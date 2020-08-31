@@ -4,7 +4,7 @@
 # edited: Aug. 2020
 __author__ = 'ayasin'
 
-import argparse, sys
+import argparse
 
 INST_UNIQ='PAUSE'
 INST_1B='NOP'

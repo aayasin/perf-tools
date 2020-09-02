@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void main(int argc, const char* argv[])
+int main(int argc, const char* argv[])
 {
     long i,n;
     if (argc<2) {
@@ -31,6 +31,6 @@ void main(int argc, const char* argv[])
         asm(".align 16384");
         asm("Lbl005:");
     }
-    return 0;
+return 0;
 }
 

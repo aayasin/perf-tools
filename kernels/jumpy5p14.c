@@ -31,5 +31,6 @@ void main(int argc, const char* argv[])
         asm(".align 16384");
         asm("Lbl005:");
     }
+    return 0;
 }
 

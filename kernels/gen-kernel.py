@@ -5,6 +5,7 @@
 __author__ = 'ayasin'
 
 import argparse
+import sys
 
 INST_UNIQ='PAUSE'
 INST_1B='NOP'

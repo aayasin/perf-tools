@@ -48,7 +48,7 @@ for j in range(args.num):
 if args.mode == 'jumpy': asm('Lbl%03d:'%args.num, tabs=0)
 
 print """    }
-return 0;
+    return 0;
 }
 """
 

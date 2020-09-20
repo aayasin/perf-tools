@@ -1,0 +1,3 @@
+[submodule "pmu-tools"]
+	path = pmu-tools
+	url = https://github.com/andikleen/pmu-tools

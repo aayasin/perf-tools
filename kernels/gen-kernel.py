@@ -4,8 +4,7 @@
 # edited: Aug. 2020
 __author__ = 'ayasin'
 
-import argparse
-import sys
+import argparse, sys
 
 INST_UNIQ='PAUSE'
 INST_1B='NOP'
@@ -13,7 +12,7 @@ INST_1B='NOP'
 ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--num', type=int, default=3)
 ap.add_argument('-i', '--instruction', default=INST_UNIQ)
-ap.add_argument('-a', '--align', type=int, default=5, help='in power of 2')
+ap.add_argument('-a', '--align' , type=int, default=0, help='in power of 2')
 ap.add_argument('-o', '--offset', type=int, default=0)
 ap.add_argument('mode', nargs='?', choices=['basicblock', 'jumpy'], default='basicblock')
 args = ap.parse_args()

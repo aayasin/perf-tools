@@ -2,6 +2,7 @@
 # Author: Ahmad Yasin
 # Aug. 2020
 #
+#set -x
 ./gen-kernel.py jumpy -n 5 -i JMP -a 14  > jumpy5p14.c
 gcc -S jumpy5p14.c
 gcc -o jumpy5p14 jumpy5p14.c

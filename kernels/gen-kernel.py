@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2
 # generate C-language kernels with ability to incorporate x86 Assembly with certain control-flow constructs
 # Author: Ahmad Yasin
 # edited: Aug. 2020

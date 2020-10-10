@@ -11,6 +11,11 @@ import argparse, sys
 from os import system
 #from subprocess import check_output
 
+do = {'no-mux': 1,
+      'run':    './run.sh',
+      'info-metrics': "--nodes '+CoreIPC,+UPI,+Time,+MUX'",
+      'kernel-iterations': 1000000000
+}
 args = []
 
 class color:
@@ -38,9 +43,12 @@ def parse_args():
       #return check_output("grep elif %s | cut -d\\' -f2"%sys.argv[0], shell=True)
       exe("grep elif %s | grep -v grep | cut -d' ' -f8"%sys.argv[0])
   ap = argparse.ArgumentParser()
-  ap.add_argument('command', nargs='+', help='support options: setup-perf log profile tar, all (for these 4)'
-      + '\n\t\t\t[disable|enable]-smt tools-update')
+  ap.add_argument('command', nargs='+', help='supported options: ' \
+      'setup-perf log profile tar, all (for these 4)' \
+      '\n\t\t\t[disable|enable]-smt tools-update build')
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
+  ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
+  ap.add_argument('-a', '--app-name', help='name of kernel')
   x = ap.parse_args()
   return x
 
@@ -64,18 +72,24 @@ def smt(x='off'):
 
 def profile():
   perf=args.perf
-  exe(perf + ' stat -- ./run.sh | tee run-perf_stat.log | egrep "seconds|CPUs|GHz|insn"', 'basic counting')
-  exe(perf + ' record -g ./run.sh', 'sampling w/ stacks')
-  exe(perf + " report --stdio --hierarchy --header | grep -v '0\.0.%' | tee run-perf-modules.log | grep -A11 Overhead", '\treport modules')
-  exe(perf + " annotate --stdio | c++filt | tee run-perf-code.log | egrep -v -E ' 0\.[0-9][0-9] :|^\s+:(|\s+Disassembly of section .text:)$' | tee run-perf-code_nonzero.log | head -20", '\tannotate code', '2>/dev/null')
+  r = do['run']
+  exe(perf + ' stat '+r+' | tee run-perf_stat.log | egrep "seconds|CPUs|GHz|insn"', 'basic counting')
+  exe(perf + ' record -g '+r, 'sampling w/ stacks')
+  exe(perf + " report --stdio --hierarchy --header | grep -v '0\.0.%' | tee run-perf-modules.log " \
+    "| grep -A11 Overhead", '\treport modules')
+  exe(perf + " annotate --stdio | c++filt | tee run-perf-code.log " \
+    "| egrep -v -E ' 0\.[0-9][0-9] :|^\s+:($|\s+(Disassembly of section .text:|//|#include))' " \
+    "| tee run-perf-code_nonzero.log | head -20", '\tannotate code', '2>/dev/null')
   
-  toplev = 'PERF=%s ./pmu-tools/toplev.py --no-desc --no-perf'%perf
+  toplev = '' if perf is 'perf' else 'PERF=%s '%perf
+  toplev+= './pmu-tools/toplev.py --no-desc --no-perf %s'%do['info-metrics']
   grep_bk= "egrep '<==|MUX'"
-  exe(toplev+" -vl6 -- ./run.sh | tee run-toplev-vl6.log | %s"%grep_bk, 'topdown full')
-  exe(toplev+"  -l3 --nodes '+CoreIPC,+Time,+MUX' -- ./run.sh | tee run-toplev-l3.log", '@topdown 3-levels')
-  exe(toplev+" -vl3 --nodes '+CoreIPC,+Time,+MUX' -- ./run.sh > run-toplev-vl3.log", 'topdown 3-levels unfiltered')
+  exe(toplev+' -vl6 -- '+r+' | tee run-toplev-vl6.log | %s'%grep_bk, 'topdown full')
+  exe(toplev+'  -l3 -- '+r+' | tee run-toplev-l3.log', '@topdown 3-levels')
+  exe(toplev+' -vl3 -- '+r+' > run-toplev-vl3.log', 'topdown 3-levels unfiltered')
   out = 'run-toplev-vl6-nomux.log'
-  exe(toplev+" -vl6 --metric-group +Summary,+HPC --no-multiplex -- ./run.sh | tee %s | grep RUN && %s %s"%(out, grep_bk, out), 'topdown full no multiplexing')
+  if do['no-mux']: exe(toplev+' -vl6 --metric-group +Summary,+HPC --no-multiplex -- '+r+' | tee %s ' \
+    '| grep RUN && %s %s'%(out, grep_bk, out), 'topdown full no multiplexing')
 
 def log_setup():
   exe('lscpu > setup-lscpu.log', 'logging setup')
@@ -88,6 +102,13 @@ def log_setup():
 
 def gen_tar():
   exe('tar -czvf results.tar.gz run.sh *.log')
+
+def build_kernel():
+  app = args.app_name
+  exe('./kernels/gen-kernel.py %s > ./kernels/%s.c'%(args.gen_args, app), 'building kernel: ' + app)
+  exe('head -2 ./kernels/%s.c'%(app))
+  exe('gcc -g -O2 -o ./kernels/%s ./kernels/%s.c'%(app, app))
+  do['run'] = './kernels/%s %d'%(app, do['kernel-iterations'])
 
 def main():
   global args
@@ -106,6 +127,7 @@ def main():
       log_setup()
       profile()
       gen_tar()
+    elif c == 'build':        build_kernel()
     else:
       sys.exit("Unknown command: '%s' !"%c)
       return -1

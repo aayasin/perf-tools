@@ -2,7 +2,7 @@
 A collection of performance analysis tools, recipes &amp; more
 
 ## Overview
-* **do.py** -- handy shortcuts for setting up and doing profiling, over Linux perf tool.
+* **do.py** -- handy shortcuts for setting up and doing profiling, over [Linux perf](https://perf.wiki.kernel.org/index).
 * **kernels/** -- an evolving collection of x86 kernels
   * **gen-kernel.py** -- generators of X86 kernels
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools
@@ -17,7 +17,7 @@ A collection of performance analysis tools, recipes &amp; more
 * to setup the perf tool, invoke `./do.py setup-perf`
 * to turn-off SMT (CPU hyper-threading), invoke `./do.py disable-smt` (don't forget to re-enable it once done)
 
-## profiling
+### profiling
 First, edit `run.sh` to invoke your application (the only mode supported as of now)
 * to profile, simply `./do.py profile` which will collect key metrics like time or CPUs utilized,
     do basic profiling and output top CPU-time consuming commands/modules/functions as well as
@@ -32,6 +32,6 @@ First, edit `run.sh` to invoke your application (the only mode supported as of n
 * to build pre-defined ones, simply `cd kernels/ && ./build.sh`
 * to run a kernel, invoke it with number-of-iterations, e.g.
 `    ./kernels/jumpy5p14 200000000`
-* to build a custom kernel, set the desired parameters. e.g.
+* to create a custom kernel, set the desired parameters. e.g.
 `    ./kernels/gen-kernel.py -i PAUSE -n 10`
-  outputs a C-file of a loop with 10 PAUSE instructions
+  outputs a C-file of a loop with 10 PAUSE instructions, that can be fed to your favorite compiler.

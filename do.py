@@ -14,8 +14,7 @@ from os import system
 do = {'no-mux': 1,
       'run':    './run.sh',
       'info-metrics': "--nodes '+CoreIPC,+UPI,+Time,+MUX'",
-      'kernel-iterations': 1000000000
-}
+      'kernel-iterations': 1e9}
 args = []
 
 class color:
@@ -45,12 +44,16 @@ def parse_args():
   ap = argparse.ArgumentParser()
   ap.add_argument('command', nargs='+', help='supported options: ' \
       'setup-perf log profile tar, all (for these 4)' \
-      '\n\t\t\t[disable|enable]-smt tools-update build')
+      '\n\t\t\tbuild [disable|enable]-smt setup-all tools-update')
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', help='name of kernel')
   x = ap.parse_args()
   return x
+
+def tools_install(installer='sudo apt-get install '):
+  for x in ('numactl', 'dmidecode'):
+    exe(installer + x, 'installing ' + x)
 
 def tools_update():
   exe('git pull')
@@ -70,9 +73,21 @@ def setup_perf():
 def smt(x='off'):
   exe('echo %s | sudo tee /sys/devices/system/cpu/smt/control'%x)
 
-def profile():
+def log_setup():
+  exe('lscpu > setup-lscpu.log', 'logging setup')
+  out = 'setup-system.log'
+  exe('uname -a > ' + out)
+  exe('%s --version >> '%args.perf + out)
+  exe('cat /etc/os-release >> ' + out)
+  #exe('cat /etc/lsb-release >> ' + out)
+  exe('numactl -H >> ' + out)
+  exe('dmidecode > setup-memory.log') #requires sudo
+
+def profile(log=False):
   perf=args.perf
   r = do['run']
+  if log: log_setup()
+  
   exe(perf + ' stat '+r+' | tee run-perf_stat.log | egrep "seconds|CPUs|GHz|insn"', 'basic counting')
   exe(perf + ' record -g '+r, 'sampling w/ stacks')
   exe(perf + " report --stdio --hierarchy --header | grep -v '0\.0.%' | tee run-perf-modules.log " \
@@ -91,15 +106,6 @@ def profile():
   if do['no-mux']: exe(toplev+' -vl6 --metric-group +Summary,+HPC --no-multiplex -- '+r+' | tee %s ' \
     '| grep RUN && %s %s'%(out, grep_bk, out), 'topdown full no multiplexing')
 
-def log_setup():
-  exe('lscpu > setup-lscpu.log', 'logging setup')
-  out = 'setup-system.log'
-  exe('uname -a > ' + out)
-  exe('%s --version >> '%args.perf + out)
-  exe('cat /etc/os-release >> ' + out)
-  #exe('cat /etc/lsb-release >> ' + out)
-  exe('numactl -H >> ' + out)
-
 def gen_tar():
   exe('tar -czvf results.tar.gz run.sh *.log')
 
@@ -108,13 +114,17 @@ def build_kernel():
   exe('./kernels/gen-kernel.py %s > ./kernels/%s.c'%(args.gen_args, app), 'building kernel: ' + app)
   exe('head -2 ./kernels/%s.c'%(app))
   exe('gcc -g -O2 -o ./kernels/%s ./kernels/%s.c'%(app, app))
-  do['run'] = './kernels/%s %d'%(app, do['kernel-iterations'])
+  if 'pause' in app: do['kernel-iterations'] = 1e7
+  do['run'] = 'taskset 0x4 ./kernels/%s %d'%(app, int(do['kernel-iterations']))
 
 def main():
   global args
   args = parse_args()
   for c in args.command:
     if   c == 'forgive-me':   pass
+    elif c == 'setup-all':
+      tools_install()
+      setup_perf()
     elif c == 'setup-perf':   setup_perf()
     elif c == 'tools-update': tools_update()
     elif c == 'disable-smt':  smt()
@@ -124,8 +134,7 @@ def main():
     elif c == 'tar':          gen_tar()
     elif c == 'all':
       setup_perf()
-      log_setup()
-      profile()
+      profile(True)
       gen_tar()
     elif c == 'build':        build_kernel()
     else:

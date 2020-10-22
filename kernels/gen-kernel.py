@@ -9,6 +9,7 @@ import argparse, sys
 
 INST_UNIQ='PAUSE'
 INST_1B='NOP'
+NOP8='nopl   0x0(%rax,%rax,1)'
 
 ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--num', type=int, default=3)

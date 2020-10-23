@@ -12,9 +12,10 @@ import argparse
 import common as C
 
 do = {'run':    './run.sh',
-      'info-metrics': "--nodes '+CoreIPC,+Instructions,+UPI,+CPU_Utilization,+Time,+MUX'",
+      'info-metrics':   "--nodes '+CoreIPC,+Instructions,+UPI,+CPU_Utilization,+Time,+MUX'",
+      'extra-metrics':  "--metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+IpCall",
       'super': 0,
-      'toplev-levels': 3,
+      'toplev-levels':  3,
       'perf-record': '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
 }
 args = []
@@ -110,9 +111,9 @@ def profile(log=False):
   if en(4): exe(cmd + ' | tee %s | %s'%(log, grep_bk), 'topdown full')
   cmd, log = toplev_V('-vl%d'%do['toplev-levels'])
   if en(5): exe(cmd + ' | tee %s | %s'%(log, grep_nz), 'topdown %d-levels'%do['toplev-levels'])
-  cmd, log = toplev_V('--drilldown --show-sample')
+  cmd, log = toplev_V('--drilldown')# --show-sample')
   if en(6): exe(cmd + ' | tee ' + log, 'topdown auto-drilldown')
-  cmd, log = toplev_V('-vl6 --metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+IpCall --no-multiplex ', '-nomux')
+  cmd, log = toplev_V('-vl6 %s --no-multiplex '%do['extra-metrics'], '-nomux')
   if en(7) and args.no_multiplex:
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
@@ -122,12 +123,13 @@ def alias(cmd, log_files=['','log','csv']):
   if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files))
   if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* results.tar.gz ')
 
-def build_kernel():
+def build_kernel(dir='./kernels/'):
+  def fixup(x): return x.replace('./', dir)
   app = args.app_name
-  exe('./kernels/gen-kernel.py %s > ./kernels/%s.c'%(args.gen_args, app), 'building kernel: ' + app)
-  if args.verbose > 2: exe('head -2 ./kernels/%s.c'%(app))
-  exe('gcc -g -O2 -o ./kernels/%s ./kernels/%s.c'%(app, app))
-  do['run'] = 'taskset 0x4 ./kernels/%s %d'%(app, int(float(args.app_iterations)))
+  exe(fixup('./gen-kernel.py %s > ./%s.c'%(args.gen_args, app)), 'building kernel: ' + app)
+  if args.verbose > 2: exe(fixup('head -2 ./%s.c'%(app)))
+  exe(fixup('gcc -g -O2 -o ./%s ./%s.c'%(app, app)))
+  do['run'] = fixup('taskset 0x4 ./%s %d'%(app, int(float(args.app_iterations))))
 
 def parse_args():
   ap = argparse.ArgumentParser()
@@ -138,10 +140,11 @@ def parse_args():
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', default=None, help='name of kernel')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
-  ap.add_argument('-pm', '--profile-mask', default='FF', help='mask to controal stage in profile-command')
+  ap.add_argument('-pm', '--profile-mask', default='FF', help='mask to control stage in profile-command')
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=True, default=False,
     help='profile with a non-multiplexing run too')
-  ap.add_argument('-v', '--verbose', type=int, help='verbose level')
+  ap.add_argument('-v', '--verbose', type=int, help='verbose level; 0:none, 1:commands, ' \
+    '2:+event-groups, 3:ALL')
   x = ap.parse_args()
   return x
 

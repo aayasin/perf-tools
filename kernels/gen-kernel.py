@@ -3,7 +3,7 @@
 # Author: Ahmad Yasin
 # edited: Oct. 2020
 __author__ = 'ayasin'
-__version__ = 0.2
+__version__ = 0.21
 
 import argparse, sys
 
@@ -35,6 +35,7 @@ int main(int argc, const char* argv[])
     }
     n= atol(argv[1]);"""
 asm(INST_UNIQ, spaces=4)
+if args.align: asm('.align %d'%(2 ** args.align), tabs=0)
 print "    for (i=0; i<n; i++) {"
 
 for j in range(args.num):
@@ -44,7 +45,7 @@ for j in range(args.num):
   for inst in args.instruction:
     if inst == 'JMP': inst += ' Lbl%03d'%(j+1)
     asm(inst)
-  if args.align: asm('.align %d'%(2 ** args.align), tabs=0)
+  if args.mode == 'jumpy' and args.align: asm('.align %d'%(2 ** args.align), tabs=0)
 if args.mode == 'jumpy': asm('Lbl%03d:'%args.num, tabs=0)
 
 print """    }

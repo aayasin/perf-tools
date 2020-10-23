@@ -10,7 +10,6 @@ __author__ = 'ayasin'
 
 import argparse
 import common as C
-#from subprocess import check_output
 
 do = {'run':    './run.sh',
       'info-metrics': "--nodes '+CoreIPC,+Instructions,+UPI,+CPU_Utilization,+Time,+MUX'",
@@ -118,11 +117,10 @@ def profile(log=False):
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
-    exe('./tma.py csv2stat -v1 -i ' + log.replace('log', 'csv'))
 
 def alias(cmd, log_files=['','log','csv']):
   if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files))
-  if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data *.old results.tar.gz ')
+  if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* results.tar.gz ')
 
 def build_kernel():
   app = args.app_name

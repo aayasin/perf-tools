@@ -42,6 +42,14 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False):
   ret = os.system(x)
   if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))
 
+import subprocess
+def get_out(x):
+  out = subprocess.check_output(x)
+  return out.replace('\n', '')
+
+def file2str(f):
+  out = file2lines(f)
+  return out[0].replace('\n', '')
 
 # files
 #

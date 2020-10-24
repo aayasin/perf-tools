@@ -3,13 +3,13 @@
 # Author: Ahmad Yasin
 # edited: Oct. 2020
 __author__ = 'ayasin'
-__version__ = 0.21
+__version__ = 0.3
 
 import argparse, sys
 
 INST_UNIQ='PAUSE'
 INST_1B='NOP'
-NOP8='nopl   0x0(%rax,%rax,1)'
+
 
 ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--num', type=int, default=3)
@@ -37,7 +37,6 @@ int main(int argc, const char* argv[])
 asm(INST_UNIQ, spaces=4)
 if args.align: asm('.align %d'%(2 ** args.align), tabs=0)
 print "    for (i=0; i<n; i++) {"
-
 for j in range(args.num):
   if args.offset:
      for k in range(j+args.offset-1): asm(INST_1B)
@@ -49,6 +48,8 @@ for j in range(args.num):
 if args.mode == 'jumpy': asm('Lbl%03d:'%args.num, tabs=0)
 
 print """    }
+    asm(".align 512; Lbl_end:");
+
     return 0;
 }"""
 

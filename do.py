@@ -106,7 +106,7 @@ def profile(log=False):
   grep_nz= "egrep -v '(FE|BE|BAD|RET).*[ \-][10]\.. |^RUN' "
   def toplev_V(v, tag=''):
     o = 'run-toplev%s.log'%(v.split()[0]+tag)
-    return '%s %s -V %s -- %s'%(toplev, v, o.replace('.log', '.csv'), r), o
+    return '%s %s -V %s -- %s'%(toplev, v, o.replace('.log', '-perf.csv'), r), o
   cmd, log = toplev_V('-vl6')
   if en(4): exe(cmd + ' | tee %s | %s'%(log, grep_bk), 'topdown full')
   cmd, log = toplev_V('-vl%d'%do['toplev-levels'])
@@ -141,8 +141,8 @@ def parse_args():
   ap.add_argument('-a', '--app-name', default=None, help='name of kernel')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
   ap.add_argument('-pm', '--profile-mask', default='FF', help='mask to control stage in profile-command')
-  ap.add_argument('-N', '--no-multiplex', action='store_const', const=True, default=False,
-    help='profile with a non-multiplexing run too')
+  ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
+    help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, help='verbose level; 0:none, 1:commands, ' \
     '2:+event-groups, 3:ALL')
   x = ap.parse_args()
@@ -173,7 +173,7 @@ def main():
       alias('tar')
     elif c == 'build':        build_kernel()
     else:
-      sys.exit("Unknown command: '%s' !"%c)
+      C.error("Unknown command: '%s' !"%c)
       return -1
   return 0
 

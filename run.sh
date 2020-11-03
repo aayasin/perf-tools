@@ -10,4 +10,4 @@ taskset 0x3 \
 # sample output of the last command
 # "Game 0 played in 37.6 seconds with 24 moves"
 
-printf "\n\tDid you added your cmd?!\n"	# remove me
+printf "\tDid you invoked your workload?!\n"	# remove me

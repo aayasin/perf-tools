@@ -1,8 +1,9 @@
 #!/usr/bin/env python2
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: October 2020
+# edited: December 2020
 # TODO list:
+#   convert verbose to a bitmask
 #   add test command to gate commits to this file
 #   check sudo permissions
 #   auto-produce options for 'command' help
@@ -13,7 +14,7 @@ import common as C
 
 do = {'run':    './run.sh',
       'info-metrics':   "--nodes '+CoreIPC,+Instructions,+UPI,+CPU_Utilization,+Time,+MUX'",
-      'extra-metrics':  "--metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+IpCall",
+      'extra-metrics':  "--metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+BpTkBranch,+IpCall",
       'super': 0,
       'toplev-levels':  3,
       'perf-record': '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
@@ -90,7 +91,7 @@ def profile(log=False):
     base = 'run-perf'
     if do['perf-record']: base += do['perf-record'].replace(' ', '').replace(':', '')
     exe(perf + ' record -g '+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
-    exe(perf + " report --stdio --hierarchy --header | grep -v '0\.0.%' | tee "+base+"-modules.log " \
+    exe(perf + " report --stdio --hierarchy --header | grep -v ' 0\.0.%' | tee "+base+"-modules.log " \
       "| grep -A11 Overhead", '\treport modules')
     base2 = base+'-code'
     exe(perf + " annotate --stdio | c++filt | tee " + base2 + ".log" \
@@ -107,14 +108,18 @@ def profile(log=False):
   def toplev_V(v, tag=''):
     o = 'run-toplev%s.log'%(v.split()[0]+tag)
     return '%s %s -V %s -- %s'%(toplev, v, o.replace('.log', '-perf.csv'), r), o
+  
   cmd, log = toplev_V('-vl6')
   if en(4): exe(cmd + ' | tee %s | %s'%(log, grep_bk), 'topdown full')
+  
   cmd, log = toplev_V('-vl%d'%do['toplev-levels'])
   if en(5): exe(cmd + ' | tee %s | %s'%(log, grep_nz), 'topdown %d-levels'%do['toplev-levels'])
+  
   cmd, log = toplev_V('--drilldown')# --show-sample')
   if en(6): exe(cmd + ' | tee ' + log, 'topdown auto-drilldown')
-  cmd, log = toplev_V('-vl6 %s --no-multiplex '%do['extra-metrics'], '-nomux')
+  
   if en(7) and args.no_multiplex:
+    cmd, log = toplev_V('-vl6 %s --no-multiplex '%do['extra-metrics'], '-nomux')
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
@@ -127,7 +132,7 @@ def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
   app = args.app_name
   exe(fixup('./gen-kernel.py %s > ./%s.c'%(args.gen_args, app)), 'building kernel: ' + app)
-  if args.verbose > 2: exe(fixup('head -2 ./%s.c'%(app)))
+  if args.verbose > 3: exe(fixup('head -2 ./%s.c'%(app)))
   exe(fixup('gcc -g -O2 -o ./%s ./%s.c'%(app, app)))
   do['run'] = fixup('taskset 0x4 ./%s %d'%(app, int(float(args.app_iterations))))
 
@@ -144,15 +149,16 @@ def parse_args():
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
     help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, help='verbose level; 0:none, 1:commands, ' \
-    '2:+event-groups, 3:ALL')
+    '2:+verbose-on-metrics, 3:+event-groups, 4:ALL')
   x = ap.parse_args()
   return x
 
 def main():
   global args
   args = parse_args()
-  if args.verbose > 2: print args
-  if args.verbose > 1: do['info-metrics'] = do['info-metrics'] + ' -g'
+  if args.verbose > 3: print args
+  if args.verbose > 2: do['info-metrics'] = do['info-metrics'] + ' -g'
+  if args.verbose > 1: do['info-metrics'] = do['info-metrics'] + ' -v'
   if args.app_name is not None: do['run'] = args.app_name
   for c in args.command:
     if   c == 'forgive-me':   pass

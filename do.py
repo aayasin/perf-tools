@@ -12,12 +12,13 @@ __author__ = 'ayasin'
 import argparse
 import common as C
 
-do = {'run':    './run.sh',
-      'info-metrics':   "--nodes '+CoreIPC,+Instructions,+UPI,+CPU_Utilization,+Time,+MUX'",
-      'extra-metrics':  "--metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+BpTkBranch,+IpCall",
-      'super': 0,
-      'toplev-levels':  3,
-      'perf-record': '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
+do = {'run':        './run.sh',
+  'info-metrics':   "--nodes '+CoreIPC,+Instructions,+UPI,+CPU_Utilization,+Time,+MUX'",
+  'extra-metrics':  "--metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
+  'super': 0,
+  'toplev-levels':  3,
+  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses',
+  'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
 }
 args = []
 
@@ -86,8 +87,12 @@ def profile(log=False):
   r = do['run']
   if en(0) or log: log_setup()
   
-  if en(1): exe(perf + ' stat '+r+' | tee run-perf_stat.log | egrep "seconds|CPUs|GHz|insn"', 'basic counting')
-  if en(2):
+  def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[2:] + px.join(rapl) + '/'
+  def perf_stat(flags=''): return '%s stat %s -- %s | tee run-perf_stat%s.log | egrep "seconds|CPUs|GHz|insn|pkg"'%(perf, flags, r, flags.split(' ')[0])
+  if en(1): exe(perf_stat(), 'per-app counting')
+  if en(2): exe(perf_stat('-a -e %s,%s'%(do['perf-stat-def'], power())), 'system-wide counting')
+
+  if en(3):
     base = 'run-perf'
     if do['perf-record']: base += do['perf-record'].replace(' ', '').replace(':', '')
     exe(perf + ' record -g '+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
@@ -99,7 +104,6 @@ def profile(log=False):
       "| tee " + base2 + "_nonzero.log > /dev/null " \
       "&& egrep -n -B1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
       "| head -20", '\tannotate code', '2>/dev/null')
-  if en(3): pass #perf placeholder
   
   toplev = '' if perf is 'perf' else 'PERF=%s '%perf
   toplev+= './pmu-tools/toplev.py --no-desc %s'%do['info-metrics']

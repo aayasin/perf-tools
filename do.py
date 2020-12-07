@@ -38,7 +38,7 @@ def tools_update():
   exe('git pull')
   exe('git checkout HEAD run.sh')
   exe('git submodule update --remote')
-  if do['super']: exe("./pmu-tools/event_download.py") # requires sudo
+  if do['super']: exe(args.pmu_tools + "/event_download.py") # requires sudo
 
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): exe_to_null('echo %d | sudo tee %s'%(v, p))
@@ -106,7 +106,7 @@ def profile(log=False):
       "| head -20", '\tannotate code', '2>/dev/null')
   
   toplev = '' if perf is 'perf' else 'PERF=%s '%perf
-  toplev+= './pmu-tools/toplev.py --no-desc %s'%do['info-metrics']
+  toplev+= (args.pmu_tools + '/toplev.py --no-desc %s'%do['info-metrics'])
   grep_bk= "egrep '<==|MUX'"
   grep_nz= "egrep -v '(FE|BE|BAD|RET).*[ \-][10]\.. |^RUN' "
   def toplev_V(v, tag=''):
@@ -146,6 +146,7 @@ def parse_args():
       'setup-perf log profile tar, all (for these 4)' \
       '\n\t\t\tbuild [disable|enable]-smt setup-all tools-update')
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
+  ap.add_argument('--pmu-tools', default='./pmu-tools', help='use a custom pmu-tools directory')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', default=None, help='name of kernel')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')

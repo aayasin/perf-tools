@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: October 2020
+# edited: Dec. 2020
 __author__ = 'ayasin'
 
 import sys, os
@@ -34,9 +34,18 @@ def error(msg):
 
 # system
 #
+
+# exe_cmd - execute system command(s) with logging support
+# @x:     command to be executed
+# @msg:   an informative message to display. @ hints for a "slave" command
+# @debug: print the command before its execution
+# @redir_out:  redirect output of the (first non-piped) command as specified
 def exe_cmd(x, msg=None, redir_out=None, debug=False):
   if redir_out: x = x.replace('|', redir_out + ' |', 1) if '|' in x else x + redir_out
-  if msg: printc(msg + ' ..', color.BOLD)
+  if msg:
+    if '@' in msg: msg='\t'+msg.replace('@', '')
+    else: msg = msg + ' ..'
+    printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
   ret = os.system(x)

@@ -1,9 +1,9 @@
 #!/usr/bin/env python2
 # generate C-language kernels with ability to incorporate x86 Assembly with certain control-flow constructs
 # Author: Ahmad Yasin
-# edited: Oct. 2020
+# edited: Dec. 2020
 __author__ = 'ayasin'
-__version__ = 0.3
+__version__ = 0.31
 
 import argparse, sys
 
@@ -40,12 +40,12 @@ print "    for (i=0; i<n; i++) {"
 for j in range(args.num):
   if args.offset:
      for k in range(j+args.offset-1): asm(INST_1B)
-  if args.mode == 'jumpy': asm('Lbl%03d:'%j, tabs=0)
+  if args.mode == 'jumpy': asm('Lbl%07d:'%j, tabs=0)
   for inst in args.instruction:
-    if inst == 'JMP': inst += ' Lbl%03d'%(j+1)
+    if inst in ['JMP', 'JL']: inst += ' Lbl%07d'%(j+1)
     asm(inst)
   if args.mode == 'jumpy' and args.align: asm('.align %d'%(2 ** args.align), tabs=0)
-if args.mode == 'jumpy': asm('Lbl%03d:'%args.num, tabs=0)
+if args.mode == 'jumpy': asm('Lbl%07d:'%args.num, tabs=0)
 
 print """    }
     asm(".align 512; Lbl_end:");

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Author: Ahmad Yasin
-# Oct. 2020
+# Dec. 2020
 #
 CC='gcc -g -O2'
 set -x
@@ -14,7 +14,8 @@ $CC -S jumpy5p14.c
 #$CC -o sse2avx sse2avx.c
 
 ./gen-kernel.py -i NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak4wide.c
+./gen-kernel.py jumpy -i JL -a 6 -n 20000  > jcc20k.c
 
-for x in jumpy5p14 sse2avx peak4wide; do
+for x in jumpy5p14 jcc20k sse2avx peak4wide; do
   $CC -o $x $x.c
 done

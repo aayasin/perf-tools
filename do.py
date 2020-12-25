@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: December 2020
+# edited: Dec. 2020
 # TODO list:
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
@@ -11,21 +11,23 @@ __author__ = 'ayasin'
 
 import argparse
 import common as C
+from os import getpid
 
 do = {'run':        './run.sh',
-  'info-metrics':   "--nodes '+CoreIPC,+Instructions,+UPI,+CPU_Utilization,+Time,+MUX'",
+  'info-metrics':   "--nodes '+CoreIPC,+Instructions,+IpTB,+UPI,+CPU_Utilization,+Time,+MUX'",
   'extra-metrics':  "--metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
   'super': 0,
   'toplev-levels':  3,
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
+  'gen-kernel':     1,
+  'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
+  'cmds_file':      '.run%d.cmd'%getpid(),
 }
 args = []
 
 def exe(x, msg=None, redir_out=' 2>&1'):
-  if msg is not None and '@' in msg:
-    print '\t%s'%x
-    msg=msg.replace('@', '')
+  do['cmds_file'].write(x + '\n')
   return C.exe_cmd(x, msg, redir_out, args.verbose>0)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
@@ -33,6 +35,7 @@ def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
 def tools_install(installer='sudo apt-get install '):
   for x in ('numactl', 'dmidecode'):
     exe(installer + x, 'installing ' + x)
+  if do['super']: exe('./build-xed.sh', 'installing xed')
 
 def tools_update():
   exe('git pull')
@@ -48,9 +51,11 @@ def setup_perf(actions=('set', 'log'), out=None):
     ('/proc/sys/kernel/soft_watchdog', 0, ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
-    ('/sys/devices/cpu/perf_event_mux_interval_ms', 100, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
     ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e9), 1),
+    ('/sys/devices/cpu/perf_event_mux_interval_ms', 100, ),
+    ('/sys/devices/cpu/rdpmc', 1, ),
+    ('/sys/bus/event_source/devices/cpu/rdpmc', 2, ),
     (TIME_MAX, 0, 1), # has to be last
   )
   if 'set' in actions: exe_v0(msg='setting up perf')
@@ -97,13 +102,13 @@ def profile(log=False):
     if do['perf-record']: base += do['perf-record'].replace(' ', '').replace(':', '')
     exe(perf + ' record -g '+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
     exe(perf + " report --stdio --hierarchy --header | grep -v ' 0\.0.%' | tee "+base+"-modules.log " \
-      "| grep -A11 Overhead", '\treport modules')
+      "| grep -A11 Overhead", '@report modules')
     base2 = base+'-code'
     exe(perf + " annotate --stdio | c++filt | tee " + base2 + ".log" \
       "| egrep -v -E ' 0\.[0-9][0-9] :|^\s+:($|\s+(Disassembly of section .text:|//|#include))' " \
       "| tee " + base2 + "_nonzero.log > /dev/null " \
       "&& egrep -n -B1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
-      "| head -20", '\tannotate code', '2>/dev/null')
+      "| head -20", '@annotate code', '2>/dev/null')
   
   toplev = '' if perf is 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc %s'%do['info-metrics'])
@@ -129,15 +134,16 @@ def profile(log=False):
       , 'topdown full no multiplexing')
 
 def alias(cmd, log_files=['','log','csv']):
-  if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files))
+  if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files) + '.*.cmd')
   if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* results.tar.gz ')
 
 def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
   app = args.app_name
-  exe(fixup('./gen-kernel.py %s > ./%s.c'%(args.gen_args, app)), 'building kernel: ' + app)
-  if args.verbose > 3: exe(fixup('head -2 ./%s.c'%(app)))
-  exe(fixup('gcc -g -O2 -o ./%s ./%s.c'%(app, app)))
+  if do['gen-kernel']:
+    exe(fixup('./gen-kernel.py %s > ./%s.c'%(args.gen_args, app)), 'building kernel: ' + app)
+    if args.verbose > 3: exe(fixup('head -2 ./%s.c'%app))
+  exe(fixup('%s -g -O2 -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
   do['run'] = fixup('taskset 0x4 ./%s %d'%(app, int(float(args.app_iterations))))
 
 def parse_args():
@@ -164,7 +170,10 @@ def main():
   if args.verbose > 3: print args
   if args.verbose > 2: do['info-metrics'] = do['info-metrics'] + ' -g'
   if args.verbose > 1: do['info-metrics'] = do['info-metrics'] + ' -v'
-  if args.app_name is not None: do['run'] = args.app_name
+  if args.app_name is not None:
+    do['run'] = args.app_name
+    do['cmds_file'] = '.%s.cmd'%args.app_name.split(' ')[0]
+  do['cmds_file'] = open(do['cmds_file'], 'w')
   for c in args.command:
     if   c == 'forgive-me':   pass
     elif c == 'setup-all':
@@ -190,4 +199,5 @@ def main():
 
 if __name__ == "__main__":
   main()
+  do['cmds_file'].close()
 

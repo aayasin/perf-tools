@@ -3,6 +3,7 @@
 # Author: Ahmad Yasin
 # edited: Dec. 2020
 # TODO list:
+#   re-enable power in system-wide (kernel support is missing for ICL+ models)
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
 #   check sudo permissions
@@ -46,7 +47,7 @@ def tools_update():
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): exe_to_null('echo %d | sudo tee %s'%(v, p))
   TIME_MAX = '/proc/sys/kernel/perf_cpu_time_max_percent'
-  perf_params = (
+  perf_params = [
     ('/proc/sys/kernel/nmi_watchdog', 0, ),
     ('/proc/sys/kernel/soft_watchdog', 0, ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
@@ -54,13 +55,14 @@ def setup_perf(actions=('set', 'log'), out=None):
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
     ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e9), 1),
     ('/sys/devices/cpu/perf_event_mux_interval_ms', 100, ),
-    ('/sys/devices/cpu/rdpmc', 1, ),
-    ('/sys/bus/event_source/devices/cpu/rdpmc', 2, ),
-    (TIME_MAX, 0, 1), # has to be last
-  )
+  ]
   if 'set' in actions: exe_v0(msg='setting up perf')
   superv = 'sup' in actions or do['super']
-  if superv: set_it(TIME_MAX, 25)
+  if superv:
+    set_it(TIME_MAX, 25)
+    perf_params += [('/sys/devices/cpu/rdpmc', 1, ),
+      ('/sys/bus/event_source/devices/cpu/rdpmc', 2, )]
+  perf_params += [(TIME_MAX, 0, 1)] # has to be last
   for x in perf_params: 
     if (len(x) is 2) or superv:
       param, value = x[0], x[1]
@@ -93,9 +95,10 @@ def profile(log=False):
   if en(0) or log: log_setup()
   
   def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[2:] + px.join(rapl) + '/'
+  def perf_e(): return '-e %s,%s'%(do['perf-stat-def'], power()) if do['super'] else ''
   def perf_stat(flags=''): return '%s stat %s -- %s | tee run-perf_stat%s.log | egrep "seconds|CPUs|GHz|insn|pkg"'%(perf, flags, r, flags.split(' ')[0])
   if en(1): exe(perf_stat(), 'per-app counting')
-  if en(2): exe(perf_stat('-a -e %s,%s'%(do['perf-stat-def'], power())), 'system-wide counting')
+  if en(2): exe(perf_stat('-a ' + perf_e()), 'system-wide counting')
 
   if en(3):
     base = 'run-perf'
@@ -172,7 +175,7 @@ def main():
   if args.verbose > 1: do['info-metrics'] = do['info-metrics'] + ' -v'
   if args.app_name is not None:
     do['run'] = args.app_name
-    do['cmds_file'] = '.%s.cmd'%args.app_name.split(' ')[0]
+    do['cmds_file'] = '.%s.cmd'%args.app_name.split(' ')[0].replace('.', '').replace('/', '-')
   do['cmds_file'] = open(do['cmds_file'], 'w')
   for c in args.command:
     if   c == 'forgive-me':   pass

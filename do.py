@@ -128,7 +128,7 @@ def profile(log=False):
   if en(5): exe(cmd + ' | tee %s | %s'%(log, grep_nz), 'topdown %d-levels'%do['toplev-levels'])
   
   cmd, log = toplev_V('--drilldown')# --show-sample')
-  if en(6): exe(cmd + ' | tee ' + log, 'topdown auto-drilldown')
+  if en(6): exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using)" '%log, 'topdown auto-drilldown')
   
   if en(7) and args.no_multiplex:
     cmd, log = toplev_V('-vl6 %s --no-multiplex '%do['extra-metrics'], '-nomux')
@@ -137,7 +137,7 @@ def profile(log=False):
       , 'topdown full no multiplexing')
 
 def alias(cmd, log_files=['','log','csv']):
-  if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files) + '.*.cmd')
+  if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files) + ' .*.cmd')
   if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* results.tar.gz ')
 
 def build_kernel(dir='./kernels/'):

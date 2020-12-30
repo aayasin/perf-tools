@@ -21,14 +21,14 @@ class color:
   UNDERLINE = '\033[4m'
   END = '\033[0m'
 
-def printc(msg, col=color.RED): 
+def printc(msg, col=color.DARKCYAN):
   print col + msg + color.END
 
 def warn(msg):
   printc('WARNING: %s !'%msg, color.CYAN)
 
 def error(msg):
-  printc('ERROR: %s !'%msg)
+  printc('ERROR: %s !'%msg, color.RED)
   sys.exit(' !')
 
 

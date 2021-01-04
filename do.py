@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Dec. 2020
+# edited: Jan. 2021
 # TODO list:
 #   re-enable power in system-wide (kernel support is missing for ICL+ models)
 #   convert verbose to a bitmask
@@ -86,9 +86,9 @@ def log_setup(out = 'setup-system.log'):
   #exe('cat /etc/lsb-release >> ' + out)
   exe('numactl -H >> ' + out)
   
-  exe('sudo dmidecode > setup-memory.log')
+  if do['super']: exe('sudo dmidecode > setup-memory.log')
 
-def profile(log=False):
+def profile(log=False, out='run'):
   def en(n): return int(args.profile_mask, 16) & 2**n
   perf=args.perf
   r = do['run']
@@ -96,13 +96,13 @@ def profile(log=False):
   
   def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[2:] + px.join(rapl) + '/'
   def perf_e(): return '-e %s,%s'%(do['perf-stat-def'], power()) if do['super'] else ''
-  def perf_stat(flags=''): return '%s stat %s -- %s | tee run-perf_stat%s.log | egrep "seconds|CPUs|GHz|insn|pkg"'%(perf, flags, r, flags.split(' ')[0])
+  def perf_stat(flags=''): return '%s stat %s -- %s | tee %s-perf_stat%s.log | egrep "seconds|CPUs|GHz|insn|pkg"'%(perf, flags, r, out, flags.split(' ')[0])
   if en(1): exe(perf_stat(), 'per-app counting')
   if en(2): exe(perf_stat('-a ' + perf_e()), 'system-wide counting')
 
   if en(3):
-    base = 'run-perf'
-    if do['perf-record']: base += do['perf-record'].replace(' ', '').replace(':', '')
+    base = out+'-perf'
+    if do['perf-record']: base += C.chop(do['perf-record'], ' :')
     exe(perf + ' record -g '+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
     exe(perf + " report --stdio --hierarchy --header | grep -v ' 0\.0.%' | tee "+base+"-modules.log " \
       "| grep -A11 Overhead", '@report modules')
@@ -115,10 +115,10 @@ def profile(log=False):
   
   toplev = '' if perf is 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc %s'%do['info-metrics'])
-  grep_bk= "egrep '<==|MUX'"
-  grep_nz= "egrep -v '(FE|BE|BAD|RET).*[ \-][10]\.. |^RUN' "
+  grep_bk= "egrep '<==|MUX|Info.Bott'"
+  grep_nz= "egrep -v '(FE|BE|BAD|RET).*[ \-][10]\.. |^RUN|not found' "
   def toplev_V(v, tag=''):
-    o = 'run-toplev%s.log'%(v.split()[0]+tag)
+    o = '%s-toplev%s.log'%(out, v.split()[0]+tag)
     return '%s %s -V %s -- %s'%(toplev, v, o.replace('.log', '-perf.csv'), r), o
   
   cmd, log = toplev_V('-vl6')
@@ -175,7 +175,7 @@ def main():
   if args.verbose > 1: do['info-metrics'] = do['info-metrics'] + ' -v'
   if args.app_name is not None:
     do['run'] = args.app_name
-    do['cmds_file'] = '.%s.cmd'%args.app_name.split(' ')[0].replace('.', '').replace('/', '-')
+    do['cmds_file'] = '.%s.cmd'%C.chop(args.app_name.split(' ')[0], './~')
   do['cmds_file'] = open(do['cmds_file'], 'w')
   for c in args.command:
     if   c == 'forgive-me':   pass

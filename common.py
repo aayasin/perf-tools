@@ -1,10 +1,10 @@
 #!/usr/bin/env python2
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Dec. 2020
+# edited: Jan. 2021
 __author__ = 'ayasin'
 
-import sys, os
+import sys, os, re
 
 
 # logging
@@ -80,4 +80,15 @@ def read_perf_toplev(filename):
       d[x.upper()] = int(float(r['Value']))
   return d
 
+
+# strings
+#
+
+# chop - clean a list of charecters from a string
+# @s:     input string
+# @chars: input charecters
+def chop(s, chars):
+  r=s
+  for i in range(len(chars)): r=r.replace(chars[i], '')
+  return r
 

@@ -29,6 +29,8 @@ def warn(msg):
 
 def error(msg):
   printc('ERROR: %s !'%msg, color.RED)
+  log = re.match(r".*(>|tee) (.*).log.*", msg)
+  if log: exe_cmd("cat %s.log"%log.group(2), debug=True)
   sys.exit(' !')
 
 

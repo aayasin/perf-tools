@@ -3,6 +3,7 @@
 # Author: Ahmad Yasin
 # edited: Jan. 2021
 # TODO list:
+#   add trials support
 #   re-enable power in system-wide (kernel support is missing for ICL+ models)
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
@@ -15,7 +16,7 @@ import common as C
 from os import getpid
 
 do = {'run':        './run.sh',
-  'info-metrics':   "--nodes '+CoreIPC,+Instructions,+IpTB,+UPI,+CPU_Utilization,+Time,+MUX'",
+  'info-metrics':   "--nodes '+CoreIPC,+Instructions,+CORE_CLKS,+IpTB,+UPI,+CPU_Utilization,+Time,+MUX'",
   'extra-metrics':  "--metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
   'super': 0,
   'toplev-levels':  3,
@@ -23,7 +24,7 @@ do = {'run':        './run.sh',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'gen-kernel':     1,
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
-  'cmds_file':      '.run%d.cmd'%getpid(),
+  'cmds_file':      None,
 }
 args = []
 
@@ -32,6 +33,14 @@ def exe(x, msg=None, redir_out=' 2>&1'):
   return C.exe_cmd(x, msg, redir_out, args.verbose>0)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
+
+def uniq_name():
+  if args.app_name is None: return 'run%d'%getpid()
+  name = args.app_name.split(' ')[2:] if 'taskset' in args.app_name.split(' ')[0] else args.app_name.split(' ')
+  if '/' in name[0]: name[0] = name[0].split('/')[-1].replace('.sh', '')
+  name = ''.join(name)
+  name = name.replace('/tmp', '-')
+  return C.chop(name, './~')
 
 def tools_install(installer='sudo apt-get install '):
   for x in ('numactl', 'dmidecode'):
@@ -90,18 +99,19 @@ def log_setup(out = 'setup-system.log'):
 
 def profile(log=False, out='run'):
   def en(n): return int(args.profile_mask, 16) & 2**n
+  out = uniq_name()
   perf=args.perf
   r = do['run']
   if en(0) or log: log_setup()
   
   def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[2:] + px.join(rapl) + '/'
   def perf_e(): return '-e %s,%s'%(do['perf-stat-def'], power()) if do['super'] else ''
-  def perf_stat(flags=''): return '%s stat %s -- %s | tee %s-perf_stat%s.log | egrep "seconds|CPUs|GHz|insn|pkg"'%(perf, flags, r, out, flags.split(' ')[0])
+  def perf_stat(flags=''): return '%s stat %s -- %s | tee %s.perf_stat%s.log | egrep "seconds|CPUs|GHz|insn|pkg"'%(perf, flags, r, out, flags.split(' ')[0])
   if en(1): exe(perf_stat(), 'per-app counting')
   if en(2): exe(perf_stat('-a ' + perf_e()), 'system-wide counting')
 
   if en(3):
-    base = out+'-perf'
+    base = out+'.perf'
     if do['perf-record']: base += C.chop(do['perf-record'], ' :')
     exe(perf + ' record -g '+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
     exe(perf + " report --stdio --hierarchy --header | grep -v ' 0\.0.%' | tee "+base+"-modules.log " \
@@ -118,7 +128,7 @@ def profile(log=False, out='run'):
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_nz= "egrep -v '(FE|BE|BAD|RET).*[ \-][10]\.. |^RUN|not found' "
   def toplev_V(v, tag=''):
-    o = '%s-toplev%s.log'%(out, v.split()[0]+tag)
+    o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     return '%s %s -V %s -- %s'%(toplev, v, o.replace('.log', '-perf.csv'), r), o
   
   cmd, log = toplev_V('-vl6')
@@ -173,10 +183,10 @@ def main():
   if args.verbose > 3: print args
   if args.verbose > 2: do['info-metrics'] = do['info-metrics'] + ' -g'
   if args.verbose > 1: do['info-metrics'] = do['info-metrics'] + ' -v'
-  if args.app_name is not None:
-    do['run'] = args.app_name
-    do['cmds_file'] = '.%s.cmd'%C.chop(args.app_name.split(' ')[0], './~')
-  do['cmds_file'] = open(do['cmds_file'], 'w')
+  if args.app_name: do['run'] = args.app_name
+  
+  do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
+  
   for c in args.command:
     if   c == 'forgive-me':   pass
     elif c == 'setup-all':

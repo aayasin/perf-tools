@@ -5,6 +5,8 @@
 # TODO list:
 #   add trials support
 #   re-enable power in system-wide (kernel support is missing for ICL+ models)
+#   control prefetches, log msrs
+#   quiet mode
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
 #   check sudo permissions
@@ -25,6 +27,7 @@ do = {'run':        './run.sh',
   'gen-kernel':     1,
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
   'cmds_file':      None,
+  'package-mgr':    'apt-get' if 'Ubuntu' in C.file2str('/etc/os-release') else 'yum',
 }
 args = []
 
@@ -39,10 +42,10 @@ def uniq_name():
   name = args.app_name.split(' ')[2:] if 'taskset' in args.app_name.split(' ')[0] else args.app_name.split(' ')
   if '/' in name[0]: name[0] = name[0].split('/')[-1].replace('.sh', '')
   name = ''.join(name)
-  name = name.replace('/tmp', '-')
+  name = name.replace('/tmp' if '/tmp' in name else 'silesia', '-')#Mine
   return C.chop(name, './~')
 
-def tools_install(installer='sudo apt-get install '):
+def tools_install(installer='sudo %s install '%do['package-mgr']):
   for x in ('numactl', 'dmidecode'):
     exe(installer + x, 'installing ' + x)
   if do['super']: exe('./build-xed.sh', 'installing xed')

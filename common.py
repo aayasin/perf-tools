@@ -33,6 +33,9 @@ def error(msg):
   if log: exe_cmd("cat %s.log"%log.group(2), debug=True)
   sys.exit(' !')
 
+def exit(msg=''):
+  printc('%s ..'%msg, color.GREEN)
+  sys.exit('exiting')
 
 # system
 #

@@ -18,10 +18,10 @@ import common as C
 from os import getpid
 
 do = {'run':        './run.sh',
-  'info-metrics':   "--nodes '+CoreIPC,+Instructions,+CORE_CLKS,+IpTB,+UPI,+CPU_Utilization,+Time,+MUX'",
+  'info-metrics':   "--nodes '+CoreIPC,+Instructions,+CORE_CLKS,+IpTB,+UPI,+L2MPKI,+CPU_Utilization,+Time,+MUX'",
   'extra-metrics':  "--metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
   'super': 0,
-  'toplev-levels':  3,
+  'toplev-levels':  2,
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'gen-kernel':     1,
@@ -54,7 +54,7 @@ def tools_update():
   exe('git pull')
   exe('git checkout HEAD run.sh')
   exe('git submodule update --remote')
-  if do['super']: exe(args.pmu_tools + "/event_download.py") # requires sudo
+  if do['super']: exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs for now.
 
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): exe_to_null('echo %d | sudo tee %s'%(v, p))
@@ -127,7 +127,7 @@ def profile(log=False, out='run'):
       "| head -20", '@annotate code', '2>/dev/null')
   
   toplev = '' if perf is 'perf' else 'PERF=%s '%perf
-  toplev+= (args.pmu_tools + '/toplev.py --no-desc %s'%do['info-metrics'])
+  toplev+= (args.pmu_tools + '/toplev.py %s --no-desc %s'%(args.toplev, do['info-metrics']))
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_nz= "egrep -v '(FE|BE|BAD|RET).*[ \-][10]\.. |^RUN|not found' "
   def toplev_V(v, tag=''):
@@ -169,6 +169,7 @@ def parse_args():
       '\n\t\t\tbuild [disable|enable]-smt setup-all tools-update')
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('--pmu-tools', default='./pmu-tools', help='use a custom pmu-tools directory')
+  ap.add_argument('--toplev', default='', help='arguments to pass-through to toplev')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', default=None, help='name of kernel')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')

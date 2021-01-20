@@ -6,7 +6,6 @@ __author__ = 'ayasin'
 
 import sys, os, re
 
-
 # logging
 #
 class color:
@@ -64,6 +63,12 @@ def get_out(x):
 def file2str(f):
   out = file2lines(f)
   return out[0].replace('\n', '')
+
+import glob as python_glob
+def glob(regex):
+  fs = python_glob.glob(regex)
+  if len(fs) is 0: error("could not find files: %s"%regex)
+  return sorted(fs)
 
 # files
 #

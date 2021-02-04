@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Jan. 2021
+# edited: Feb. 2021
 # TODO list:
 #   add trials support
 #   re-enable power in system-wide (kernel support is missing for ICL+ models)
@@ -18,10 +18,11 @@ import common as C
 from os import getpid
 
 do = {'run':        './run.sh',
-  'info-metrics':   "--nodes '+CoreIPC,+Instructions,+CORE_CLKS,+IpTB,+UPI,+L2MPKI,+CPU_Utilization,+Time,+MUX'",
-  'extra-metrics':  "--metric-group +Summary,+HPC --nodes +Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
-  'super': 0,
+  'super':          0,
+  'toplev':         "--metric-group +Summary,+HPC",
   'toplev-levels':  2,
+  'metrics':        "+CoreIPC,+Instructions,+CORE_CLKS,+IpTB,+UPI,+L2MPKI,+CPU_Utilization,+Time,+MUX",
+  'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'gen-kernel':     1,
@@ -43,7 +44,7 @@ def uniq_name():
   if '/' in name[0]: name[0] = name[0].split('/')[-1].replace('.sh', '')
   name = ''.join(name)
   name = name.replace('/tmp' if '/tmp' in name else 'silesia', '-')#Mine
-  return C.chop(name, './~')
+  return C.chop(name, './~<>')
 
 def tools_install(installer='sudo %s install '%do['package-mgr']):
   for x in ('numactl', 'dmidecode'):
@@ -107,8 +108,8 @@ def profile(log=False, out='run'):
   r = do['run']
   if en(0) or log: log_setup()
   
-  def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[2:] + px.join(rapl) + '/'
-  def perf_e(): return '-e %s,%s'%(do['perf-stat-def'], power()) if do['super'] else ''
+  def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
+  def perf_e(): return '-e %s,%s,%s'%(do['perf-stat-def'], power(), power(['retiring','bad-spec','fe-bound','be-bound'], '/,cpu/topdown-')) if do['super'] >= 2 else ''
   def perf_stat(flags=''): return '%s stat %s -- %s | tee %s.perf_stat%s.log | egrep "seconds|CPUs|GHz|insn|pkg"'%(perf, flags, r, out, flags.split(' ')[0])
   if en(1): exe(perf_stat(), 'per-app counting')
   if en(2): exe(perf_stat('-a ' + perf_e()), 'system-wide counting')
@@ -127,12 +128,13 @@ def profile(log=False, out='run'):
       "| head -20", '@annotate code', '2>/dev/null')
   
   toplev = '' if perf is 'perf' else 'PERF=%s '%perf
-  toplev+= (args.pmu_tools + '/toplev.py %s --no-desc %s'%(args.toplev, do['info-metrics']))
+  toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_nz= "egrep -v '(FE|BE|BAD|RET).*[ \-][10]\.. |^RUN|not found' "
-  def toplev_V(v, tag=''):
+  def toplev_V(v, tag='', nodes=do['metrics']):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
-    return '%s %s -V %s -- %s'%(toplev, v, o.replace('.log', '-perf.csv'), r), o
+    return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
+              o.replace('.log', '-perf.csv'), args.toplev_args, r), o
   
   cmd, log = toplev_V('-vl6')
   if en(4): exe(cmd + ' | tee %s | %s'%(log, grep_bk), 'topdown full')
@@ -144,7 +146,7 @@ def profile(log=False, out='run'):
   if en(6): exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using)" '%log, 'topdown auto-drilldown')
   
   if en(7) and args.no_multiplex:
-    cmd, log = toplev_V('-vl6 %s --no-multiplex '%do['extra-metrics'], '-nomux')
+    cmd, log = toplev_V('-vl6 --no-multiplex ', '-nomux', do['metrics'] + ',' + do['extra-metrics'])
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
@@ -169,7 +171,7 @@ def parse_args():
       '\n\t\t\tbuild [disable|enable]-smt setup-all tools-update')
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('--pmu-tools', default='./pmu-tools', help='use a custom pmu-tools directory')
-  ap.add_argument('--toplev', default='', help='arguments to pass-through to toplev')
+  ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', default=None, help='name of kernel')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')

@@ -21,7 +21,8 @@ do = {'run':        './run.sh',
   'super':          0,
   'toplev':         "--metric-group +Summary,+HPC",
   'toplev-levels':  2,
-  'metrics':        "+CoreIPC,+Instructions,+CORE_CLKS,+IpTB,+UPI,+L2MPKI,+CPU_Utilization,+Time,+MUX",
+  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+UPI,+CPU_Utilization,+Time,+MUX",
+  'metrics':        "+IpTB,+L2MPKI",
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
@@ -131,7 +132,7 @@ def profile(log=False, out='run'):
   toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_nz= "egrep -v '(FE|BE|BAD|RET).*[ \-][10]\.. |^RUN|not found' "
-  def toplev_V(v, tag='', nodes=do['metrics']):
+  def toplev_V(v, tag='', nodes=do['nodes']):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
               o.replace('.log', '-perf.csv'), args.toplev_args, r), o
@@ -146,7 +147,7 @@ def profile(log=False, out='run'):
   if en(6): exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using)" '%log, 'topdown auto-drilldown')
   
   if en(7) and args.no_multiplex:
-    cmd, log = toplev_V('-vl6 --no-multiplex ', '-nomux', do['metrics'] + ',' + do['extra-metrics'])
+    cmd, log = toplev_V('-vl6 --no-multiplex ', '-nomux', do['nodes'] + ',' + do['extra-metrics'])
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
@@ -172,6 +173,7 @@ def parse_args():
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('--pmu-tools', default='./pmu-tools', help='use a custom pmu-tools directory')
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
+  ap.add_argument('-m', '--metrics', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', default=None, help='name of kernel')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
@@ -187,10 +189,10 @@ def main():
   global args
   args = parse_args()
   if args.verbose > 3: print args
-  if args.verbose > 2: do['info-metrics'] = do['info-metrics'] + ' -g'
-  if args.verbose > 1: do['info-metrics'] = do['info-metrics'] + ' -v'
+  if args.verbose > 2: args.toplev_args += ' -g'
+  if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name
-  
+  do['nodes'] += ("," + args.metrics)
   do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
   
   for c in args.command:

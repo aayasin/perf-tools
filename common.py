@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Jan. 2021
+# edited: Feb. 2021
 __author__ = 'ayasin'
 
 import sys, os, re
@@ -20,6 +20,7 @@ class color:
   UNDERLINE = '\033[4m'
   END = '\033[0m'
 
+#colored printing
 def printc(msg, col=color.DARKCYAN):
   print col + msg + color.END
 
@@ -31,6 +32,11 @@ def error(msg):
   log = re.match(r".*(>|tee) (.*).log.*", msg)
   if log: exe_cmd("cat %s.log"%log.group(2), debug=True)
   sys.exit(' !')
+
+#print (to stderr) and flush
+def printf(x, flush=True, std=sys.stderr):
+  std.write(x)
+  if flush: std.flush()
 
 def exit(msg=''):
   printc('%s ..'%msg, color.GREEN)

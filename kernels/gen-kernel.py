@@ -16,7 +16,7 @@ INST_UNIQ='PAUSE'
 INST_1B='NOP'
 NOP10='nopw   %cs:0x0(%rax,%rax,1)'
 NOP14='data16 data16 data16 data16 nopw %cs:0x0(%rax,%rax,1)'
-MOVlg='movabs $0x8877665544332211, %%r8'
+MOVLG='movabs $0x8877665544332211, %r8'
 
 ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--num', type=int, default=3, help='# times to repeat instruction(s), aka unroll-factor')
@@ -27,6 +27,7 @@ ap.add_argument('mode', nargs='?', choices=['basicblock']+J.jumpy_modes, default
 args = ap.parse_args()
 
 def asm(x, tabs=1, spaces=8):
+  if x == 'MOVLG': x = MOVLG
   print ' '*spaces + 'asm("' + '\t'*tabs + x + '");'
 
 def jumpy(): return args.mode in J.jumpy_modes

@@ -52,9 +52,9 @@ def tools_install(installer='sudo %s install '%do['package-mgr']):
     exe(installer + x, 'installing ' + x)
   if do['super']: exe('./build-xed.sh', 'installing xed')
 
-def tools_update():
+def tools_update(kernels=['', 'jumpy5p14.c', 'peak4wide.c', 'sse2avx.c']):
   exe('git pull')
-  exe('git checkout HEAD run.sh')
+  exe('git checkout HEAD run.sh' + ' kernels/'.join(kernels))
   exe('git submodule update --remote')
   if do['super']: exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs for now.
 
@@ -189,6 +189,8 @@ def main():
   global args
   args = parse_args()
   if args.verbose > 3: print args
+  #args sanity checks
+  if args.gen_args and not args.app_name: C.error('must specify --app-name with --gen-args')
   if args.verbose > 2: args.toplev_args += ' -g'
   if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name

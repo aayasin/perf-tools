@@ -43,8 +43,8 @@ def uniq_name():
   if args.app_name is None: return 'run%d'%getpid()
   name = args.app_name.split(' ')[2:] if 'taskset' in args.app_name.split(' ')[0] else args.app_name.split(' ')
   if '/' in name[0]: name[0] = name[0].split('/')[-1].replace('.sh', '')
+  if len(name) > 1: name[1] = '-'+name[1]
   name = ''.join(name)
-  name = name.replace('/tmp' if '/tmp' in name else 'silesia', '-')#Mine
   return C.chop(name, './~<>')
 
 def tools_install(installer='sudo %s install '%do['package-mgr']):
@@ -131,7 +131,7 @@ def profile(log=False, out='run'):
   toplev = '' if perf is 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
   grep_bk= "egrep '<==|MUX|Info.Bott'"
-  grep_nz= "egrep -v '(FE|BE|BAD|RET).*[ \-][10]\.. |^RUN|not found' "
+  grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0 |RUN|Add)|not (found|supported)' "
   def toplev_V(v, tag='', nodes=do['nodes']):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,

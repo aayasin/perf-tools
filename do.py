@@ -10,7 +10,6 @@
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
 #   check sudo permissions
-#   auto-produce options for 'command' help
 __author__ = 'ayasin'
 
 import argparse
@@ -56,7 +55,7 @@ def tools_update(kernels=['', 'jumpy5p14.c', 'peak4wide.c', 'sse2avx.c']):
   exe('git pull')
   exe('git checkout HEAD run.sh' + ' kernels/'.join(kernels))
   exe('git submodule update --remote')
-  if do['super']: exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs for now.
+  if do['super']: exe(args.pmu_tools + "/event_download.py ") # requires sudo; add '-a' to download all CPUs
 
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): exe_to_null('echo %d | sudo tee %s'%(v, p))
@@ -167,9 +166,8 @@ def build_kernel(dir='./kernels/'):
 
 def parse_args():
   ap = argparse.ArgumentParser()
-  ap.add_argument('command', nargs='+', help='supported options: ' \
-      'setup-perf log profile tar, all (for these 4)' \
-      '\n\t\t\tbuild [disable|enable]-smt setup-all tools-update')
+  ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '\
+                  '\nsupported options: ' + C.commands_list())
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('--pmu-tools', default='./pmu-tools', help='use a custom pmu-tools directory')
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')

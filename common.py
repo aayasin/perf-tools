@@ -62,9 +62,9 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False):
   if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))
 
 from subprocess import check_output
-def get_out(x):
-  out = check_output(x)
-  return out.replace('\n', '')
+def exe_output(x, sep=';'):
+  out = check_output(x, shell=True)
+  return out.replace('\n', sep)
 
 def file2str(f):
   out = file2lines(f)
@@ -107,4 +107,7 @@ def chop(s, chars):
   r=s
   for i in range(len(chars)): r=r.replace(chars[i], '')
   return r
+
+def commands_list():
+  return exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2 | sort"%sys.argv[0], sep=' ')
 

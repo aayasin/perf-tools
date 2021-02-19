@@ -16,7 +16,9 @@ $CC -S jumpy5p14.c
 ./gen-kernel.py -i NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak4wide.c
 ./gen-kernel.py jumpy-seq -i JL -a 6 -n 20000  > jcc20k.c
 ./gen-kernel.py jumpy-random -a 6 -i JMP -n 1024 > rfetch64k.c
+./gen-kernel.py -i 'vaddpd %ymm@,%ymm@,%ymm@' -r16 -n1 > fp-add-bw.c
+./gen-kernel.py -i 'vaddpd %ymm@-1,%ymm@,%ymm@' -r16 -n1 > fp-add-lat.c
 
-for x in rfetch64k jumpy5p14 jcc20k sse2avx peak4wide; do
+for x in rfetch64k jumpy5p14 jcc20k sse2avx peak4wide fp-add-bw fp-add-lat; do
   $CC -o $x $x.c
 done

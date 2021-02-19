@@ -21,7 +21,7 @@ do = {'run':        './run.sh',
   'toplev':         "--metric-group +Summary,+HPC",
   'toplev-levels':  2,
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+UPI,+CPU_Utilization,+Time,+MUX",
-  'metrics':        "+IpTB,+L2MPKI",
+  'metrics':        "+IpTB,+L2MPKI,+ILP",
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
@@ -42,7 +42,8 @@ def uniq_name():
   if args.app_name is None: return 'run%d'%getpid()
   name = args.app_name.split(' ')[2:] if 'taskset' in args.app_name.split(' ')[0] else args.app_name.split(' ')
   if '/' in name[0]: name[0] = name[0].split('/')[-1].replace('.sh', '')
-  if len(name) > 1: name[1] = '-'+name[1]
+  if len(name) == 1: name.append(args.app_iterations)
+  if len(name) > 1 and name[1][0] != '-': name[1] = '-'+name[1]
   name = ''.join(name)
   return C.chop(name, './~<>')
 
@@ -151,7 +152,7 @@ def profile(log=False, out='run'):
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
 
-def alias(cmd, log_files=['','log','csv']):
+def alias(cmd, log_files=['','log','csv','stat']):
   if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files) + ' .*.cmd')
   if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* results.tar.gz ')
 

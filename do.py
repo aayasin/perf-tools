@@ -1,10 +1,9 @@
 #!/usr/bin/env python2
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Feb. 2021
+# edited: March. 2021
 # TODO list:
 #   add trials support
-#   re-enable power in system-wide (kernel support is missing for ICL+ models)
 #   control prefetches, log msrs
 #   quiet mode
 #   convert verbose to a bitmask
@@ -23,12 +22,13 @@ do = {'run':        './run.sh',
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+UPI,+CPU_Utilization,+Time,+MUX",
   'metrics':        "+IpTB,+L2MPKI,+ILP",
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
-  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses',
+  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'gen-kernel':     1,
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
   'cmds_file':      None,
   'package-mgr':    'apt-get' if 'Ubuntu' in C.file2str('/etc/os-release') else 'yum',
+  'pmu':            C.file2str('/sys/devices/cpu/caps/pmu_name'),
 }
 args = []
 
@@ -37,6 +37,9 @@ def exe(x, msg=None, redir_out=' 2>&1'):
   return C.exe_cmd(x, msg, redir_out, args.verbose>0)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
+
+#Icelake onward PMU, e.g. Intel PerfMon Version 5+
+def icelake(): return do['pmu'] in ['icelake']
 
 def uniq_name():
   if args.app_name is None: return 'run%d'%getpid()
@@ -89,6 +92,7 @@ def smt(x='off'):
 
 def log_setup(out = 'setup-system.log'):
   def new_line(): exe_v0('echo >> %s'%out)
+  C.printc(do['pmu'])
   exe('lscpu > setup-lscpu.log', 'logging setup')
   
   exe('uname -a > ' + out)
@@ -110,10 +114,15 @@ def profile(log=False, out='run'):
   if en(0) or log: log_setup()
   
   def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
-  def perf_e(): return '-e %s,%s,%s'%(do['perf-stat-def'], power(), power(['retiring','bad-spec','fe-bound','be-bound'], '/,cpu/topdown-')) if do['super'] >= 2 else ''
-  def perf_stat(flags=''): return '%s stat %s -- %s | tee %s.perf_stat%s.log | egrep "seconds|CPUs|GHz|insn|pkg"'%(perf, flags, r, out, flags.split(' ')[0])
+  def perf_e(): return power() if not icelake() else ''
+  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
+    args = flags
+    def c(x): return x if events == '' else ','+x
+    if icelake(): events += ',topdown-'.join([c('{slots'),'retiring','bad-spec','fe-bound','be-bound}'])
+    if events != '': args += ' -e %s,%s'%(do['perf-stat-def'], events)
+    return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, args, r, out, C.chop(flags,' '), grep)
   if en(1): exe(perf_stat(), 'per-app counting')
-  if en(2): exe(perf_stat('-a ' + perf_e()), 'system-wide counting')
+  if en(2): exe(perf_stat('-a ', perf_e(), '| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
 
   if en(3):
     base = out+'.perf'

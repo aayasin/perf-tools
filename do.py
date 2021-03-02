@@ -92,7 +92,7 @@ def smt(x='off'):
 
 def log_setup(out = 'setup-system.log'):
   def new_line(): exe_v0('echo >> %s'%out)
-  C.printc(do['pmu'])
+  C.printc(do['pmu'] or 'Unknown PMU')
   exe('lscpu > setup-lscpu.log', 'logging setup')
   
   exe('uname -a > ' + out)
@@ -107,7 +107,7 @@ def log_setup(out = 'setup-system.log'):
   if do['super']: exe('sudo dmidecode > setup-memory.log')
 
 def profile(log=False, out='run'):
-  def en(n): return int(args.profile_mask, 16) & 2**n
+  def en(n): return C.hex_en(args.profile_mask, n)
   out = uniq_name()
   perf=args.perf
   r = do['run']

@@ -68,7 +68,7 @@ def exe_output(x, sep=';'):
 
 def file2str(f):
   out = file2lines(f)
-  return out[0].replace('\n', '')
+  return out[0].replace('\n', '') if out[0] else None
 
 import glob as python_glob
 def glob(regex):
@@ -79,8 +79,12 @@ def glob(regex):
 # files
 #
 def file2lines(filename):
-  with open(filename) as f:
-    return f.read().splitlines()
+  try:
+    with open(filename) as f:
+      return f.read().splitlines()
+  except IOError:
+    warn('cannot open %s'%filename)
+    return [None]
 
 import csv
 def read_perf_toplev(filename):
@@ -97,7 +101,7 @@ def read_perf_toplev(filename):
   return d
 
 
-# strings
+# auxiliary: strings, Hexa masks
 #
 
 # chop - clean a list of charecters from a string
@@ -110,4 +114,7 @@ def chop(s, chars):
 
 def commands_list():
   return exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2 | sort"%sys.argv[0], sep=' ')
+
+def hex_en(mask, bit):
+  return int(mask, 16) & 2**bit
 

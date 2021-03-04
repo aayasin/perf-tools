@@ -3,8 +3,11 @@
 # Mar. 2021
 #
 CC='gcc -g -O2'
+GEN=${GEN:-1}
+
 set -xe
 
+if [ $GEN -eq 1 ]; then
 ./gen-kernel.py jumpy-seq -n 5 -i JMP -a 14  > jumpy5p14.c
 $CC -S jumpy5p14.c
 #$CC -o jumpy5p14 jumpy5p14.c
@@ -19,7 +22,9 @@ $CC -S jumpy5p14.c
 ./gen-kernel.py jumpy-random -a 6 -i JMP -n 49152 > rfetch3m.c
 ./gen-kernel.py -i 'vaddpd %ymm@,%ymm@,%ymm@' -r16 -n1 > fp-add-bw.c
 ./gen-kernel.py -i 'vaddpd %ymm@-1,%ymm@,%ymm@' -r16 -n1 > fp-add-lat.c
+fi
 
-for x in rfetch{64k,3m} jumpy5p14 jcc20k sse2avx peak[45]wide fp-add-{bw,lat}; do
+kernels=`bash -c "ls rfetch{64k,3m} jumpy5p14 jcc20k sse2avx peak[45]wide fp-add-{bw,lat}"`
+for x in $kernels; do
   $CC -o $x $x.c
 done

@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: March. 2021
+# edited: Mar. 2021
 # TODO list:
 #   add trials support
 #   control prefetches, log msrs
@@ -19,9 +19,9 @@ do = {'run':        './run.sh',
   'super':          0,
   'toplev':         "--metric-group +Summary,+HPC",
   'toplev-levels':  2,
-  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+UPI,+CPU_Utilization,+Time,+MUX",
-  'metrics':        "+IpTB,+L2MPKI,+ILP",
-  'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad",
+  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX", #,+UPI once ICL mux fixed
+  'metrics':        "+IpTB,+L2MPKI",
+  'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'gen-kernel':     1,
@@ -34,7 +34,7 @@ args = []
 
 def exe(x, msg=None, redir_out=' 2>&1'):
   do['cmds_file'].write(x + '\n')
-  return C.exe_cmd(x, msg, redir_out, args.verbose>0)
+  return C.exe_cmd(x, msg, redir_out, args.verbose>0, run=not args.print_only)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
 
@@ -50,9 +50,10 @@ def uniq_name():
   name = ''.join(name)
   return C.chop(name, './~<>')
 
-def tools_install(installer='sudo %s install '%do['package-mgr']):
-  for x in ('numactl', 'dmidecode'):
-    exe(installer + x, 'installing ' + x)
+def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['numactl', 'dmidecode']):
+  if args.install_perf: packages += ['linux-tools-generic && sudo find / -name perf -executable -type f']
+  for x in packages:
+    exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['super']: exe('./build-xed.sh', 'installing xed')
 
 def tools_update(kernels=['', 'jumpy5p14.c', 'peak4wide.c', 'sse2avx.c']):
@@ -175,12 +176,14 @@ def build_kernel(dir='./kernels/'):
   do['run'] = fixup('taskset 0x4 ./%s %d'%(app, int(float(args.app_iterations))))
 
 def parse_args():
-  ap = argparse.ArgumentParser()
+  ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '\
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('--pmu-tools', default='./pmu-tools', help='use a custom pmu-tools directory')
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
+  ap.add_argument('--install-perf', action='store_const', const=True, default=False, help='install the linux perf tool')
+  ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('-m', '--metrics', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', default=None, help='name of kernel')

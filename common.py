@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Feb. 2021
+# edited: Mar. 2021
 __author__ = 'ayasin'
 
 import sys, os, re
@@ -50,7 +50,8 @@ def exit(msg=''):
 # @msg:   an informative message to display. @ hints for a "slave" command
 # @debug: print the command before its execution
 # @redir_out:  redirect output of the (first non-piped) command as specified
-def exe_cmd(x, msg=None, redir_out=None, debug=False):
+# @run:   do run the specified command
+def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True):
   if redir_out: x = x.replace('|', redir_out + ' |', 1) if '|' in x else x + redir_out
   if msg:
     if '@' in msg: msg='\t'+msg.replace('@', '')
@@ -58,7 +59,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False):
     printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
-  ret = os.system(x)
+  ret = os.system(x) if run else 0
   if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))
 
 from subprocess import check_output

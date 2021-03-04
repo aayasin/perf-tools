@@ -94,11 +94,15 @@ def read_perf_toplev(filename):
   with open(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl)
     for r in reader:
-      x = r['Event']
-      if x in ('Event', 'dummy') : continue
-      if x == 'msr/tsc/': x='tsc'
-      elif not '.' in x: print x
-      d[x.upper()] = int(float(r['Value']))
+      if r['Event'] in ('Event', 'dummy') : continue
+      x = r['Event'].upper()
+      v = int(float(r['Value']))
+      if x == 'MSR/TSC/': x='TSC'
+      elif x == 'DURATION_TIME':
+        x='DurationTimeInMilliSeconds'
+        v=float(v/1e6)
+      elif not '.' in x: print r['Event']
+      d[x] = v
   return d
 
 

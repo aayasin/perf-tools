@@ -108,7 +108,7 @@ def log_setup(out = 'setup-system.log'):
   if do['super']: exe('sudo dmidecode > setup-memory.log')
 
 def profile(log=False, out='run'):
-  def en(n): return C.hex_en(args.profile_mask, n)
+  def en(n): return args.profile_mask & 2**n
   out = uniq_name()
   perf=args.perf
   r = do['run']
@@ -188,7 +188,7 @@ def parse_args():
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', default=None, help='name of kernel')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
-  ap.add_argument('-pm', '--profile-mask', default='FF', help='mask to control stage in profile-command')
+  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='FF', help='mask to control stage in profile-command')
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
     help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, help='verbose level; 0:none, 1:commands, ' \

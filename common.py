@@ -120,6 +120,3 @@ def chop(s, chars):
 def commands_list():
   return exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2 | sort"%sys.argv[0], sep=' ')
 
-def hex_en(mask, bit):
-  return int(mask, 16) & 2**bit
-

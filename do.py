@@ -22,7 +22,7 @@ do = {'run':        './run.sh',
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX", #,+UPI once ICL mux fixed
   'metrics':        "+IpTB,+L2MPKI",
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
-  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses',
+  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'gen-kernel':     1,
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
@@ -98,6 +98,7 @@ def log_setup(out = 'setup-system.log'):
   
   exe('uname -a > ' + out)
   exe('cat /etc/os-release | grep -v URL >> ' + out)
+  exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)
   new_line()
   exe('%s --version >> '%args.perf + out)
   setup_perf('log', out)
@@ -176,7 +177,7 @@ def build_kernel(dir='./kernels/'):
   do['run'] = fixup('taskset 0x4 ./%s %d'%(app, int(float(args.app_iterations))))
 
 def parse_args():
-  ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  ap = argparse.ArgumentParser(usage='do.py command [command ..] [options]', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '\
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
@@ -193,6 +194,7 @@ def parse_args():
     help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, help='verbose level; 0:none, 1:commands, ' \
     '2:+verbose-on-metrics, 3:+event-groups, 4:ALL')
+  ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS) # override global variables with python expression
   x = ap.parse_args()
   return x
 
@@ -207,6 +209,8 @@ def main():
   if args.app_name: do['run'] = args.app_name
   do['nodes'] += ("," + args.metrics)
   do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
+  if args.tune:
+    for t in args.tune: exec(t)
   
   for c in args.command:
     if   c == 'forgive-me':   pass

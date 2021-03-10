@@ -111,22 +111,28 @@ def log_setup(out = 'setup-system.log'):
 
 def profile(log=False, out='run'):
   def en(n): return args.profile_mask & 2**n
+  def a_events():
+    def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
+    return power() if not icelake() else ''
+  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
+    def c(x): return x if events == '' else ','+x
+    perf_args = flags
+    if icelake(): events += ',topdown-'.join([c('{slots'),'retiring','bad-spec','fe-bound','be-bound}'])
+    if args.events:
+      events += c(args.events)
+      grep = '' #keep output unfiltered with user-defined events
+    if events != '': perf_args += ' -e %s,%s'%(do['perf-stat-def'], events)
+    return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, C.chop(flags,' '), grep)
+  
   out = uniq_name()
   perf=args.perf
   r = do['run']
   if en(0) or log: log_setup()
   
-  def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
-  def perf_e(): return power() if not icelake() else ''
-  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
-    args = flags
-    def c(x): return x if events == '' else ','+x
-    if icelake(): events += ',topdown-'.join([c('{slots'),'retiring','bad-spec','fe-bound','be-bound}'])
-    if events != '': args += ' -e %s,%s'%(do['perf-stat-def'], events)
-    return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, args, r, out, C.chop(flags,' '), grep)
   if en(1): exe(perf_stat(), 'per-app counting')
-  if en(2): exe(perf_stat('-a ', perf_e(), '| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
-
+  
+  if en(2): exe(perf_stat('-a ', a_events(), '| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
+  
   if en(3):
     base = out+'.perf'
     if do['perf-record']: base += C.chop(do['perf-record'], ' :')
@@ -184,13 +190,14 @@ def parse_args():
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('--pmu-tools', default='./pmu-tools', help='use a custom pmu-tools directory')
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
-  ap.add_argument('--install-perf', action='store_const', const=True, default=False, help='install the linux perf tool')
+  ap.add_argument('--install-perf', action='store_const', const=True, default=False, help='install the Linux perf tool')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('-m', '--metrics', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
+  ap.add_argument('-e', '--events', help='user events to pass to perf-stat\'s -e')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
-  ap.add_argument('-a', '--app-name', default=None, help='name of kernel')
+  ap.add_argument('-a', '--app-name', default=None, help='name of kernel or full-command to profile')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
-  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='FF', help='mask to control stage in profile-command')
+  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='FF', help='mask to control stages in the profile command')
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
     help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, help='verbose level; 0:none, 1:commands, ' \

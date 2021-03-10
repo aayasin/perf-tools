@@ -25,6 +25,7 @@ do = {'run':        './run.sh',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'gen-kernel':     1,
+  'pin':            'taskset 0x4',
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
   'cmds_file':      None,
   'package-mgr':    'apt-get' if 'Ubuntu' in C.file2str('/etc/os-release') else 'yum',
@@ -174,7 +175,7 @@ def build_kernel(dir='./kernels/'):
     exe(fixup('./gen-kernel.py %s > ./%s.c'%(args.gen_args, app)), 'building kernel: ' + app)
     if args.verbose > 3: exe(fixup('head -2 ./%s.c'%app))
   exe(fixup('%s -g -O2 -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
-  do['run'] = fixup('taskset 0x4 ./%s %d'%(app, int(float(args.app_iterations))))
+  do['run'] = fixup('%s ./%s %d'%(do['pin'], app, int(float(args.app_iterations))))
 
 def parse_args():
   ap = argparse.ArgumentParser(usage='do.py command [command ..] [options]', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -210,7 +211,9 @@ def main():
   do['nodes'] += ("," + args.metrics)
   do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
   if args.tune:
-    for t in args.tune: exec(t)
+    for t in args.tune:
+      if t.startswith(':'): t = "do['%s']=%s"%(t.split(':')[1], t.split(':')[2])
+      exec(t)
   
   for c in args.command:
     if   c == 'forgive-me':   pass

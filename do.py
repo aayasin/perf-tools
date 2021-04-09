@@ -8,6 +8,7 @@
 #   quiet mode
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
+#   "transparent" python version support
 #   check sudo permissions
 __author__ = 'ayasin'
 
@@ -113,7 +114,7 @@ def profile(log=False, out='run'):
   def en(n): return args.profile_mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
-    return power() if not icelake() else ''
+    return power() if args.power and not icelake() else ''
   def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
     def c(x): return x if events == '' else ','+x
     perf_args = flags
@@ -194,6 +195,7 @@ def parse_args():
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('-m', '--metrics', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
   ap.add_argument('-e', '--events', help='user events to pass to perf-stat\'s -e')
+  ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', default=None, help='name of kernel or full-command to profile')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Author: Ahmad Yasin
-# Mar. 2021
+# Apr. 2021
 #
 CC='gcc -g -O2'
 GEN=${GEN:-1}
@@ -17,6 +17,7 @@ $CC -S jumpy5p14.c
 #$CC -o sse2avx sse2avx.c
 
 ./gen-kernel.py -i NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak4wide.c
+./gen-kernel.py -i NOP NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak5wide.c
 ./gen-kernel.py jumpy-seq -i JL -a 6 -n 20000  > jcc20k.c
 ./gen-kernel.py jumpy-random -a 6 -i JMP -n 1024 > rfetch64k.c
 ./gen-kernel.py jumpy-random -a 6 -i JMP -n 49152 > rfetch3m.c

@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Mar. 2021
+# edited: Apr. 2021
 # TODO list:
 #   add trials support
 #   control prefetches, log msrs
@@ -25,6 +25,7 @@ do = {'run':        './run.sh',
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
+  'sample':         1,
   'gen-kernel':     1,
   'pin':            'taskset 0x4',
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
@@ -47,7 +48,7 @@ def uniq_name():
   if args.app_name is None: return 'run%d'%getpid()
   name = args.app_name.split(' ')[2:] if 'taskset' in args.app_name.split(' ')[0] else args.app_name.split(' ')
   if '/' in name[0]: name[0] = name[0].split('/')[-1].replace('.sh', '')
-  if len(name) == 1 and 'kernels' in args.app_name: name.append(args.app_iterations)
+  if len(name) == 1 and ('kernels' in args.app_name or args.gen_args): name.append(args.app_iterations)
   if len(name) > 1 and name[1][0] != '-': name[1] = '-'+name[1]
   name = ''.join(name)
   return C.chop(name, './~<>')
@@ -134,7 +135,7 @@ def profile(log=False, out='run'):
   
   if en(2): exe(perf_stat('-a ', a_events(), '| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
   
-  if en(3):
+  if en(3) and do['sample']:
     base = out+'.perf'
     if do['perf-record']: base += C.chop(do['perf-record'], ' :')
     exe(perf + ' record -g '+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
@@ -165,9 +166,10 @@ def profile(log=False, out='run'):
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample', nodes='+IPC,+Time', tlargs='')
     exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
-    cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
-    exe(cmd, '@sampling on bottleneck')
-    C.printc("Try 'perf report -i %s' to browse sources"%cmd.split('-o ')[1].split(' ')[0])
+    if do['sample']:
+      cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
+      exe(cmd, '@sampling on bottleneck')
+      C.printc("Try 'perf report -i %s' to browse sources"%cmd.split('-o ')[1].split(' ')[0])
   
   if en(7) and args.no_multiplex:
     cmd, log = toplev_V('-vl6 --no-multiplex ', '-nomux', do['nodes'] + ',' + do['extra-metrics'])
@@ -217,7 +219,7 @@ def main():
   args = parse_args()
   if args.verbose > 3: print args
   #args sanity checks
-  if args.gen_args and not args.app_name: C.error('must specify --app-name with --gen-args')
+  if (args.gen_args or 'build' in args.command) and not args.app_name: C.error('must specify --app-name with any of: --gen-args, build')
   if args.verbose > 2: args.toplev_args += ' -g'
   if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name
@@ -226,6 +228,7 @@ def main():
   if args.tune:
     for t in args.tune:
       if t.startswith(':'): t = "do['%s']=%s"%(t.split(':')[1], t.split(':')[2])
+      if args.verbose > 3: print t
       exec(t)
   
   for c in args.command:

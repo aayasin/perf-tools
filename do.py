@@ -47,7 +47,7 @@ def uniq_name():
   if args.app_name is None: return 'run%d'%getpid()
   name = args.app_name.split(' ')[2:] if 'taskset' in args.app_name.split(' ')[0] else args.app_name.split(' ')
   if '/' in name[0]: name[0] = name[0].split('/')[-1].replace('.sh', '')
-  if len(name) == 1: name.append(args.app_iterations)
+  if len(name) == 1 and 'kernels' in args.app_name: name.append(args.app_iterations)
   if len(name) > 1 and name[1][0] != '-': name[1] = '-'+name[1]
   name = ''.join(name)
   return C.chop(name, './~<>')
@@ -151,10 +151,10 @@ def profile(log=False, out='run'):
   toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0 |RUN|Add)|not (found|supported)' "
-  def toplev_V(v, tag='', nodes=do['nodes']):
+  def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
-              o.replace('.log', '-perf.csv'), args.toplev_args, r), o
+              o.replace('.log', '-perf.csv'), tlargs, r), o
   
   cmd, log = toplev_V('-vl6')
   if en(4): exe(cmd + ' | tee %s | %s'%(log, grep_bk), 'topdown full')
@@ -162,8 +162,12 @@ def profile(log=False, out='run'):
   cmd, log = toplev_V('-vl%d'%do['toplev-levels'])
   if en(5): exe(cmd + ' | tee %s | %s'%(log, grep_nz), 'topdown %d-levels'%do['toplev-levels'])
   
-  cmd, log = toplev_V('--drilldown')# --show-sample')
-  if en(6): exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using)" '%log, 'topdown auto-drilldown')
+  if en(6):
+    cmd, log = toplev_V('--drilldown --show-sample', nodes='+IPC,+Time', tlargs='')
+    exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
+    cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
+    exe(cmd, '@sampling on bottleneck')
+    C.printc("Try 'perf report -i %s' to browse sources"%cmd.split('-o ')[1].split(' ')[0])
   
   if en(7) and args.no_multiplex:
     cmd, log = toplev_V('-vl6 --no-multiplex ', '-nomux', do['nodes'] + ',' + do['extra-metrics'])
@@ -171,7 +175,7 @@ def profile(log=False, out='run'):
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
 
-def alias(cmd, log_files=['','log','csv','stat']):
+def alias(cmd, log_files=['','log','csv']): #,'stat'
   if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files) + ' .*.cmd')
   if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* results.tar.gz ')
 

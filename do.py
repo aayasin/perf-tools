@@ -16,9 +16,10 @@ import argparse
 import common as C
 from os import getpid
 
+TOPLEV_DEF="--metric-group +Summary,+HPC"
 do = {'run':        './run.sh',
   'super':          0,
-  'toplev':         "--metric-group +Summary,+HPC",
+  'toplev':         TOPLEV_DEF,
   'toplev-levels':  2,
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX", #,+UPI once ICL mux fixed
   'metrics':        "+IpTB,+L2MPKI",
@@ -164,7 +165,8 @@ def profile(log=False, out='run'):
   if en(5): exe(cmd + ' | tee %s | %s'%(log, grep_nz), 'topdown %d-levels'%do['toplev-levels'])
   
   if en(6):
-    cmd, log = toplev_V('--drilldown --show-sample', nodes='+IPC,+Time', tlargs='')
+    cmd, log = toplev_V('--drilldown --show-sample', nodes='+IPC,+Time',
+      tlargs='' if args.toplev_args == TOPLEV_DEF else args.toplev_args)
     exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
     if do['sample']:
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)

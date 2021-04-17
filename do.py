@@ -32,7 +32,7 @@ do = {'run':        './run.sh',
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
   'cmds_file':      None,
   'package-mgr':    'apt-get' if 'Ubuntu' in C.file2str('/etc/os-release') else 'yum',
-  'pmu':            C.file2str('/sys/devices/cpu/caps/pmu_name'),
+  'pmu':            C.pmu_name(),
 }
 args = []
 
@@ -42,8 +42,7 @@ def exe(x, msg=None, redir_out=' 2>&1'):
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
 
-#Icelake onward PMU, e.g. Intel PerfMon Version 5+
-def icelake(): return do['pmu'] in ['icelake']
+def icelake(): return C.pmu_icelake()
 
 def uniq_name():
   if args.app_name is None: return 'run%d'%getpid()

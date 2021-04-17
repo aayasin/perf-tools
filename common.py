@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Mar. 2021
+# edited: Apr. 2021
 __author__ = 'ayasin'
 
 import sys, os, re
@@ -106,7 +106,7 @@ def read_perf_toplev(filename):
   return d
 
 
-# auxiliary: strings, Hexa masks
+# auxiliary: strings, CPU, PMU
 #
 
 # chop - clean a list of charecters from a string
@@ -119,4 +119,19 @@ def chop(s, chars):
 
 def commands_list():
   return exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2 | sort"%sys.argv[0], sep=' ')
+
+def pmu_name():
+  return file2str('/sys/devices/cpu/caps/pmu_name')
+#Icelake onward PMU, e.g. Intel PerfMon Version 5+
+def pmu_icelake():
+  return pmu_name() in ['icelake']
+
+def cpu_has_feature(feature):
+  flags = exe_output("lscpu | grep Flags:")
+  return feature in flags
+
+def cpu_pipeline_width():
+  width = 4
+  if pmu_icelake(): width = 5
+  return width
 

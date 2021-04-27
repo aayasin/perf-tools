@@ -28,6 +28,8 @@ do = {'run':        './run.sh',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'sample':         1,
   'gen-kernel':     1,
+  'numactl':        1,
+  'dmidecode':      0,
   'pin':            'taskset 0x4',
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
   'cmds_file':      None,
@@ -107,9 +109,9 @@ def log_setup(out = 'setup-system.log'):
   setup_perf('log', out)
   new_line()
   #exe('cat /etc/lsb-release >> ' + out)
-  exe('numactl -H >> ' + out)
+  if do['numactl']: exe('numactl -H >> ' + out)
   
-  if do['super']: exe('sudo dmidecode > setup-memory.log')
+  if do['dmidecode']: exe('sudo dmidecode > setup-memory.log')
 
 def profile(log=False, out='run'):
   def en(n): return args.profile_mask & 2**n

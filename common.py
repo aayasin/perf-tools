@@ -1,7 +1,8 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Apr. 2021
+# edited: May. 2021
+from __future__ import print_function
 __author__ = 'ayasin'
 
 import sys, os, re
@@ -22,7 +23,7 @@ class color:
 
 #colored printing
 def printc(msg, col=color.DARKCYAN):
-  print col + msg + color.END
+  print(col + msg + color.END)
 
 def warn(msg):
   printc('WARNING: %s !'%msg, color.CYAN)
@@ -63,9 +64,11 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True):
   if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))
 
 from subprocess import check_output
-def exe_output(x, sep=';'):
+def exe_output(x, sep=";"):
   out = check_output(x, shell=True)
-  return out.replace('\n', sep)
+  if isinstance(out, (bytes, bytearray)):
+    out = out.decode()
+  return out.replace("\n", sep)
 
 def file2str(f):
   out = file2lines(f)
@@ -101,7 +104,7 @@ def read_perf_toplev(filename):
       elif x == 'DURATION_TIME':
         x='DurationTimeInMilliSeconds'
         v=float(v/1e6)
-      elif not '.' in x: print r['Event']
+      elif not '.' in x: print(r['Event'])
       d[x] = v
   return d
 
@@ -121,7 +124,7 @@ def commands_list():
   return exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2 | sort"%sys.argv[0], sep=' ')
 
 def pmu_name():
-  return file2str('/sys/devices/cpu/caps/pmu_name')
+  return file2str('/sys/devices/cpu/caps/pmu_name') or 'Unknown PMU'
 #Icelake onward PMU, e.g. Intel PerfMon Version 5+
 def pmu_icelake():
   return pmu_name() in ['icelake']

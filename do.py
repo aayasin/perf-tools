@@ -1,20 +1,21 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Apr. 2021
+# edited: May. 2021
 # TODO list:
 #   add trials support
 #   control prefetches, log msrs
 #   quiet mode
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
-#   "transparent" python version support
 #   check sudo permissions
+from __future__ import print_function
 __author__ = 'ayasin'
 
 import argparse
 import common as C
 from os import getpid
+from platform import python_version
 
 TOPLEV_DEF="--metric-group +Summary,+HPC"
 do = {'run':        './run.sh',
@@ -98,15 +99,17 @@ def smt(x='off'):
 
 def log_setup(out = 'setup-system.log'):
   def new_line(): exe_v0('echo >> %s'%out)
-  C.printc(do['pmu'] or 'Unknown PMU')
+  C.printc(do['pmu'])
   exe('lscpu > setup-lscpu.log', 'logging setup')
   
   exe('uname -a > ' + out)
   exe('cat /etc/os-release | grep -v URL >> ' + out)
   exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)
   new_line()
+  exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
   exe('%s --version >> '%args.perf + out)
   setup_perf('log', out)
+  exe('echo "python version: %s" >> %s'%(python_version(), out))
   new_line()
   #exe('cat /etc/lsb-release >> ' + out)
   if do['numactl']: exe('numactl -H >> ' + out)
@@ -211,7 +214,7 @@ def parse_args():
   ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='FF', help='mask to control stages in the profile command')
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
     help='skip no-multiplexing reruns')
-  ap.add_argument('-v', '--verbose', type=int, help='verbose level; 0:none, 1:commands, ' \
+  ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, ' \
     '2:+verbose-on-metrics, 3:+event-groups, 4:ALL')
   ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS) # override global variables with python expression
   x = ap.parse_args()
@@ -220,7 +223,7 @@ def parse_args():
 def main():
   global args
   args = parse_args()
-  if args.verbose > 3: print args
+  if args.verbose > 3: print(args)
   #args sanity checks
   if (args.gen_args or 'build' in args.command) and not args.app_name: C.error('must specify --app-name with any of: --gen-args, build')
   if args.verbose > 2: args.toplev_args += ' -g'
@@ -231,7 +234,7 @@ def main():
   if args.tune:
     for t in args.tune:
       if t.startswith(':'): t = "do['%s']=%s"%(t.split(':')[1], t.split(':')[2])
-      if args.verbose > 3: print t
+      if args.verbose > 3: print(t)
       exec(t)
   
   for c in args.command:

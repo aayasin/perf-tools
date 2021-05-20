@@ -12,9 +12,8 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 
-import argparse
+import argparse, os
 import common as C
-from os import getpid
 from platform import python_version
 
 TOPLEV_DEF="--metric-group +Summary,+HPC"
@@ -48,9 +47,11 @@ def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
 def icelake(): return C.pmu_icelake()
 
 def uniq_name():
-  if args.app_name is None: return 'run%d'%getpid()
+  if args.app_name is None: return 'run%d'%os.getpid()
   name = args.app_name.split(' ')[2:] if 'taskset' in args.app_name.split(' ')[0] else args.app_name.split(' ')
-  if '/' in name[0]: name[0] = name[0].split('/')[-1].replace('.sh', '')
+  if '/' in name[0]:
+    if not os.access(name[0], os.X_OK): C.error("user-app '%s' is not executable"%name[0])
+    name[0] = name[0].split('/')[-1].replace('.sh', '')
   if len(name) == 1 and ('kernels' in args.app_name or args.gen_args): name.append(args.app_iterations)
   if len(name) > 1 and name[1][0] != '-': name[1] = '-'+name[1]
   name = ''.join(name)
@@ -209,7 +210,7 @@ def parse_args():
   ap.add_argument('-e', '--events', help='user events to pass to perf-stat\'s -e')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
-  ap.add_argument('-a', '--app-name', default=None, help='name of kernel or full-command to profile')
+  ap.add_argument('-a', '--app-name', default=None, help='name of user-application/kernel/command to profile')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
   ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='FF', help='mask to control stages in the profile command')
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,

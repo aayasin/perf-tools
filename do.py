@@ -31,6 +31,7 @@ do = {'run':        './run.sh',
   'numactl':        1,
   'dmidecode':      0,
   'pin':            'taskset 0x4',
+  'xed':            0,
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
   'cmds_file':      None,
   'package-mgr':    'apt-get' if 'Ubuntu' in C.file2str('/etc/os-release') else 'yum',
@@ -144,15 +145,17 @@ def profile(log=False, out='run'):
   if en(3) and do['sample']:
     base = out+'.perf'
     if do['perf-record']: base += C.chop(do['perf-record'], ' :')
-    exe(perf + ' record -g '+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
-    exe(perf + " report --stdio --hierarchy --header | grep -v ' 0\.0.%' | tee "+base+"-modules.log " \
-      "| grep -A11 Overhead", '@report modules')
+    exe(perf + ' record -g -o %s.perf.data '%out+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
+    exe(perf + " report --stdio --hierarchy --header -i %s.perf.data | grep -v ' 0\.0.%%' | tee "%out+
+      base+"-modules.log | grep -A11 Overhead", '@report modules')
     base2 = base+'-code'
-    exe(perf + " annotate --stdio | c++filt | tee " + base2 + ".log" \
+    exe(perf + " annotate --stdio -i %s.perf.data | c++filt | tee "%out + base2 + ".log" \
       "| egrep -v -E ' 0\.[0-9][0-9] :|^\s+:($|\s+(Disassembly of section .text:|//|#include))' " \
       "| tee " + base2 + "_nonzero.log > /dev/null " \
       "&& egrep -n -B1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
       "| head -20", '@annotate code', '2>/dev/null')
+    if do['xed']: exe(perf + " script -i %s.perf.data -F insn --xed | sort | uniq -c | sort -n " \
+      "| tee %s-imix.log | tail"%(out, base), '@instructions-mix')
   
   toplev = '' if perf is 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc ')

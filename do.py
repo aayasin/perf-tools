@@ -90,7 +90,7 @@ def setup_perf(actions=('set', 'log'), out=None):
       ('/sys/bus/event_source/devices/cpu/rdpmc', 2, )]
   perf_params += [(TIME_MAX, 0, 1)] # has to be last
   for x in perf_params: 
-    if (len(x) is 2) or superv:
+    if (len(x) == 2) or superv:
       param, value = x[0], x[1]
       if 'set' in actions: set_it(param, value)
       if 'log' in actions: exe_v0('printf "%s : %s \n"'%(param, C.file2str(param)) + 
@@ -157,7 +157,7 @@ def profile(log=False, out='run'):
     if do['xed']: exe(perf + " script -i %s.perf.data -F insn --xed | sort | uniq -c | sort -n " \
       "| tee %s-imix.log | tail"%(out, base), '@instructions-mix')
   
-  toplev = '' if perf is 'perf' else 'PERF=%s '%perf
+  toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0 |RUN|Add)|not (found|supported)' "

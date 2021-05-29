@@ -77,7 +77,7 @@ def file2str(f):
 import glob as python_glob
 def glob(regex):
   fs = python_glob.glob(regex)
-  if len(fs) is 0: error("could not find files: %s"%regex)
+  if len(fs) == 0: error("could not find files: %s"%regex)
   return sorted(fs)
 
 # files

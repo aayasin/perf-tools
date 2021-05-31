@@ -12,7 +12,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 
-import argparse, os
+import argparse, os, sys
 import common as C
 from platform import python_version
 
@@ -33,6 +33,7 @@ do = {'run':        './run.sh',
   'pin':            'taskset 0x4',
   'xed':            0,
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
+  'python':         sys.executable,
   'cmds_file':      None,
   'package-mgr':    'apt-get' if 'Ubuntu' in C.file2str('/etc/os-release') else 'yum',
   'pmu':            C.pmu_name(),
@@ -195,7 +196,7 @@ def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
   app = args.app_name
   if do['gen-kernel']:
-    exe(fixup('./gen-kernel.py %s > ./%s.c'%(args.gen_args, app)), 'building kernel: ' + app)
+    exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app)
     if args.verbose > 3: exe(fixup('head -2 ./%s.c'%app))
   exe(fixup('%s -g -O2 -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
   do['run'] = fixup('%s ./%s %d'%(do['pin'], app, int(float(args.app_iterations))))

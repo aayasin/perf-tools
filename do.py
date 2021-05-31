@@ -65,9 +65,10 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['num
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['super']: exe('./build-xed.sh', 'installing xed')
 
-def tools_update(kernels=['', 'jumpy5p14.c', 'peak4wide.c', 'sse2avx.c']):
+def tools_update(kernels=[]):
+  ks = [''] + [x+'.c' for x in (C.cpu_peak_kernels() + ['jumpy5p14', 'sse2avx'])] + kernels
   exe('git pull')
-  exe('git checkout HEAD run.sh' + ' kernels/'.join(kernels))
+  exe('git checkout HEAD run.sh' + ' kernels/'.join(ks))
   exe('git submodule update --remote')
   if do['super']: exe(args.pmu_tools + "/event_download.py ") # requires sudo; add '-a' to download all CPUs
 

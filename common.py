@@ -138,3 +138,6 @@ def cpu_pipeline_width():
   if pmu_icelake(): width = 5
   return width
 
+def cpu_peak_kernels():
+  return ['peak%dwide'%x for x in (4,5)]
+

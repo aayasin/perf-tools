@@ -1,6 +1,6 @@
 #!/bin/sh
 # Author: Ahmad Yasin
-# Apr. 2021
+# Jun. 2021
 #
 CC='gcc -g -O2'
 GEN=${GEN:-1}
@@ -25,7 +25,7 @@ $CC -S jumpy5p14.c
 ./gen-kernel.py -i 'vaddpd %ymm@-1,%ymm@,%ymm@' -r16 -n1 > fp-add-lat.c
 fi
 
-ks="rfetch{64k,3m},jumpy5p14,jcc20k,sse2avx,peak[45]wide,fp-add-{bw,lat}"
+ks="fp-add-{bw,lat},jcc20k,jumpy5p14,memcpy,peak[45]wide,rfetch{64k,3m},sse2avx"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

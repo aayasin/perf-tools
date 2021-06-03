@@ -55,9 +55,9 @@ def uniq_name():
     if not os.access(name[0], os.X_OK): C.error("user-app '%s' is not executable"%name[0])
     name[0] = name[0].split('/')[-1].replace('.sh', '')
   if len(name) == 1 and ('kernels' in args.app_name or args.gen_args): name.append(args.app_iterations)
-  if len(name) > 1 and name[1][0] != '-': name[1] = '-'+name[1]
-  name = ''.join(name)
-  return C.chop(name, './~<>')
+  namestr = name.pop(0)
+  for x in name: namestr += "%s%s"%('' if x.startswith('-') else '-', x)
+  return C.chop(namestr, './~<>')
 
 def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['numactl', 'dmidecode']):
   if args.install_perf: packages += ['linux-tools-generic && sudo find / -name perf -executable -type f']
@@ -100,6 +100,8 @@ def setup_perf(actions=('set', 'log'), out=None):
 
 def smt(x='off'):
   exe('echo %s | sudo tee /sys/devices/system/cpu/smt/control'%x)
+def atom(x='offline'):
+  exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
 
 def log_setup(out = 'setup-system.log'):
   def new_line(): exe_v0('echo >> %s'%out)
@@ -252,6 +254,8 @@ def main():
     elif c == 'tools-update': tools_update()
     elif c == 'disable-smt':  smt()
     elif c == 'enable-smt':   smt('on')
+    elif c == 'disable-atom': atom()
+    elif c == 'enable-atom':  atom('online')
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
     elif c == 'tar':          alias(c)

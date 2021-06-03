@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: May. 2021
+# edited: Jun. 2021
 # TODO list:
 #   add trials support
 #   control prefetches, log msrs
@@ -209,7 +209,7 @@ def parse_args():
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '\
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
-  ap.add_argument('--pmu-tools', default='./pmu-tools', help='use a custom pmu-tools directory')
+  ap.add_argument('--pmu-tools', default='%s ./pmu-tools'%do['python'], help='use a custom pmu-tools directory')
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
   ap.add_argument('--install-perf', action='store_const', const=True, default=False, help='install the Linux perf tool')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')

@@ -56,7 +56,7 @@ int main(int argc, const char* argv[])
     }
     asm(".align 512; Lbl_end:");
     tsc2 = _rdtsc();
-    printf("%s: Average TSC ticks/KB: %.1f for %ld KB buffers\n",
+    printf("%s: Average TSC of %.1f ticks/KB for %ld KB buffers\n",
        argv[0], (tsc2-tsc1)/(double)n/b, b);
     free(B1);
     free(B2);

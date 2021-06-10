@@ -196,7 +196,7 @@ def profile(log=False, out='run'):
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
 
-def alias(cmd, log_files=['','log','csv']): #,'stat'
+def do_logs(cmd, log_files=['','log','csv']): #,'stat'
   if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files) + ' .*.cmd')
   if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* results.tar.gz ')
 
@@ -256,6 +256,7 @@ def main():
       tools_install()
       setup_perf()
     elif c == 'setup-perf':   setup_perf()
+    elif c == 'find-perf':    exe('sudo find / -name perf -type f -executable')
     elif c == 'tools-update': tools_update()
     elif c == 'disable-smt':  smt()
     elif c == 'enable-smt':   smt('on')
@@ -263,12 +264,12 @@ def main():
     elif c == 'enable-atom':  atom('online')
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
-    elif c == 'tar':          alias(c)
-    elif c == 'clean':        alias(c)
+    elif c == 'tar':          do_logs(c)
+    elif c == 'clean':        do_logs(c)
     elif c == 'all':
       setup_perf()
       profile(True)
-      alias('tar')
+      do_logs('tar')
     elif c == 'build':        build_kernel()
     else:
       C.error("Unknown command: '%s' !"%c)

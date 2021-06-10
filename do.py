@@ -185,8 +185,11 @@ def profile(log=False, out='run'):
     if do['sample']:
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
       exe(cmd, '@sampling on bottleneck')
-      C.printc("Try 'perf report -i %s' to browse sources"%cmd.split('-o ')[1].split(' ')[0])
-  
+      perf_data = cmd.split('-o ')[1].split(' ')[0]
+      C.printc("Try 'perf report -i %s' to browse sources"%perf_data)
+      for c in ('report', 'annotate'):
+        exe("%s %s --stdio -i %s > %s "%(perf, c, perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
+
   if en(7) and args.no_multiplex:
     cmd, log = toplev_V('-vl6 --no-multiplex ', '-nomux', do['nodes'] + ',' + do['extra-metrics'])
     exe(cmd + " | tee %s | %s"%(log, grep_nz)

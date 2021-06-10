@@ -27,6 +27,7 @@ do = {'run':        './run.sh',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'sample':         1,
+  'tee':            1,
   'gen-kernel':     1,
   'numactl':        1,
   'dmidecode':      0,
@@ -41,6 +42,7 @@ do = {'run':        './run.sh',
 args = []
 
 def exe(x, msg=None, redir_out=' 2>&1'):
+  if not do['tee']: x = x.split('|')[0]
   do['cmds_file'].write(x + '\n')
   return C.exe_cmd(x, msg, redir_out, args.verbose>0, run=not args.print_only)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)

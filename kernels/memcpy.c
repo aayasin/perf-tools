@@ -11,7 +11,7 @@
 
 #define MSG 0
 #define DBG 0
-#define KB 	1024
+#define KB  1024
 #define U64	uint64_t
 
 #if 0
@@ -31,12 +31,13 @@ char* buffers[MAX_BUFFERS];
 int   buffers_idx=0;
 char* alloc(U64 s, U64 a, char i)
 {
-    char* b=(char*)malloc(s);
+    char* b=(char*)malloc(s+a);
+    assert(a>0);
     assert(b);
-    if (DBG) printf("%p with s=%lu a=%lu i=%c\n", b, s, a, i);
+    if (DBG) printf("alloc: %p with s=%lu a=%lu i=%c\n", b, s, a, i);
     assert(buffers_idx<MAX_BUFFERS);
     buffers[buffers_idx++]=b;
-    b = (char*)((U64)b & ~((U64)(a - 1)));
+    b = (char*)(((U64)b+a) & ~(a - 1));
 #if 0
     memset(b, i, s-2);
     b[s-1]='\0';
@@ -46,8 +47,10 @@ char* alloc(U64 s, U64 a, char i)
 }
 void freeall()
 {
-    for(int i=0; i<buffers_idx; i++)
+    for(int i=0; i<buffers_idx; i++) {
+        if (DBG) printf("free: %p\n", buffers[i]);
         free(buffers[i]);
+    }
 }
 
 int main(int argc, const char* argv[])
@@ -76,8 +79,7 @@ int main(int argc, const char* argv[])
     printf("%s: average TSC of %.1f ticks/KB for %ld KB %ldB-aligned buffers\n",
        argv[0], (tsc2-tsc1)/(double)n/b, b, a);
     if (DBG) printf("%p %p\n", B1, B2);
-    //TODO: fix why free seg-faults
-    //freeall();
+    freeall();
 
     return 0;
 }

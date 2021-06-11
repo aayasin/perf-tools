@@ -8,6 +8,7 @@
 #   quiet mode
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
+#   support disable nmi_watchdog in CentOS
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
@@ -42,7 +43,7 @@ do = {'run':        './run.sh',
 args = []
 
 def exe(x, msg=None, redir_out=' 2>&1'):
-  if not do['tee']: x = x.split('|')[0]
+  if not do['tee'] and redir_out: x = x.split('|')[0]
   do['cmds_file'].write(x + '\n')
   return C.exe_cmd(x, msg, redir_out, args.verbose>0, run=not args.print_only)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
@@ -52,7 +53,8 @@ def icelake(): return C.pmu_icelake()
 
 def uniq_name():
   if args.app_name is None: return 'run%d'%os.getpid()
-  name = args.app_name.split(' ')[2:] if 'taskset' in args.app_name.split(' ')[0] else args.app_name.split(' ')
+  name = args.app_name.strip().split(' ')
+  if 'taskset' in name[0]: name = name[2:]
   if '/' in name[0]:
     if not os.access(name[0], os.X_OK): C.error("user-app '%s' is not executable"%name[0])
     name[0] = name[0].split('/')[-1].replace('.sh', '')
@@ -78,13 +80,13 @@ def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): exe_to_null('echo %d | sudo tee %s'%(v, p))
   TIME_MAX = '/proc/sys/kernel/perf_cpu_time_max_percent'
   perf_params = [
-    ('/proc/sys/kernel/nmi_watchdog', 0, ),
-    ('/proc/sys/kernel/soft_watchdog', 0, ),
-    ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
     ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e9), 1),
     ('/sys/devices/cpu/perf_event_mux_interval_ms', 100, ),
+    ('/proc/sys/kernel/kptr_restrict', 0, ),
+    ('/proc/sys/kernel/nmi_watchdog', 0, ),
+    ('/proc/sys/kernel/soft_watchdog', 0, ),
   ]
   if 'set' in actions: exe_v0(msg='setting up perf')
   superv = 'sup' in actions or do['super']
@@ -196,7 +198,8 @@ def profile(log=False, out='run'):
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
 
-def do_logs(cmd, log_files=['','log','csv']): #,'stat'
+def do_logs(cmd, ext=[]):
+  log_files = ['','log','csv'] + ext
   if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files) + ' .*.cmd')
   if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* results.tar.gz ')
 

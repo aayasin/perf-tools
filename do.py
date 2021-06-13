@@ -40,12 +40,15 @@ do = {'run':        './run.sh',
   'package-mgr':    'apt-get' if 'Ubuntu' in C.file2str('/etc/os-release') else 'yum',
   'pmu':            C.pmu_name(),
 }
-args = []
+args = argparse.Namespace()
 
-def exe(x, msg=None, redir_out=' 2>&1'):
+def exe(x, msg=None, redir_out=' 2>&1', verbose=False, run=True):
   if not do['tee'] and redir_out: x = x.split('|')[0]
-  do['cmds_file'].write(x + '\n')
-  return C.exe_cmd(x, msg, redir_out, args.verbose>0, run=not args.print_only)
+  if len(vars(args))>0:
+    do['cmds_file'].write(x + '\n')
+    verbose = args.verbose > 0
+    run = not args.print_only
+  return C.exe_cmd(x, msg, redir_out, verbose, run)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
 
@@ -110,21 +113,36 @@ def atom(x='offline'):
 def log_setup(out = 'setup-system.log'):
   def new_line(): exe_v0('echo >> %s'%out)
   C.printc(do['pmu'])
-  exe('lscpu > setup-lscpu.log', 'logging setup')
-  
-  exe('uname -a > ' + out)
+  exe('uname -a > ' + out, 'logging setup')
   exe('cat /etc/os-release | grep -v URL >> ' + out)
+  new_line()
   exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)
   new_line()
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
+  exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step' >> " + out)
+  new_line()
   exe('%s --version >> '%args.perf + out)
   setup_perf('log', out)
   exe('echo "python version: %s" >> %s'%(python_version(), out))
   new_line()
-  #exe('cat /etc/lsb-release >> ' + out)
+  
   if do['numactl']: exe('numactl -H >> ' + out)
   
   if do['dmidecode']: exe('sudo dmidecode > setup-memory.log')
+
+def perf_format(es, result=''):
+  for e in es.split(','):
+    if ':' in e:
+      ok = True
+      e = e.split(':')
+      if e[0].startswith('r'):
+        if len(e[0])==5:   e='cpu/event=0x%s,umask=0x%s,name=%s/'%(e[0][3:5], e[0][1:3], e[1])
+        elif len(e[0])==7: e='cpu/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/'%(e[0][5:7], e[0][3:5], e[0][1:3], e[1])
+        else: ok = False
+      else: ok = False
+      if not ok: C.error("profile:perf-stat: invalid syntax in '%s'"%':'.join(e))
+    result += (e if result=='' else ','+e)
+  return result
 
 def profile(log=False, out='run'):
   def en(n): return args.profile_mask & 2**n
@@ -132,11 +150,11 @@ def profile(log=False, out='run'):
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not icelake() else ''
   def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
-    def c(x): return x if events == '' else ','+x
+    def append(x, y): return x if y == '' else ','+x
     perf_args = flags
     if icelake(): events += ',topdown-'.join([c('{slots'),'retiring','bad-spec','fe-bound','be-bound}'])
     if args.events:
-      events += c(args.events)
+      events += append(perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e %s,%s'%(do['perf-stat-def'], events)
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, C.chop(flags,' '), grep)
@@ -152,7 +170,9 @@ def profile(log=False, out='run'):
   
   if en(3) and do['sample']:
     base = out+'.perf'
-    if do['perf-record']: base += C.chop(do['perf-record'], ' :')
+    if do['perf-record']:
+      do['perf-record'] += ' '
+      base += C.chop(do['perf-record'], ' :')
     exe(perf + ' record -g -o %s.perf.data '%out+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
     exe(perf + " report --stdio --hierarchy --header -i %s.perf.data | grep -v ' 0\.0.%%' | tee "%out+
       base+"-modules.log | grep -A11 Overhead", '@report modules')
@@ -201,7 +221,7 @@ def profile(log=False, out='run'):
 def do_logs(cmd, ext=[]):
   log_files = ['','log','csv'] + ext
   if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files) + ' .*.cmd')
-  if cmd == 'clean': exe('rm -f ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* results.tar.gz ')
+  if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')
 
 def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
@@ -245,11 +265,14 @@ def main():
   if args.verbose > 2: args.toplev_args += ' -g'
   if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name
+  if args.print_only and args.verbose == 0: args.verbose = 1
   do['nodes'] += ("," + args.metrics)
   do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
   if args.tune:
     for t in args.tune:
-      if t.startswith(':'): t = "do['%s']=%s"%(t.split(':')[1], t.split(':')[2])
+      if t.startswith(':'):
+        l = t.split(':')
+        t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
       if args.verbose > 3: print(t)
       exec(t)
   

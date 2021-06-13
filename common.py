@@ -45,7 +45,6 @@ def exit(msg=''):
 
 # system
 #
-
 # exe_cmd - execute system command(s) with logging support
 # @x:     command to be executed
 # @msg:   an informative message to display. @ hints for a "slave" command
@@ -97,15 +96,18 @@ def read_perf_toplev(filename):
   with open(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl)
     for r in reader:
-      if r['Event'] in ('Event', 'dummy') : continue
-      x = r['Event'].upper()
+      if r['Event'] in ('Event', 'dummy'): continue
+      x = r['Event']
       v = int(float(r['Value']))
-      if x == 'MSR/TSC/': x='TSC'
-      elif x == 'DURATION_TIME':
+      if x == 'msr/tsc/': x='tsc'
+      elif x == 'duration_time':
         x='DurationTimeInMilliSeconds'
         v=float(v/1e6)
-      elif not '.' in x: print(r['Event'])
-      d[x] = v
+        d[x] = v
+        continue
+      elif '.' in x or x.startswith('cpu/topdown-'): pass
+      else: print(r['Event'])
+      d[x.upper()] = v
   return d
 
 
@@ -123,6 +125,18 @@ def chop(s, chars):
 def commands_list():
   return exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2 | sort"%sys.argv[0], sep=' ')
 
+def command_basename(comm, iterations=None):
+  if comm is None: return 'run%d'%os.getpid()
+  name = comm.strip().split(' ')
+  if 'taskset' in name[0]: name = name[2:]
+  if '/' in name[0]:
+    if not os.access(name[0], os.X_OK): error("user-app '%s' is not executable"%name[0])
+    name[0] = name[0].split('/')[-1].replace('.sh', '')
+  if len(name) == 1 and ('kernels' in comm or iterations): name.append(iterations)
+  namestr = name.pop(0)
+  for x in name: namestr += "%s%s"%('' if x.startswith('-') else '-', x)
+  return chop(namestr, './~<>')
+
 def pmu_name():
   return file2str('/sys/devices/cpu/caps/pmu_name') or 'Unknown PMU'
 #Icelake onward PMU, e.g. Intel PerfMon Version 5+
@@ -138,6 +152,6 @@ def cpu_pipeline_width():
   if pmu_icelake(): width = 5
   return width
 
-def cpu_peak_kernels():
-  return ['peak%dwide'%x for x in (4,5)]
+def cpu_peak_kernels(widths=range(4,6)):
+  return ['peak%dwide'%x for x in widths]
 

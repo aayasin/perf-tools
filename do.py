@@ -55,16 +55,7 @@ def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
 def icelake(): return C.pmu_icelake()
 
 def uniq_name():
-  if args.app_name is None: return 'run%d'%os.getpid()
-  name = args.app_name.strip().split(' ')
-  if 'taskset' in name[0]: name = name[2:]
-  if '/' in name[0]:
-    if not os.access(name[0], os.X_OK): C.error("user-app '%s' is not executable"%name[0])
-    name[0] = name[0].split('/')[-1].replace('.sh', '')
-  if len(name) == 1 and ('kernels' in args.app_name or args.gen_args): name.append(args.app_iterations)
-  namestr = name.pop(0)
-  for x in name: namestr += "%s%s"%('' if x.startswith('-') else '-', x)
-  return C.chop(namestr, './~<>')
+  return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
 
 def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['numactl', 'dmidecode']):
   if args.install_perf: packages += ['linux-tools-generic && sudo find / -name perf -executable -type f']

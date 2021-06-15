@@ -17,7 +17,8 @@ import argparse, os, sys
 import common as C
 from platform import python_version
 
-TOPLEV_DEF="--metric-group +Summary,+HPC"
+TOPLEV_DEF='--metric-group +Summary,+HPC' #FIXME: argparse should tell whether user specified an options
+Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        './run.sh',
   'super':          0,
   'toplev':         TOPLEV_DEF,
@@ -40,7 +41,7 @@ do = {'run':        './run.sh',
   'package-mgr':    'apt-get' if 'Ubuntu' in C.file2str('/etc/os-release') else 'yum',
   'pmu':            C.pmu_name(),
 }
-args = argparse.Namespace()
+args = argparse.Namespace() #vars(args)
 
 def exe(x, msg=None, redir_out=' 2>&1', verbose=False, run=True):
   if not do['tee'] and redir_out: x = x.split('|')[0]
@@ -58,10 +59,20 @@ def uniq_name():
   return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
 
 def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['numactl', 'dmidecode']):
-  if args.install_perf: packages += ['linux-tools-generic && sudo find / -name perf -executable -type f']
+  if args.install_perf:
+    if args.install_perf == 'install':
+      packages += ['linux-tools-generic && ' + Find_perf]
+    elif args.install_perf == 'build':
+      b='./build-perf'
+      exe('sed -i s/apt\-get/%s/ %s.sh && %s.sh | tee %s.log'%(do['package-mgr'],b,b,b), 'building perf anew')
+    elif args.install_perf == 'patch':
+      exe_v0(msg='setting default perf')
+      a_perf = C.exe_output(Find_perf + ' | grep -v /usr/bin/perf | head -1', '')
+      exe('ln -f -s %s /usr/bin/perf'%a_perf)
+    else: C.error('Unsupported --perf-install option: '+args.install_perf)
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
-  if do['super']: exe('./build-xed.sh', 'installing xed')
+  if do['xed']: exe('./build-xed.sh', 'installing xed')
 
 def tools_update(kernels=[]):
   ks = [''] + [x+'.c' for x in (C.cpu_peak_kernels() + ['jumpy5p14', 'sse2avx'])] + kernels
@@ -219,7 +230,7 @@ def build_kernel(dir='./kernels/'):
   app = args.app_name
   if do['gen-kernel']:
     exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app)
-    if args.verbose > 3: exe(fixup('head -2 ./%s.c'%app))
+    if args.verbose > 1: exe(fixup('head -2 ./%s.c'%app))
   exe(fixup('%s -g -O2 -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
   do['run'] = fixup('%s ./%s %d'%(do['pin'], app, int(float(args.app_iterations))))
 
@@ -230,7 +241,7 @@ def parse_args():
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('--pmu-tools', default='%s ./pmu-tools'%do['python'], help='use a custom pmu-tools directory')
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
-  ap.add_argument('--install-perf', action='store_const', const=True, default=False, help='install the Linux perf tool')
+  ap.add_argument('--install-perf', nargs='?', default=None, const='install', help='perf tool installation options: [install]|patch|build')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('-m', '--metrics', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
   ap.add_argument('-e', '--events', help='user events to pass to perf-stat\'s -e')
@@ -252,7 +263,8 @@ def main():
   args = parse_args()
   if args.verbose > 3: print(args)
   #args sanity checks
-  if (args.gen_args or 'build' in args.command) and not args.app_name: C.error('must specify --app-name with any of: --gen-args, build')
+  if (args.gen_args or 'build' in args.command) and not args.app_name:
+    C.error('must specify --app-name with any of: --gen-args, build')
   if args.verbose > 2: args.toplev_args += ' -g'
   if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name
@@ -271,9 +283,9 @@ def main():
     if   c == 'forgive-me':   pass
     elif c == 'setup-all':
       tools_install()
-      setup_perf()
+      setup_perf('set')
     elif c == 'setup-perf':   setup_perf()
-    elif c == 'find-perf':    exe('sudo find / -name perf -type f -executable')
+    elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()
     elif c == 'disable-smt':  smt()
     elif c == 'enable-smt':   smt('on')

@@ -6,9 +6,11 @@ A collection of performance analysis tools, recipes &amp; more
 * **kernels/** -- an evolving collection of x86 kernels
   * **gen-kernel.py** -- generator of X86 kernels
   * **jumpy.py** -- module for different jumping constructs
-  * **peak4wide.c** -- a sample kernel for a 4-wide superscalar machine, e.g. Skylake
-  * **sse2avx.c** -- another sample kernel for SSE <-> AVX ISA transition penalty
+  * **peakXwide.c** -- sample kernels for a X-wide superscalar machine, e.g. 4 for Skylake
+  * **sse2avx.c** -- another auto-generated kernel for SSE <-> AVX ISA transition penalty
+  * **memcpy.c** -- a custom kernel for strings of libc demonstrating how to timestamp 
   * There are more kernels produced by **build.sh** though not uploaded to git
+* **build-perf.sh** -- builds the perf tool from scratch; invoke with `./do.py setup-all --install-perf build`
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools
   * **toplev** -- profiler featuring the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method on Intel processors
   * **ocperf** -- perf wrappers that converts Intel event names to perf-events syntax  

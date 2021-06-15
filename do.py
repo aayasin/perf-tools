@@ -154,6 +154,7 @@ def profile(log=False, out='run'):
     return power() if args.power and not icelake() else ''
   def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
     def append(x, y): return x if y == '' else ','+x
+    def c(x): return append(x, events)
     perf_args = flags
     if icelake(): events += ',topdown-'.join([c('{slots'),'retiring','bad-spec','fe-bound','be-bound}'])
     if args.events:
@@ -204,7 +205,7 @@ def profile(log=False, out='run'):
   if en(5): exe(cmd + ' | tee %s | %s'%(log, grep_nz), 'topdown %d-levels'%do['toplev-levels'])
   
   if en(6):
-    cmd, log = toplev_V('--drilldown --show-sample', nodes='+IPC,+Time',
+    cmd, log = toplev_V('--drilldown --show-sample', nodes='+IPC,+Heavy_Operations,+Time',
       tlargs='' if args.toplev_args == TOPLEV_DEF else args.toplev_args)
     exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
     if do['sample']:

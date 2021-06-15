@@ -19,7 +19,7 @@ $PY ./gen-kernel.py -i "addps %xmm1,%xmm2" "vsubps %ymm1,%ymm2,%ymm3" -n10 > sse
 
 $PY ./gen-kernel.py -i NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak4wide.c
 $PY ./gen-kernel.py -i NOP NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak5wide.c
-$PY ./gen-kernel.py jumpy-seq -i JL -a 6 -n 20000  > jcc20k.c
+$PY ./gen-kernel.py jumpy-seq -i JG -a 6 -n 20000  > jcc20k.c
 $PY ./gen-kernel.py jumpy-random -a 6 -i JMP -n 1024 > rfetch64k.c
 $PY ./gen-kernel.py jumpy-random -a 6 -i JMP -n 49152 > rfetch3m.c
 $PY ./gen-kernel.py -i 'vaddpd %ymm@,%ymm@,%ymm@' -r16 -n1 > fp-add-bw.c

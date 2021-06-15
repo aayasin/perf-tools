@@ -81,8 +81,9 @@ def tools_update(kernels=[]):
   exe('git submodule update --remote')
   if do['super']: exe(args.pmu_tools + "/event_download.py ") # requires sudo; add '-a' to download all CPUs
 
+def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
 def setup_perf(actions=('set', 'log'), out=None):
-  def set_it(p, v): exe_to_null('echo %d | sudo tee %s'%(v, p))
+  def set_it(p, v): set_sysfile(p, str(v))
   TIME_MAX = '/proc/sys/kernel/perf_cpu_time_max_percent'
   perf_params = [
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
@@ -108,7 +109,7 @@ def setup_perf(actions=('set', 'log'), out=None):
                                   (' >> %s'%out if out != None else ''))
 
 def smt(x='off'):
-  exe('echo %s | sudo tee /sys/devices/system/cpu/smt/control'%x)
+  set_sysfile('/sys/devices/system/cpu/smt/control', x)
 def atom(x='offline'):
   exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
 
@@ -182,7 +183,7 @@ def profile(log=False, out='run'):
     exe(perf + " annotate --stdio -i %s.perf.data | c++filt | tee "%out + base2 + ".log" \
       "| egrep -v -E ' 0\.[0-9][0-9] :|^\s+:($|\s+(Disassembly of section .text:|//|#include))' " \
       "| tee " + base2 + "_nonzero.log > /dev/null " \
-      "&& egrep -n -B1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
+      "&& egrep -n -1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
       "| head -20", '@annotate code', '2>/dev/null')
     if do['xed']: exe(perf + " script -i %s.perf.data -F insn --xed | sort | uniq -c | sort -n " \
       "| tee %s-imix.log | tail"%(out, base), '@instructions-mix')

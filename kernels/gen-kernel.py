@@ -79,7 +79,7 @@ for j in range(args.num):
   if jumpy(): asm(label(j), tabs=0)
   for r in range(max(args.registers, 1)):
     for inst in args.instructions:
-      if inst in ['JMP', 'JL']: inst += label(J.next(args.mode, args.num), False)
+      if inst in ['JMP', 'JL', 'JG']: inst += label(J.next(args.mode, args.num), False)
       if args.registers and '@' in inst:
         for i in range(9):
           inst = inst.replace('@+%d'%(i+1), str((r+i+1) % args.registers_max))

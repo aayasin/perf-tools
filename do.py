@@ -38,7 +38,7 @@ do = {'run':        './run.sh',
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
   'python':         sys.executable,
   'cmds_file':      None,
-  'package-mgr':    'apt-get' if 'Ubuntu' in C.file2str('/etc/os-release') else 'yum',
+  'package-mgr':    C.os_installer(),
   'pmu':            C.pmu_name(),
 }
 args = argparse.Namespace() #vars(args)
@@ -61,7 +61,7 @@ def uniq_name():
 def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['numactl', 'dmidecode']):
   if args.install_perf:
     if args.install_perf == 'install':
-      packages += ['linux-tools-generic && ' + Find_perf]
+      if not do['package-mgr'] == 'dnf': packages += ['linux-tools-generic && ' + Find_perf]
     elif args.install_perf == 'build':
       b='./build-perf'
       exe('sed -i s/apt\-get/%s/ %s.sh && %s.sh | tee %s.log'%(do['package-mgr'],b,b,b), 'building perf anew')
@@ -204,7 +204,7 @@ def profile(log=False, out='run'):
   if en(5): exe(cmd + ' | tee %s | %s'%(log, grep_nz), 'topdown %d-levels'%do['toplev-levels'])
   
   if en(6):
-    cmd, log = toplev_V('--drilldown --show-sample', nodes='+IPC,+Heavy_Operations,+Time',
+    cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
       tlargs='' if args.toplev_args == TOPLEV_DEF else args.toplev_args)
     exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
     if do['sample']:

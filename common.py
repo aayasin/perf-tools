@@ -79,6 +79,13 @@ def glob(regex):
   if len(fs) == 0: error("could not find files: %s"%regex)
   return sorted(fs)
 
+def os_installer():
+  installer='yum'
+  name = file2str('/etc/os-release')
+  if 'Ubuntu' in name: installer='apt-get'
+  if 'CentOS' in name: installer='dnf'
+  return installer
+
 # files
 #
 def file2lines(filename):

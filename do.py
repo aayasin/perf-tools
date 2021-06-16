@@ -280,8 +280,7 @@ def main():
       if args.verbose > 3: print(t)
       exec(t)
   do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
-  #todo: handle dropping of quotes in say: -a 'myapp arg1 arg2'
-  do['cmds_file'].write('# %s\n'%' '.join(sys.argv))
+  do['cmds_file'].write('# %s\n'%C.argv2str())
   
   for c in args.command:
     if   c == 'forgive-me':   pass

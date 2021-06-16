@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: May. 2021
+# edited: Jun. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -121,6 +121,12 @@ def chop(s, chars):
   r=s
   for i in range(len(chars)): r=r.replace(chars[i], '')
   return r
+
+def argv2str():
+  res = []
+  for a in sys.argv:
+    res.append("'%s'"%a if ' ' in a else a)
+  return ' '.join(res)
 
 def commands_list():
   return exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2 | sort"%sys.argv[0], sep=' ')

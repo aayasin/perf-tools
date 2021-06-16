@@ -154,9 +154,8 @@ def profile(log=False, out='run'):
     return power() if args.power and not icelake() else ''
   def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
     def append(x, y): return x if y == '' else ','+x
-    def c(x): return append(x, events)
     perf_args = flags
-    if icelake(): events += ',topdown-'.join([c('{slots'),'retiring','bad-spec','fe-bound','be-bound}'])
+    if icelake(): events += ',topdown-'.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound}'])
     if args.events:
       events += append(perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events
@@ -272,7 +271,7 @@ def main():
   if args.app_name: do['run'] = args.app_name
   if args.print_only and args.verbose == 0: args.verbose = 1
   do['nodes'] += ("," + args.metrics)
-  do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
+  
   if args.tune:
     for t in args.tune:
       if t.startswith(':'):
@@ -280,6 +279,9 @@ def main():
         t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
       if args.verbose > 3: print(t)
       exec(t)
+  do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
+  #todo: handle dropping of quotes in say: -a 'myapp arg1 arg2'
+  do['cmds_file'].write('# %s\n'%' '.join(sys.argv))
   
   for c in args.command:
     if   c == 'forgive-me':   pass

@@ -39,6 +39,9 @@ def printf(x, flush=True, std=sys.stderr):
   std.write(x)
   if flush: std.flush()
 
+def annotate(x, label=''):
+  printf('%s: %s; %s\n'%(label, str(x), type(x)))
+
 def exit(msg=''):
   printc('%s ..'%msg, color.GREEN)
   sys.exit('exiting')

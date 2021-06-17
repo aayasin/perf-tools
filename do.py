@@ -3,6 +3,7 @@
 # Author: Ahmad Yasin
 # edited: Jun. 2021
 # TODO list:
+#   toplevl 3-levels default Icelake onwards
 #   add trials support
 #   control prefetches, log msrs
 #   quiet mode
@@ -231,9 +232,10 @@ def build_kernel(dir='./kernels/'):
   app = args.app_name
   if do['gen-kernel']:
     exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app)
-    if args.verbose > 1: exe(fixup('head -2 ./%s.c'%app))
+    if args.verbose > 1: exe(fixup('grep instructions ./%s.c'%app))
   exe(fixup('%s -g -O2 -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
   do['run'] = fixup('%s ./%s %d'%(do['pin'], app, int(float(args.app_iterations))))
+  if args.verbose > 2: exe(fixup("objdump -D ./%s | grep -A50 pause | egrep '[ 0-9a-f]+:'"%app), '@kernel ASM')
 
 def parse_args():
   ap = argparse.ArgumentParser(usage='do.py command [command ..] [options]', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -254,7 +256,7 @@ def parse_args():
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
     help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, ' \
-    '2:+verbose-on-metrics, 3:+event-groups, 4:ALL')
+    '2:+verbose-on metrics|build, 3:ASM on kernel build, 4:+args parsing, 5:+event-groups(ALL)')
   ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS) # override global variables with python expression
   x = ap.parse_args()
   return x
@@ -266,7 +268,7 @@ def main():
   #args sanity checks
   if (args.gen_args or 'build' in args.command) and not args.app_name:
     C.error('must specify --app-name with any of: --gen-args, build')
-  if args.verbose > 2: args.toplev_args += ' -g'
+  if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name
   if args.print_only and args.verbose == 0: args.verbose = 1

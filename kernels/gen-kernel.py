@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # generate C-language kernels with ability to incorporate x86 Assembly with certain control-flow constructs
 # Author: Ahmad Yasin
-# edited: May. 2021
+# edited: Jun. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.53
+__version__ = 0.60
 # TODO:
 # - multi-byte NOP support
 # - move Paper to a seperate module
@@ -13,11 +13,18 @@ import argparse, sys
 
 import jumpy as J
 
+import os, sys
+sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/..')
+import common as C
+
 INST_UNIQ='PAUSE'
 INST_1B='NOP'
-NOP10='nopw   %cs:0x0(%rax,%rax,1)'
-NOP14='data16 data16 data16 data16 nopw %cs:0x0(%rax,%rax,1)'
-MOVLG='movabs $0x8877665544332211, %r8'
+aliases = {'MOVLG': 'movabs $0x8877665544332211, %r8',
+  'NOP4':   'nopl   0x0(%rax)',
+  'NOP10':  'nopw   %cs:0x0(%rax,%rax,1)',
+  'NOP14':  'data16 data16 data16 data16 nopw %cs:0x0(%rax,%rax,1)',
+}
+
 Papers = {
   'MGM':  'A Metric-Guided Method for Discovering Impactful Features and Architectural Insights for Skylake-Based Processors. Ahmad Yasin, Jawad Haj-Yahya, Yosi Ben-Asher, Avi Mendelson. TACO 2019 and HiPEAC 2020.',
 }
@@ -26,9 +33,9 @@ ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--num', type=int, default=3, help='# times to repeat instruction(s), aka unroll-factor')
 ap.add_argument('-r', '--registers', type=int, default=0, help="# of registers to traverse via '@' if > 0")
 ap.add_argument('--registers-max', type=int, default=16, help="max # of registers in the instruction-set")
-ap.add_argument('-i', '--instructions', nargs='+', default=[INST_UNIQ], help='instructions for the primary loop')
-ap.add_argument('-p', '--prolog-instructions', nargs='+', default=[], help='instructions prior to the primary loop')
-ap.add_argument('-e', '--epilog-instructions', nargs='+', default=[], help='instructions post the primary loop')
+ap.add_argument('-i', '--instructions', nargs='+', default=[INST_UNIQ], help='Instructions for the primary loop. NOP#3 denotes NOP three times e.g.')
+ap.add_argument('-p', '--prolog-instructions', nargs='+', default=[], help='Instructions prior to the primary loop')
+ap.add_argument('-e', '--epilog-instructions', nargs='+', default=[], help='Instructions post the primary loop')
 ap.add_argument('-a', '--align' , type=int, default=0, help='in power of 2')
 ap.add_argument('-o', '--offset', type=int, default=0)
 ap.add_argument('--label-prefix', default='Lbl')
@@ -41,8 +48,26 @@ if args.registers > 0:
   if args.registers > args.registers_max:   sys.exit("invalid value for --registers! must be < %d"%args.registers_max)
   paper='"Reference: %s"'%Papers['MGM']
 
+def error(x):
+  C.printf(x)
+  sys.exit(' !\n')
+
+def itemize(insts):
+  if not '#' in ' '.join(insts): return insts
+  out=[]
+  for i in insts:
+    if '#' in i:
+      l = i.split('#')
+      if len(l)!=2 or not l[1].isdigit(): error('Invalid syntax: %s'%i)
+      n=int(l[1])
+      out += [l[0] for x in range(n)]
+    else: out.append(i)
+  #C.annotate(out, 'aft')
+  return out
+
 def asm(x, tabs=1, spaces=8):
-  if x == 'MOVLG': x = MOVLG
+  for a in aliases.keys():
+    if x == a: x = aliases[a]
   print(' '*spaces + 'asm("' + '\t'*tabs + x + '");')
 
 def jumpy(): return args.mode in J.jumpy_modes
@@ -69,6 +94,10 @@ int main(int argc, const char* argv[])
     if (MSG) printf("%%s\\n", MSG ? MSG : "");
     n= atol(argv[1]);"""%(__author__, sys.argv[0].replace('./',''), str(__version__),
   str(args).replace('Namespace', ''), paper))
+
+for x in vars(args).keys():
+  if 'instructions' in x:
+    setattr(args, x, itemize(getattr(args, x)))
 
 for inst in [INST_UNIQ] + args.prolog_instructions: asm(inst, spaces=4)
 if args.align: asm('.align %d'%(2 ** args.align), tabs=0)

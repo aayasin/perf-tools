@@ -187,7 +187,7 @@ def profile(log=False, out='run'):
       "&& egrep -n -1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
       "| head -20", '@annotate code', '2>/dev/null')
     if do['xed']: exe(perf + " script -i %s.perf.data -F insn --xed | sort | uniq -c | sort -n " \
-      "| tee %s-imix.log | tail"%(out, base), '@instructions-mix')
+      "| tee %s-imix-time.log | tail"%(out, base), '@instruction-mix')
   
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
@@ -208,7 +208,7 @@ def profile(log=False, out='run'):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
       tlargs='' if args.toplev_args == TOPLEV_DEF else args.toplev_args)
     exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
-    if do['sample']:
+    if do['sample'] > 2:
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
       exe(cmd, '@sampling on bottleneck')
       perf_data = cmd.split('-o ')[1].split(' ')[0]
@@ -221,6 +221,17 @@ def profile(log=False, out='run'):
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
+  
+  if en(8) and do['sample'] > 1:
+    perf_data = '%s.r20c4-b.perf.data'%out
+    exe(perf + ' record -b -e r20c4:pp -c 100003 -o %s -- %s'%(perf_data, r), 'sampling w/ LBRs')
+    C.printc("Try 'perf script -i %s --branch-history --samples 9' to browse streams"%perf_data)
+    if do['xed']:
+      comm = C.exe_output(perf + " script -i %s.perf.data -F comm "\
+        "| sort | uniq -c | sort -n | tail -1 | tr -s ' ' | cut -d' ' -f3"%out, '')
+      exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '00000|fffff' "\
+        "| cut -f3- | sed 's/#.*//' | sort | uniq -c | sort -n | tee %s.perf-imix-path.log "\
+        "| tail"%(perf_data, comm, out), "@instruction-mix for '%s'"%comm)
 
 def do_logs(cmd, ext=[]):
   log_files = ['','log','csv'] + ext

@@ -21,26 +21,27 @@ from platform import python_version
 TOPLEV_DEF='--metric-group +Summary,+HPC' #FIXME: argparse should tell whether user specified an options
 Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        './run.sh',
+  'cmds_file':      None,
+  'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
+  'dmidecode':      0,
+  'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
+  'gen-kernel':     1,
+  'metrics':        "+IpTB,+L2MPKI",
+  'msrs':           ('0x8b', '0x1a4'),
+  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX", #,+UPI once ICL mux fixed
+  'numactl':        1,
+  'package-mgr':    C.os_installer(),
+  'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
+  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
+  'pin':            'taskset 0x4',
+  'pmu':            C.pmu_name(),
+  'python':         sys.executable,
+  'sample':         1,
   'super':          0,
+  'tee':            1,
   'toplev':         TOPLEV_DEF,
   'toplev-levels':  2,
-  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX", #,+UPI once ICL mux fixed
-  'metrics':        "+IpTB,+L2MPKI",
-  'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
-  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
-  'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
-  'sample':         1,
-  'tee':            1,
-  'gen-kernel':     1,
-  'numactl':        1,
-  'dmidecode':      0,
-  'pin':            'taskset 0x4',
   'xed':            0,
-  'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
-  'python':         sys.executable,
-  'cmds_file':      None,
-  'package-mgr':    C.os_installer(),
-  'pmu':            C.pmu_name(),
 }
 args = argparse.Namespace() #vars(args)
 
@@ -74,6 +75,7 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['num
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']: exe('./build-xed.sh', 'installing xed')
+  if do['super']: exe('sudo modprobe msr', 'enabling MSRs')
 
 def tools_update(kernels=[]):
   ks = [''] + [x+'.c' for x in (C.cpu_peak_kernels() + ['jumpy5p14', 'sse2avx'])] + kernels
@@ -124,6 +126,10 @@ def log_setup(out = 'setup-system.log'):
   new_line()
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step' >> " + out)
+  if do['super']:
+    for m in do['msrs']:
+      exe('echo "MSR %s:\\t\\t%s" >> %s'%(m,
+        C.exe_one_line('sudo %s ./pmu-tools/msr.py %s'%(do['python'], m)), out))
   new_line()
   exe('%s --version >> '%args.perf + out)
   setup_perf('log', out)
@@ -187,7 +193,7 @@ def profile(log=False, out='run'):
       "&& egrep -n -1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
       "| head -20", '@annotate code', '2>/dev/null')
     if do['xed']: exe(perf + " script -i %s.perf.data -F insn --xed | sort | uniq -c | sort -n " \
-      "| tee %s-imix-time.log | tail"%(out, base), '@instruction-mix')
+      "| tee %s-hot-insts.log | tail"%(out, base), '@time-consuming instructions')
   
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
@@ -227,8 +233,8 @@ def profile(log=False, out='run'):
     exe(perf + ' record -b -e r20c4:pp -c 100003 -o %s -- %s'%(perf_data, r), 'sampling w/ LBRs')
     C.printc("Try 'perf script -i %s --branch-history --samples 9' to browse streams"%perf_data)
     if do['xed']:
-      comm = C.exe_output(perf + " script -i %s.perf.data -F comm "\
-        "| sort | uniq -c | sort -n | tail -1 | tr -s ' ' | cut -d' ' -f3"%out, '')
+      comm = C.exe_one_line(perf + " script -i %s.perf.data -F comm "\
+        "| sort | uniq -c | sort -n | tail -1 | tr -s ' ' | cut -d' ' -f3"%out)
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '00000|fffff' "\
         "| cut -f3- | sed 's/#.*//' | sort | uniq -c | sort -n | tee %s.perf-imix-path.log "\
         "| tail"%(perf_data, comm, out), "@instruction-mix for '%s'"%comm)

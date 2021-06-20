@@ -10,4 +10,5 @@ sudo apt-get install make
 make clean
 make
 ls -l $PWD/perf
+cp perf ../../../../
 set +x

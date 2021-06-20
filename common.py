@@ -71,6 +71,7 @@ def exe_output(x, sep=";"):
   if isinstance(out, (bytes, bytearray)):
     out = out.decode()
   return out.replace("\n", sep)
+def exe_one_line(x): return exe_output(x, '')
 
 def file2str(f):
   out = file2lines(f)

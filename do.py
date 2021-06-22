@@ -72,6 +72,7 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['num
       a_perf = C.exe_output(Find_perf + ' | grep -v /usr/bin/perf | head -1', '')
       exe('ln -f -s %s /usr/bin/perf'%a_perf)
     else: C.error('Unsupported --perf-install option: '+args.install_perf)
+  if do['super']: packages += ['msr-tools']
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']: exe('./build-xed.sh', 'installing xed')
@@ -313,6 +314,8 @@ def main():
     elif c == 'enable-smt':   smt('on')
     elif c == 'disable-atom': atom()
     elif c == 'enable-atom':  atom('online')
+    elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0xf && sudo rdmsr 0x1a4')
+    elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0 && sudo rdmsr 0x1a4')
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
     elif c == 'tar':          do_logs(c)

@@ -27,6 +27,7 @@ do = {'run':        './run.sh',
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'gen-kernel':     1,
   'metrics':        "+IpTB,+L2MPKI",
+  'msr':            0,
   'msrs':           ('0x8b', '0x1a4'),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX", #,+UPI once ICL mux fixed
   'numactl':        1,
@@ -72,11 +73,11 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['num
       a_perf = C.exe_output(Find_perf + ' | grep -v /usr/bin/perf | head -1', '')
       exe('ln -f -s %s /usr/bin/perf'%a_perf)
     else: C.error('Unsupported --perf-install option: '+args.install_perf)
-  if do['super']: packages += ['msr-tools']
+  if do['msr']: packages += ['msr-tools']
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']: exe('./build-xed.sh', 'installing xed')
-  if do['super']: exe('sudo modprobe msr', 'enabling MSRs')
+  if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
 
 def tools_update(kernels=[]):
   ks = [''] + [x+'.c' for x in (C.cpu_peak_kernels() + ['jumpy5p14', 'sse2avx'])] + kernels
@@ -127,7 +128,7 @@ def log_setup(out = 'setup-system.log'):
   new_line()
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step' >> " + out)
-  if do['super']:
+  if do['msr']:
     for m in do['msrs']:
       exe('echo "MSR %s:\\t\\t%s" >> %s'%(m,
         C.exe_one_line('sudo %s ./pmu-tools/msr.py %s'%(do['python'], m)), out))

@@ -127,7 +127,7 @@ def log_setup(out = 'setup-system.log'):
   exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)
   new_line()
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
-  exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step' >> " + out)
+  exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
     for m in do['msrs']:
       exe('echo "MSR %s:\\t\\t%s" >> %s'%(m,

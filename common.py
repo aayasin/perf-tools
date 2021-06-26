@@ -133,9 +133,13 @@ def chop(s, chars):
   for i in range(len(chars)): r=r.replace(chars[i], '')
   return r
 
-def argv2str():
+def arg(num):
+  if len(sys.argv) <= num: error("must provide %d parameters"%num)
+  return sys.argv[num]
+
+def argv2str(start=0):
   res = []
-  for a in sys.argv:
+  for a in sys.argv[start:]:
     res.append("'%s'"%a if ' ' in a else a)
   return ' '.join(res)
 

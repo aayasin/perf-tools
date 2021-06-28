@@ -132,6 +132,7 @@ def log_setup(out = 'setup-system.log'):
     for m in do['msrs']:
       exe('echo "MSR %s:\\t\\t%s" >> %s'%(m,
         C.exe_one_line('sudo %s ./pmu-tools/msr.py %s'%(do['python'], m)), out))
+  exe("dmesg | tee setup-dmesg.log | grep 'BIOS ' | tail -1 >> " + out)
   new_line()
   exe('%s --version >> '%args.perf + out)
   setup_perf('log', out)
@@ -168,7 +169,7 @@ def profile(log=False, out='run'):
     if args.events:
       events += append(perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events
-    if events != '': perf_args += ' -e %s,%s'%(do['perf-stat-def'], events)
+    if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, C.chop(flags,' '), grep)
   
   out = uniq_name()

@@ -159,7 +159,9 @@ def command_basename(comm, iterations=None):
   return chop(namestr, './~<>')
 
 def pmu_name():
-  return file2str('/sys/devices/cpu/caps/pmu_name') or 'Unknown PMU'
+  f = '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
+  f += '/caps/pmu_name'
+  return file2str(f) or 'Unknown PMU'
 #Icelake onward PMU, e.g. Intel PerfMon Version 5+
 def pmu_icelake():
   return pmu_name() in ['icelake']

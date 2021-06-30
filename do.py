@@ -94,7 +94,7 @@ def setup_perf(actions=('set', 'log'), out=None):
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
     ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e9), 1),
-    ('/sys/devices/cpu/perf_event_mux_interval_ms', 100, ),
+    ('/sys/devices/cpu%s/perf_event_mux_interval_ms'%('_core' if 'hybrid' in do['pmu'] else ''), 100, ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/nmi_watchdog', 0, ),
     ('/proc/sys/kernel/soft_watchdog', 0, ),

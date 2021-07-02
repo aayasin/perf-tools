@@ -4,7 +4,7 @@
 # edited: Jun. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.61
+__version__ = 0.62
 # TODO:
 # - multi-byte NOP support
 # - move Paper to a seperate module
@@ -28,6 +28,7 @@ aliases = {'MOVLG': 'movabs $0x8877665544332211, %r8',
 Papers = {
   'MGM':  'A Metric-Guided Method for Discovering Impactful Features and Architectural Insights for Skylake-Based Processors. Ahmad Yasin, Jawad Haj-Yahya, Yosi Ben-Asher, Avi Mendelson. TACO 2019 and HiPEAC 2020.',
 }
+paper=str(0)
 
 ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--num', type=int, default=3, help='# times to repeat instruction(s), aka unroll-factor')
@@ -38,19 +39,22 @@ ap.add_argument('-p', '--prolog-instructions', nargs='+', default=[], help='Inst
 ap.add_argument('-e', '--epilog-instructions', nargs='+', default=[], help='Instructions post the primary loop')
 ap.add_argument('-a', '--align' , type=int, default=0, help='in power of 2')
 ap.add_argument('-o', '--offset', type=int, default=0)
-ap.add_argument('--label-prefix', default='Lbl', help="Starting '@' implies local labels")
-ap.add_argument('mode', nargs='?', choices=['basicblock']+J.jumpy_modes, default='basicblock')
+ap.add_argument('--label-prefix', default='Lbl', help="Starting '@' implies local labels. empty '' implies number-only labels")
+ap.add_argument('mode', nargs='?', choices=['basicblock']+J.get_modes(), default='basicblock')
 args = ap.parse_args()
-
-paper=str(0)
-if args.registers > 0:
-  if not '@' in ' '.join(args.instructions): sys.exit("expect '@' in --instructions")
-  if args.registers > args.registers_max:   sys.exit("invalid value for --registers! must be < %d"%args.registers_max)
-  paper='"Reference: %s"'%Papers['MGM']
 
 def error(x):
   C.printf(x)
   sys.exit(' !\n')
+
+if args.label_prefix == '':
+  if args.mode == 'jumpy-random': args.mode += '#'
+  else: error('empty label-prefix is supported with jumpy-random mode only')
+
+if args.registers > 0:
+  if not '@' in ' '.join(args.instructions): error("expect '@' in --instructions")
+  if args.registers > args.registers_max:    error("invalid value for --registers! must be < %d"%args.registers_max)
+  paper='"Reference: %s"'%Papers['MGM']
 
 def itemize(insts):
   if not '#' in ' '.join(insts): return insts
@@ -72,13 +76,12 @@ def asm(x, tabs=1, spaces=8):
 
 def jumpy(): return args.mode in J.jumpy_modes
 
-def label(n, start=True):
- local = False
- lbl = '%s%05d'%(args.label_prefix, n)
+def label(n, declaration=True, local=False):
+ lbl = '%s%05d'%(args.label_prefix, n) if isinstance(n, int) else n
  if args.label_prefix.startswith('@'):
    local = True
    lbl = '%s%05d'%(args.label_prefix[1:], n)
- if start:
+ if declaration:
    if local: return '.local %s\\n"\n\t    "%s:'%(lbl, lbl)
    else:     return lbl+':'
  else:

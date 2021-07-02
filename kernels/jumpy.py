@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # Author: Ahmad Yasin
-# edited: May. 2021
+# edited: Jul. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -13,17 +13,20 @@ import common as C
 debug=0
 def step(x='.'): C.printf(x)
 
-jumpy_modes = ['jumpy-seq', 'jumpy-random']
+jumpy_modes = ['jumpy-seq', 'jumpy-random', 'jumpy-random#']
+
+def get_modes(): return jumpy_modes[0:2]
 
 def jumpy_idx(mode, n):
   if mode == 'jumpy-seq':
     jumpy_idx.counter += 1
     return jumpy_idx.counter
-  elif mode == 'jumpy-random':
+  elif mode.startswith('jumpy-random'):
     if jumpy_idx.counter == 0:
       if n < 4: C.error('jumpy-random: cannot converge with --num<4')
       done = False
       visited_l = [0] * n
+      patch_list = [None] * n if mode.endswith('#') else None
       if debug: print(visited_l)
       step('// jump-random: trials ')
       xx=n
@@ -48,10 +51,15 @@ def jumpy_idx(mode, n):
           visited_l[x]=1
           xx = x
           x = jumpy_idx.list[x]
+          if patch_list:
+            patch_list[xx] = str(x) + ('f' if x>xx else 'b')
           r += 1
         if debug and done: print('done: xx=%d, r=%d!'%(xx, r))
       jumpy_idx.list[xx] = n
-      if debug: print("final:", jumpy_idx.list)
+      if debug: print("final:", jumpy_idx.list, patch_list)
+      if patch_list:
+        patch_list[xx] = str(n)+'f'
+        jumpy_idx.list = patch_list
       step('\n')
       jumpy_idx.counter = -1
     return jumpy_idx.list.pop(0)

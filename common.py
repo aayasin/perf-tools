@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Jun. 2021
+# edited: Jul. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
 
-import sys, os, re
+import sys, os, re, pickle
 
 # logging
 #
@@ -121,6 +121,18 @@ def read_perf_toplev(filename):
       d[x.upper()] = v
   return d
 
+# python dictionaries
+def dict_save(d, f):
+  fo = open(f, 'wb')
+  pickle.dump(d, fo, protocol=pickle.HIGHEST_PROTOCOL)
+  fo.close()
+  printf('wrote: %s\n'%f)
+
+def dict_load(f):
+  fo = open(f, 'rb')
+  d = pickle.load(fo)
+  fo.close()
+  return d
 
 # auxiliary: strings, CPU, PMU
 #

@@ -129,10 +129,10 @@ def dict_save(d, f):
   printf('wrote: %s\n'%f)
 
 def dict_load(f):
-  fo = open(f, 'rb')
-  d = pickle.load(fo)
-  fo.close()
-  return d
+  with open(f, 'rb') as fo:
+    d = pickle.load(fo)
+    fo.close()
+    return d
 
 # auxiliary: strings, CPU, PMU
 #

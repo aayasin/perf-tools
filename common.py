@@ -143,7 +143,7 @@ def dict_load(f):
 def chop(s, chars):
   r=s
   for i in range(len(chars)): r=r.replace(chars[i], '')
-  return r
+  return r.strip()
 
 def arg(num):
   if len(sys.argv) <= num: error("must provide %d parameters"%num)

@@ -1,0 +1,44 @@
+usage: do.py command [command ..] [options]
+
+positional arguments:
+  command               setup-perf log profile tar, all (for these 4)
+                        supported options: all build clean disable-atom
+                        disable-prefetches disable-smt enable-atom enable-
+                        prefetches enable-smt find-perf log profile setup-all
+                        setup-perf tar tools-update
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --perf PERF           use a custom perf tool (default: perf)
+  --pmu-tools PMU_TOOLS
+                        use a custom pmu-tools directory (default:
+                        /usr/bin/python ./pmu-tools)
+  --toplev-args TOPLEV_ARGS
+                        arguments to pass-through to toplev (default:
+                        --metric-group +Summary,+HPC)
+  --install-perf [INSTALL_PERF]
+                        perf tool installation options: [install]|patch|build
+                        (default: None)
+  --print-only          print the commands without running them (default:
+                        False)
+  -m METRICS, --metrics METRICS
+                        user metrics to pass to toplev's --nodes (default:
+                        +IpTB,+L2MPKI)
+  -e EVENTS, --events EVENTS
+                        user events to pass to perf-stat's -e (default: None)
+  --power               collect power metrics/events as well (default: False)
+  -g GEN_ARGS, --gen-args GEN_ARGS
+                        args to gen-kernel.py (default: None)
+  -a APP_NAME, --app-name APP_NAME
+                        name of user-application/kernel/command to profile
+                        (default: None)
+  -ki APP_ITERATIONS, --app-iterations APP_ITERATIONS
+                        num-iterations of kernel (default: 1e9)
+  -pm PROFILE_MASK, --profile-mask PROFILE_MASK
+                        mask to control stages in the profile command
+                        (default: FF)
+  -N, --no-multiplex    skip no-multiplexing reruns (default: True)
+  -v VERBOSE, --verbose VERBOSE
+                        verbose level; 0:none, 1:commands, 2:+verbose-on
+                        metrics|build, 3:ASM on kernel build, 4:+args parsing,
+                        5:+event-groups(ALL) (default: 0)

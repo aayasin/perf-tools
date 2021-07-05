@@ -1,8 +1,8 @@
 #!/bin/sh
 # Author: Ahmad Yasin
-# Jun. 2021
+# Jul. 2021
 #
-CC='gcc -g -O2'
+CC=${CC:-gcc -g -O2}
 GEN=${GEN:-1}
 PY=${PY:-python3}
 
@@ -23,10 +23,12 @@ $PY ./gen-kernel.py jumpy-seq -i JG -a 6 -n 20000  > jcc20k.c
 $PY ./gen-kernel.py jumpy-random -a 6 -i JMP -n 1024 > rfetch64k.c
 $PY ./gen-kernel.py jumpy-random -a 6 -i JMP -n 49152 > rfetch3m.c
 $PY ./gen-kernel.py -i 'vaddpd %ymm@,%ymm@,%ymm@' -r16 -n1 > fp-add-bw.c
-$PY ./gen-kernel.py -i 'vaddpd %ymm@-1,%ymm@,%ymm@' -r16 -n1 > fp-add-lat.c
+$PY ./gen-kernel.py -i 'vaddpd %ymm@-1,%ymm@,%ymm@' -r16 -n10 > fp-add-lat.c
+$PY ./gen-kernel.py -i 'vmulpd %ymm@,%ymm@,%ymm@' -r16 -n1 > fp-mul-bw.c
+$PY ./gen-kernel.py -i 'vmulpd %ymm@-1,%ymm@,%ymm@' -r16 -n10 > fp-mul-lat.c
 fi
 
-ks="fp-add-{bw,lat},jcc20k,jumpy5p14,memcpy,peak[45]wide,rfetch{64k,3m},sse2avx"
+ks="fp-{add,mul}-{bw,lat},jcc20k,jumpy5p14,memcpy,peak[45]wide,rfetch{64k,3m},sse2avx"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

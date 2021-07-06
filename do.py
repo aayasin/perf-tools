@@ -61,7 +61,7 @@ def icelake(): return C.pmu_icelake()
 def uniq_name():
   return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
 
-def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['numactl', 'dmidecode']):
+def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
   if args.install_perf:
     if args.install_perf == 'install':
       if not do['package-mgr'] == 'dnf': packages += ['linux-tools-generic && ' + Find_perf]
@@ -74,6 +74,8 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=['num
       exe('ln -f -s %s /usr/bin/perf'%a_perf)
     else: C.error('Unsupported --perf-install option: '+args.install_perf)
   if do['msr']: packages += ['msr-tools']
+  for x in ('numactl', 'dmidecode'):
+    if do[x]: packages += [x]
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']: exe('./build-xed.sh', 'installing xed')

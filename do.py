@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Jun. 2021
+# edited: Jul. 2021
 # TODO list:
 #   toplevl 3-levels default Icelake onwards
 #   add trials support
@@ -95,7 +95,7 @@ def setup_perf(actions=('set', 'log'), out=None):
   perf_params = [
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
-    ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e9), 1),
+    ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e9), 'root'),
     ('/sys/devices/cpu%s/perf_event_mux_interval_ms'%('_core' if 'hybrid' in do['pmu'] else ''), 100, ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/nmi_watchdog', 0, ),
@@ -107,7 +107,7 @@ def setup_perf(actions=('set', 'log'), out=None):
     set_it(TIME_MAX, 25)
     perf_params += [('/sys/devices/cpu/rdpmc', 1, ),
       ('/sys/bus/event_source/devices/cpu/rdpmc', 2, )]
-  perf_params += [(TIME_MAX, 0, 1)] # has to be last
+  perf_params += [(TIME_MAX, 0, 'root')] # has to be last
   for x in perf_params: 
     if (len(x) == 2) or superv:
       param, value = x[0], x[1]
@@ -119,6 +119,9 @@ def smt(x='off'):
   set_sysfile('/sys/devices/system/cpu/smt/control', x)
 def atom(x='offline'):
   exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
+def fix_frequency(freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')):
+  for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_m*_freq'):
+    set_sysfile(f, freq)
 
 def log_setup(out = 'setup-system.log'):
   def new_line(): exe_v0('echo >> %s'%out)
@@ -320,6 +323,7 @@ def main():
     elif c == 'enable-atom':  atom('online')
     elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0xf && sudo rdmsr 0x1a4')
     elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0 && sudo rdmsr 0x1a4')
+    elif c == 'fix-frequency':      fix_frequency()
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
     elif c == 'tar':          do_logs(c)

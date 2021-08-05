@@ -119,9 +119,15 @@ def smt(x='off'):
   set_sysfile('/sys/devices/system/cpu/smt/control', x)
 def atom(x='offline'):
   exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
-def fix_frequency(freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')):
-  for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_m*_freq'):
-    set_sysfile(f, freq)
+def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')):
+  if x == 'on':
+    for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_m*_freq'):
+      set_sysfile(f, base_freq)
+  else:
+    for m in ('max', 'min'):
+      freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_%s_freq'%m)
+      for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_%s_freq'%m):
+        set_sysfile(f, freq)
 
 def log_setup(out = 'setup-system.log'):
   def new_line(): exe_v0('echo >> %s'%out)
@@ -323,7 +329,8 @@ def main():
     elif c == 'enable-atom':  atom('online')
     elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0xf && sudo rdmsr 0x1a4')
     elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0 && sudo rdmsr 0x1a4')
-    elif c == 'fix-frequency':      fix_frequency()
+    elif c == 'enable-fix-freq':    fix_frequency()
+    elif c == 'disable-fix-freq':   fix_frequency('undo')
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
     elif c == 'tar':          do_logs(c)

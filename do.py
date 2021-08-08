@@ -245,7 +245,7 @@ def profile(log=False, out='run'):
   if en(8) and do['sample'] > 1:
     perf_data = '%s.r20c4-b.perf.data'%out
     exe(perf + ' record -b -e r20c4:pp -c 100003 -o %s -- %s'%(perf_data, r), 'sampling w/ LBRs')
-    C.printc("Try 'perf script -i %s --branch-history --samples 9' to browse streams"%perf_data)
+    C.printc("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
     if do['xed']:
       comm = C.exe_one_line(perf + " script -i %s.perf.data -F comm "\
         "| sort | uniq -c | sort -n | tail -1 | tr -s ' ' | cut -d' ' -f3"%out)

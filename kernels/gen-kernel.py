@@ -62,8 +62,7 @@ def itemize(insts):
   #C.annotate(out, 'aft')
   return out
 
-def asm(x, tabs=1, spaces=8):
-  print(' '*spaces + 'asm("' + '\t'*tabs + x86_inst(x) + '");')
+def asm(x, tabs=1, spaces=8): print(x86_asm(x, tabs, spaces))
 
 def jumpy(): return args.mode in J.jumpy_modes
 

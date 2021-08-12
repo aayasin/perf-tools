@@ -92,13 +92,15 @@ def os_installer():
 
 # files
 #
-def file2lines(filename):
+def file2lines(filename, fail=False):
   try:
     with open(filename) as f:
       return f.read().splitlines()
   except IOError:
-    warn('cannot open %s'%filename)
-    return [None]
+    if fail: error('cannot open %s'%filename)
+    else:
+      warn('cannot open %s'%filename)
+      return [None]
 
 import csv
 def read_perf_toplev(filename):

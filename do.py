@@ -318,6 +318,7 @@ def main():
     elif c == 'setup-all':
       tools_install()
       setup_perf('set')
+    elif c == 'build-perf':   exe('./do.py setup-all --install-perf build -v%d --tune :numactl:0 :dmidecode:0'%args.verbose)
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()

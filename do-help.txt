@@ -12,8 +12,8 @@ optional arguments:
   -h, --help            show this help message and exit
   --perf PERF           use a custom perf tool (default: perf)
   --pmu-tools PMU_TOOLS
-                        use a custom pmu-tools directory (default:
-                        /usr/bin/python ./pmu-tools)
+                        use a custom pmu-tools (default: /usr/bin/python
+                        ./pmu-tools)
   --toplev-args TOPLEV_ARGS
                         arguments to pass-through to toplev (default:
                         --metric-group +Summary,+HPC)

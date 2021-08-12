@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Jul. 2021
+# edited: Aug. 2021
 # TODO list:
 #   toplevl 3-levels default Icelake onwards
 #   add trials support
@@ -131,27 +131,25 @@ def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpu
 
 def log_setup(out = 'setup-system.log'):
   def new_line(): exe_v0('echo >> %s'%out)
-  C.printc(do['pmu'])
+  def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s'%(args.pmu_tools, m))
+  C.printc(do['pmu']) #OS
   exe('uname -a > ' + out, 'logging setup')
-  exe('cat /etc/os-release | grep -v URL >> ' + out)
-  new_line()
-  exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)
-  new_line()
-  exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
+  exe("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME' >> " + out)
+  new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
-    for m in do['msrs']:
-      exe('echo "MSR %s:\\t\\t%s" >> %s'%(m,
-        C.exe_one_line('sudo %s ./pmu-tools/msr.py %s'%(do['python'], m)), out))
+    for m in do['msrs']: exe('echo "MSR %5s:\\t%16s" >> '%(m, read_msr(m)) + out)
   exe("dmesg | tee setup-dmesg.log | grep 'BIOS ' | tail -1 >> " + out)
-  new_line()
+  new_line()          #PMU
+  exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
   exe('%s --version >> '%args.perf + out)
   setup_perf('log', out)
   exe('echo "python version: %s" >> %s'%(python_version(), out))
-  new_line()
-  
+  new_line()          #Memory
   if do['numactl']: exe('numactl -H >> ' + out)
-  
+  new_line()          #Devices, etc
+  exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)
+  exe("ulimit -a > setup-ulimit.log")
   if do['dmidecode']: exe('sudo dmidecode > setup-memory.log')
 
 def perf_format(es, result=''):
@@ -273,7 +271,7 @@ def parse_args():
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '\
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
-  ap.add_argument('--pmu-tools', default='%s ./pmu-tools'%do['python'], help='use a custom pmu-tools directory')
+  ap.add_argument('--pmu-tools', default='%s ./pmu-tools'%do['python'], help='use a custom pmu-tools')
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
   ap.add_argument('--install-perf', nargs='?', default=None, const='install', help='perf tool installation options: [install]|patch|build')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')

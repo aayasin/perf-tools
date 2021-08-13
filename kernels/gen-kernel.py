@@ -4,8 +4,9 @@
 # edited: Aug. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.64
+__version__ = 0.7
 # TODO:
+# - functions/calls support
 # - move Paper to a seperate module
 
 import argparse, sys
@@ -27,14 +28,17 @@ ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--unroll-factor', type=int, default=3, help='# times to repeat instruction(s), aka unroll-factor')
 ap.add_argument('-r', '--registers', type=int, default=0, help="# of registers to traverse via '@' if > 0")
 ap.add_argument('--registers-max', type=int, default=16, help="max # of registers in the instruction-set")
-ap.add_argument('-i', '--instructions', nargs='+', default=[INST_UNIQ], help='Instructions for the primary loop. NOP#3 denotes NOP three times e.g.')
-ap.add_argument('-p', '--prolog-instructions', nargs='+', default=[], help='Instructions prior to the primary loop')
-ap.add_argument('-e', '--epilog-instructions', nargs='+', default=[], help='Instructions post the primary loop')
-ap.add_argument('-a', '--align' , type=int, default=0, help='in power of 2')
-ap.add_argument('-o', '--offset', type=int, default=0)
+ap.add_argument('-i', '--instructions', nargs='+', default=[INST_UNIQ], help='Instructions for the primary loop (Loop). NOP#3 denotes NOP three times e.g.')
+ap.add_argument('-l', '--loops', type=int, default=1, help='# of nested loops')
+ap.add_argument('-p', '--prolog-instructions', nargs='+', default=[], help='Instructions prior to the Loop')
+ap.add_argument('-e', '--epilog-instructions', nargs='+', default=[], help='Instructions post the Loop')
+ap.add_argument('-a', '--align' , type=int, default=0, help='align Loop and target of jumps [in power of 2]')
+ap.add_argument('-o', '--offset', type=int, default=0, help='offset unrolled Loop bodies [in bytes]')
 ap.add_argument('--label-prefix', default='Lbl', help="Starting '@' implies local labels. empty '' implies number-only labels")
 ap.add_argument('mode', nargs='?', choices=['basicblock']+J.get_modes(), default='basicblock')
 args = ap.parse_args()
+
+def jumpy(): return args.mode in J.jumpy_modes
 
 def error(x):
   C.printf(x)
@@ -49,6 +53,8 @@ if args.registers > 0:
   if args.registers > args.registers_max:    error("invalid value for --registers! must be < %d"%args.registers_max)
   paper='"Reference: %s"'%Papers['MGM']
 
+if args.loops > 1 and jumpy(): error("nested loops aren't supported with mode=%s"%args.mode)
+
 def itemize(insts):
   if not '#' in ' '.join(insts): return insts
   out=[]
@@ -62,9 +68,7 @@ def itemize(insts):
   #C.annotate(out, 'aft')
   return out
 
-def asm(x, tabs=1, spaces=8): print(x86_asm(x, tabs, spaces))
-
-def jumpy(): return args.mode in J.jumpy_modes
+def asm(x, tabs=1, spaces=8+4*(args.loops-1)): print(x86_asm(x, tabs, spaces))
 
 def label(n, declaration=True, local=False):
  lbl = '%s%05d'%(args.label_prefix, n) if isinstance(n, int) else n
@@ -102,11 +106,12 @@ int main(int argc, const char* argv[])
     if (MSG) printf("%%s\\n", MSG ? MSG : "");
     n= atol(argv[1]);"""%(__author__, sys.argv[0].replace('./',''), str(__version__),
   str(args).replace('Namespace', ''), paper))
+for inst in [INST_UNIQ] + args.prolog_instructions: asm(inst, spaces=4)
 
 #kernel's Body
-for inst in [INST_UNIQ] + args.prolog_instructions: asm(inst, spaces=4)
-if args.align: asm('.align %d'%(2 ** args.align), tabs=0)
-print("    for (uint64_t i=0; i<n; i++) {")
+for l in range(args.loops):
+  if args.align: asm('.align %d'%(2 ** args.align), tabs=0, spaces=8+4*l)
+  print(' '*4*(l+1) + "for (uint64_t %s=0; %s<n; %s++) {"%(('i%d'%l,)*3))
 for j in range(args.unroll_factor):
   if args.offset:
      for k in range(j+args.offset-1): asm(INST_1B)
@@ -122,7 +127,8 @@ for j in range(args.unroll_factor):
       asm(inst)
   if jumpy() and args.align: asm('.align %d'%(2 ** args.align), tabs=0)
 if jumpy(): asm(label(args.unroll_factor), tabs=0)
-print("    }")
+for l in range(args.loops, 0, -1):
+  print(' '*4*l + "}")
 
 #kernel's Footer
 for inst in args.epilog_instructions: asm(inst, spaces=4)

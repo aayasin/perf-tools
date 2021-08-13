@@ -3,9 +3,9 @@
 # Author: Ahmad Yasin
 # edited: Aug. 2021
 __author__ = 'ayasin'
-__version__ = 0.2
+__version__ = 0.21
 # TODO:
-# - .
+# - inform compiler on registers used by insts like MOVLG
 
 INST_UNIQ='PAUSE'
 INST_1B='NOP'
@@ -17,7 +17,7 @@ def long_nop(n):
   assert n > 9 and n < 16
   return bytes('66 '*(n-9) + '2E 0F 1F 84 00 00 00 00 00')
 
-aliases = {MOVLG: 'movabs $0x8877665544332211, %r8',
+aliases = {MOVLG: 'movabs $0x8877665544332211, %r15',
   'NOP1': 'nop',
   'NOP2': bytes('66 90'),
   'NOP3': bytes('0F 1F 00'),

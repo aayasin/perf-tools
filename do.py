@@ -23,6 +23,7 @@ Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        './run.sh',
   'cmds_file':      None,
   'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
+  'cpuid':          1,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'gen-kernel':     1,
@@ -129,7 +130,7 @@ def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpu
       for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_%s_freq'%m):
         set_sysfile(f, freq)
 
-def log_setup(out = 'setup-system.log'):
+def log_setup(out='setup-system.log', c='setup-cpuid.log'):
   def new_line(): exe_v0('echo >> %s'%out)
   def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s'%(args.pmu_tools, m))
   C.printc(do['pmu']) #OS
@@ -139,6 +140,7 @@ def log_setup(out = 'setup-system.log'):
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
     for m in do['msrs']: exe('echo "MSR %5s:\\t%16s" >> '%(m, read_msr(m)) + out)
+  if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
   exe("dmesg | tee setup-dmesg.log | grep 'BIOS ' | tail -1 >> " + out)
   new_line()          #PMU
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))

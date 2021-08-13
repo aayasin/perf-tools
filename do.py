@@ -18,7 +18,7 @@ import argparse, os, sys
 import common as C
 from platform import python_version
 
-TOPLEV_DEF='--metric-group +Summary,+HPC' #FIXME: argparse should tell whether user specified an options
+TOPLEV_DEF='--metric-group +Summary' #FIXME: argparse should tell whether user specified an options
 Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        './run.sh',
   'cmds_file':      None,

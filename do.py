@@ -252,10 +252,12 @@ def profile(log=False, out='run'):
         "| cut -f3- | sed 's/#.*//' | sort | uniq -c | sort -n | tee %s.perf-imix-path.log "\
         "| tail"%(perf_data, comm, out), "@instruction-mix for '%s'"%comm)
 
-def do_logs(cmd, ext=[]):
+def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext
-  if cmd == 'tar': exe('tar -czvf results.tar.gz run.sh '+ ' *.'.join(log_files) + ' .*.cmd')
+  res = '%sresults.tar.gz'%tag if cmd == 'tar' else None
+  if cmd == 'tar': exe('tar -czvf %s run.sh '%res + ' *.'.join(log_files) + ' .*.cmd')
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')
+  return res
 
 def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)

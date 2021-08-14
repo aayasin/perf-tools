@@ -5,7 +5,6 @@
 # TODO list:
 #   toplevl 3-levels default Icelake onwards
 #   add trials support
-#   control prefetches, log msrs
 #   quiet mode
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
@@ -22,7 +21,7 @@ TOPLEV_DEF='--metric-group +Summary' #FIXME: argparse should tell whether user s
 Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        './run.sh',
   'cmds_file':      None,
-  'compiler':       'gcc', #~/tools/llvm-6.0.0/bin/clang',
+  'compiler':       'gcc -O2', #~/tools/llvm-6.0.0/bin/clang',
   'cpuid':          1,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
@@ -264,9 +263,9 @@ def build_kernel(dir='./kernels/'):
   if do['gen-kernel']:
     exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app)
     if args.verbose > 1: exe(fixup('grep instructions ./%s.c'%app))
-  exe(fixup('%s -g -O2 -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
+  exe(fixup('%s -g -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
   do['run'] = fixup('%s ./%s %d'%(do['pin'], app, int(float(args.app_iterations))))
-  if args.verbose > 2: exe(fixup("objdump -dw ./%s | grep -A20 pause | egrep '[ 0-9a-f]+:'"%app), '@kernel ASM')
+  if args.verbose > 2: exe(fixup("objdump -dw ./%s | grep -A30 pause | egrep '[ 0-9a-f]+:'"%app), '@kernel ASM')
 
 def parse_args():
   ap = argparse.ArgumentParser(usage='do.py command [command ..] [options]', formatter_class=argparse.ArgumentDefaultsHelpFormatter)

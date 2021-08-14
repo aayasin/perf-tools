@@ -16,7 +16,7 @@ optional arguments:
                         ./pmu-tools)
   --toplev-args TOPLEV_ARGS
                         arguments to pass-through to toplev (default:
-                        --metric-group +Summary,+HPC)
+                        --metric-group +Summary)
   --install-perf [INSTALL_PERF]
                         perf tool installation options: [install]|patch|build
                         (default: None)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Jul. 2021
+# edited: Aug. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -28,10 +28,12 @@ def printc(msg, col=color.DARKCYAN):
 def warn(msg):
   printc('WARNING: %s !'%msg, color.CYAN)
 
+dump_stack_on_error = 0
 def error(msg):
   printc('ERROR: %s !'%msg, color.RED)
   log = re.match(r".*(>|tee) (.*).log.*", msg)
   if log: exe_cmd("cat %s.log"%log.group(2), debug=True)
+  if dump_stack_on_error: print(let_python_fail)
   sys.exit(' !')
 
 #print (to stderr) and flush

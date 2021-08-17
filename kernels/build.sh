@@ -9,7 +9,8 @@ PY=${PY:-python3}
 set -xe
 
 if [ $GEN -eq 1 ]; then
-$PY ./gen-kernel.py jumpy-seq -n 5 -i JMP -a 14  > jumpy5p14.c
+$PY ./gen-kernel.py jumpy-seq -n 13 -i JMP -a 15  > jumpy13b15.c
+$PY ./gen-kernel.py jumpy-seq -n 13 -i JMP -a 13  > jumpy13b13.c
 $CC -S jumpy5p14.c
 #$CC -o jumpy5p14 jumpy5p14.c
 #perf stat -a --topdown -e instructions,BACLEARS.ANY --no-metric-only -C0 -- taskset 0x1 ./jumpy5p14 999999999
@@ -28,7 +29,7 @@ $PY ./gen-kernel.py -i 'vmulpd %ymm@,%ymm@,%ymm@' -r16 -n1 > fp-mul-bw.c
 $PY ./gen-kernel.py -i 'vmulpd %ymm@-1,%ymm@,%ymm@' -r16 -n10 > fp-mul-lat.c
 fi
 
-ks="fp-{add,mul}-{bw,lat},jcc20k,jumpy5p14,memcpy,peak[45]wide,rfetch{64k,3m},sse2avx"
+ks="fp-{add,mul}-{bw,lat},jcc20k,jumpy*,memcpy,peak[45]wide,rfetch{64k,3m},sse2avx"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

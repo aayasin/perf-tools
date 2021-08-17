@@ -160,7 +160,7 @@ def argv2str(start=0):
   return ' '.join(res)
 
 def commands_list():
-  return exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2 | sort"%sys.argv[0], sep=' ')
+  return chop(exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort"%sys.argv[0], sep=' '), "),'")
 
 def command_basename(comm, iterations=None):
   if comm is None: return 'run%d'%os.getpid()

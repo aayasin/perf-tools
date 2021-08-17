@@ -34,7 +34,7 @@ ap.add_argument('-p', '--prolog-instructions', nargs='+', default=[], help='Inst
 ap.add_argument('-e', '--epilog-instructions', nargs='+', default=[], help='Instructions post the Loop')
 ap.add_argument('-a', '--align' , type=int, default=0, help='align Loop and target of jumps [in power of 2]')
 ap.add_argument('-o', '--offset', type=int, default=0, help='offset unrolled Loop bodies [in bytes]')
-ap.add_argument('--label-prefix', default='Lbl', help="Starting '@' implies local labels. empty '' implies number-only labels")
+ap.add_argument('--label-prefix', default='Lbl', help="Starting '@' implies local labels. empty '' implies numbers-only labels")
 ap.add_argument('mode', nargs='?', choices=['basicblock']+J.get_modes(), default='basicblock')
 args = ap.parse_args()
 
@@ -52,8 +52,6 @@ if args.registers > 0:
   if not '@' in ' '.join(args.instructions): error("expect '@' in --instructions")
   if args.registers > args.registers_max:    error("invalid value for --registers! must be < %d"%args.registers_max)
   paper='"Reference: %s"'%Papers['MGM']
-
-if args.loops > 1 and jumpy(): error("nested loops aren't supported with mode=%s"%args.mode)
 
 def itemize(insts):
   if not '#' in ' '.join(insts): return insts
@@ -110,7 +108,7 @@ for inst in [INST_UNIQ] + args.prolog_instructions: asm(inst, spaces=4)
 
 #kernel's Body
 for l in range(args.loops):
-  if args.align: asm('.align %d'%(2 ** args.align), tabs=0, spaces=8+4*l)
+  if l == args.loops-1 and args.align: asm('.align %d'%(2 ** args.align), tabs=0, spaces=8+4*l)
   print(' '*4*(l+1) + "for (uint64_t %s=0; %s<n; %s++) {"%(('i%d'%l,)*3))
 for j in range(args.unroll_factor):
   if args.offset:

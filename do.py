@@ -48,6 +48,7 @@ args = argparse.Namespace() #vars(args)
 
 def exe(x, msg=None, redir_out=' 2>&1', verbose=False, run=True):
   if not do['tee'] and redir_out: x = x.split('|')[0]
+  if 'tee >(' in x: x = 'bash -c "%s"'%x.replace('"', '\\"')
   if len(vars(args))>0:
     do['cmds_file'].write(x + '\n')
     verbose = args.verbose > 0
@@ -211,7 +212,7 @@ def profile(log=False, out='run'):
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
   grep_bk= "egrep '<==|MUX|Info.Bott'"
-  grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0 |RUN|Add)|not (found|supported)' "
+  grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)' "
   def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
@@ -246,11 +247,13 @@ def profile(log=False, out='run'):
     exe(perf + ' record -b -e r20c4:pp -c 100003 -o %s -- %s'%(perf_data, r), 'sampling w/ LBRs')
     C.printc("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
     if do['xed']:
-      comm = C.exe_one_line(perf + " script -i %s.perf.data -F comm "\
-        "| sort | uniq -c | sort -n | tail -1 | tr -s ' ' | cut -d' ' -f3"%out)
-      exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '00000|fffff' "\
-        "| cut -f3- | sed 's/#.*//' | sort | uniq -c | sort -n | tee %s.perf-imix-path.log "\
-        "| tail"%(perf_data, comm, out), "@instruction-mix for '%s'"%comm)
+      comm = C.exe_one_line(perf + " script -i %s -F comm "\
+        "| sort | uniq -c | sort -n | tail -1 | tr -s ' ' | cut -d' ' -f3"%perf_data)
+      exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "\
+        "| cut -f5- | tee >(cut -d' ' -f1 | sort | uniq -c | sort -n > %s.perf-imix-no.log) "\
+        "| sort | uniq -c | sort -n | tee %s.perf-imix.log "\
+        "| tail"%(perf_data, comm, out, out), "@instruction-mix for '%s'"%comm, redir_out=None)
+      exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

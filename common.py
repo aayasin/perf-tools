@@ -31,8 +31,8 @@ def warn(msg):
 dump_stack_on_error = 0
 def error(msg):
   printc('ERROR: %s !'%msg, color.RED)
-  log = re.match(r".*(>|tee) (.*).log.*", msg)
-  if log: exe_cmd("cat %s.log"%log.group(2), debug=True)
+  logs = [log[1] for log in re.findall(r"(>|tee) (\S+\.log)", msg)]
+  if len(logs): exe_cmd('head ' + ' '.join(logs), debug=True)
   if dump_stack_on_error: print(let_python_fail)
   sys.exit(' !')
 

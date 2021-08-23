@@ -3,6 +3,7 @@
 # Author: Ahmad Yasin
 # edited: Aug. 2021
 # TODO list:
+#   move profile code to a seperate module
 #   toplevl 3-levels default Icelake onwards
 #   add trials support
 #   quiet mode
@@ -184,7 +185,8 @@ def profile(log=False, out='run'):
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, C.chop(flags,' '), grep)
   
   out = uniq_name()
-  perf=args.perf
+  perf = args.perf
+  sort2u = 'sort | uniq -c | sort -n'
   r = do['run']
   if en(0) or log: log_setup()
   
@@ -206,8 +208,8 @@ def profile(log=False, out='run'):
       "| tee " + base2 + "_nonzero.log > /dev/null " \
       "&& egrep -n -1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
       "| head -20", '@annotate code', '2>/dev/null')
-    if do['xed']: exe(perf + " script -i %s.perf.data -F insn --xed | sort | uniq -c | sort -n " \
-      "| tee %s-hot-insts.log | tail"%(out, base), '@time-consuming instructions')
+    if do['xed']: exe(perf + " script -i %s.perf.data -F insn --xed | %s " \
+      "| tee %s-hot-insts.log | tail"%(out, sort2u, base), '@time-consuming instructions')
   
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
@@ -247,12 +249,10 @@ def profile(log=False, out='run'):
     exe(perf + ' record -b -e r20c4:pp -c 100003 -o %s -- %s'%(perf_data, r), 'sampling w/ LBRs')
     C.printc("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
     if do['xed']:
-      comm = C.exe_one_line(perf + " script -i %s -F comm "\
-        "| sort | uniq -c | sort -n | tail -1 | tr -s ' ' | cut -d' ' -f3"%perf_data)
+      comm = C.exe_one_line(perf + " script -i %s -F comm | %s | tail -1"%(perf_data, sort2u), 1)
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "\
-        "| cut -f5- | tee >(cut -d' ' -f1 | sort | uniq -c | sort -n > %s.perf-imix-no.log) "\
-        "| sort | uniq -c | sort -n | tee %s.perf-imix.log "\
-        "| tail"%(perf_data, comm, out, out), "@instruction-mix for '%s'"%comm, redir_out=None)
+        "| cut -f5- | tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log "\
+        "| tail"%(perf_data, comm, sort2u, out, sort2u, out), "@instruction-mix for '%s'"%comm, redir_out=None)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
 
 def do_logs(cmd, ext=[], tag=''):

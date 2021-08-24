@@ -76,7 +76,7 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
       exe('ln -f -s %s /usr/bin/perf'%a_perf)
     else: C.error('Unsupported --perf-install option: '+args.install_perf)
   if do['msr']: packages += ['msr-tools']
-  for x in ('numactl', 'dmidecode'):
+  for x in ('cpuid', 'dmidecode', 'numactl'):
     if do[x]: packages += [x]
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])

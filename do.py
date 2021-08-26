@@ -33,6 +33,7 @@ do = {'run':        './run.sh',
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX", #,+UPI once ICL mux fixed
   'numactl':        1,
   'package-mgr':    C.os_installer(),
+  'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'pin':            'taskset 0x4',
@@ -64,6 +65,7 @@ def uniq_name():
   return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
 
 def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
+  pkg_name = {'msr': 'msr-tools'}
   if args.install_perf:
     if args.install_perf == 'install':
       if not do['package-mgr'] == 'dnf': packages += ['linux-tools-generic && ' + Find_perf]
@@ -75,9 +77,8 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
       a_perf = C.exe_output(Find_perf + ' | grep -v /usr/bin/perf | head -1', '')
       exe('ln -f -s %s /usr/bin/perf'%a_perf)
     else: C.error('Unsupported --perf-install option: '+args.install_perf)
-  if do['msr']: packages += ['msr-tools']
-  for x in ('cpuid', 'dmidecode', 'numactl'):
-    if do[x]: packages += [x]
+  for x in do['packages']:
+    if do[x]: packages += [pkg_name[x] if x in pkg_name else x]
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']: exe('./build-xed.sh', 'installing xed')
@@ -324,7 +325,8 @@ def main():
     elif c == 'setup-all':
       tools_install()
       setup_perf('set')
-    elif c == 'build-perf':   exe('./do.py setup-all --install-perf build -v%d --tune :numactl:0 :dmidecode:0'%args.verbose)
+    elif c == 'build-perf':   exe('./do.py setup-all --install-perf build -v%d --tune %s'%(args.verbose,
+                                  ' '.join([':%s:0'%x for x in (do['packages']+('xed',))])))
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()

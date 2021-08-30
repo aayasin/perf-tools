@@ -178,6 +178,16 @@ def command_basename(comm, iterations=None):
   for x in name: namestr += "%s%s"%('' if x.startswith('-') else '-', x)
   return chop(namestr, './~<>')
 
+def args_parse(d, args):
+  for x in args.split(','):
+    if len(x):
+      assert '=' in x, "expect '=' as deliminer in '%s'"%args
+      arg, val = x.split('=')
+      assert arg in d, "unknown option '%s' in '%s'!"%(arg, args)
+      d[arg] = int(val) if val.isdigit() else val
+  return d
+
+# Architecture: CPU, PMU,
 def pmu_name():
   f = '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
   f += '/caps/pmu_name'

@@ -4,7 +4,7 @@
 # edited: Aug. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.7
+__version__ = 0.71
 # TODO:
 # - functions/calls support
 # - move Paper to a seperate module
@@ -36,6 +36,7 @@ ap.add_argument('-a', '--align' , type=int, default=0, help='align Loop and targ
 ap.add_argument('-o', '--offset', type=int, default=0, help='offset unrolled Loop bodies [in bytes]')
 ap.add_argument('--label-prefix', default='Lbl', help="Starting '@' implies local labels. empty '' implies numbers-only labels")
 ap.add_argument('mode', nargs='?', choices=['basicblock']+J.get_modes(), default='basicblock')
+ap.add_argument('--mode-args', default='', help="args to pass-through to mode's sub-module")
 args = ap.parse_args()
 
 def jumpy(): return args.mode in J.jumpy_modes
@@ -43,6 +44,8 @@ def jumpy(): return args.mode in J.jumpy_modes
 def error(x):
   C.printf(x)
   sys.exit(' !\n')
+
+prefetch_inst = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else None
 
 if args.label_prefix == '':
   if args.mode == 'jumpy-random': args.mode += '#'
@@ -116,7 +119,11 @@ for j in range(args.unroll_factor):
   if jumpy(): asm(label(j), tabs=0)
   for r in range(max(args.registers, 1)):
     for inst in args.instructions:
-      if inst in ['JMP', 'JL', 'JG']: inst += label(J.next(args.mode, args.unroll_factor), False)
+      if inst in ['PF+JMP', 'JMP', 'JL', 'JG']:
+        if 'PF+' in inst:
+          asm('%s%s'%(prefetch_inst, label(J.next(prefetch=True), False)))
+          inst = 'JMP'
+        inst += label(J.next(), False)
       if args.registers and '@' in inst:
         for i in range(9):
           inst = inst.replace('@+%d'%(i+1), str((r+i+1) % args.registers_max))

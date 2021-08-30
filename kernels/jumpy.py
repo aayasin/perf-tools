@@ -13,14 +13,13 @@ import common as C
 debug=0
 def step(x='.'): C.printf(x)
 
-jumpy_modes = ['jumpy-seq', 'jumpy-random', 'jumpy-random#']
-
-def get_modes(): return jumpy_modes[0:2]
+jumpy_modes = ['jumpy-seq', 'jumpy-random']
 
 flags = None
 def init(mode, n, args):
   global flags
-  flags = C.args_parse({'prefetch': 0, 'prefetch-inst': 'prefetcht2'}, args)
+  flags = C.args_parse({'prefetch': 0, 'prefetch-inst': 'prefetcht2',
+                        'numbers-labels': 0}, args)
   flags['mode'] = mode
   flags['n'] = n
   return flags['prefetch-inst']
@@ -42,7 +41,7 @@ def jumpy_idx(mode, n, prefetch):
       if n < 4: C.error('jumpy-random: cannot converge with --num<4')
       done = False
       visited_l = [0] * n
-      patch_list = [None] * n if mode.endswith('#') else None
+      patch_list = [None] * n if flags['numbers-labels'] else None
       if debug>1: print(visited_l)
       step('// jump-random: trials ')
       xx=n

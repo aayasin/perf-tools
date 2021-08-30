@@ -4,7 +4,7 @@
 # edited: Aug. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.71
+__version__ = 0.72
 # TODO:
 # - functions/calls support
 # - move Paper to a seperate module
@@ -35,7 +35,7 @@ ap.add_argument('-e', '--epilog-instructions', nargs='+', default=[], help='Inst
 ap.add_argument('-a', '--align' , type=int, default=0, help='align Loop and target of jumps [in power of 2]')
 ap.add_argument('-o', '--offset', type=int, default=0, help='offset unrolled Loop bodies [in bytes]')
 ap.add_argument('--label-prefix', default='Lbl', help="Starting '@' implies local labels. empty '' implies numbers-only labels")
-ap.add_argument('mode', nargs='?', choices=['basicblock']+J.get_modes(), default='basicblock')
+ap.add_argument('mode', nargs='?', choices=['basicblock']+J.jumpy_modes, default='basicblock')
 ap.add_argument('--mode-args', default='', help="args to pass-through to mode's sub-module")
 args = ap.parse_args()
 
@@ -45,11 +45,10 @@ def error(x):
   C.printf(x)
   sys.exit(' !\n')
 
-prefetch_inst = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else None
-
 if args.label_prefix == '':
-  if args.mode == 'jumpy-random': args.mode += '#'
+  if args.mode == 'jumpy-random': args.mode_args += '%snumbers-labels=1'%(',' if len(args.mode_args) else '')
   else: error('empty label-prefix is supported with jumpy-random mode only')
+prefetch_inst = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else None
 
 if args.registers > 0:
   if not '@' in ' '.join(args.instructions): error("expect '@' in --instructions")

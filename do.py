@@ -158,15 +158,11 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log'):
 
 def perf_format(es, result=''):
   for e in es.split(','):
-    if ':' in e:
-      ok = True
+    if e.startswith('r') and ':' in e:
       e = e.split(':')
-      if e[0].startswith('r'):
-        if len(e[0])==5:   e='cpu/event=0x%s,umask=0x%s,name=%s/'%(e[0][3:5], e[0][1:3], e[1])
-        elif len(e[0])==7: e='cpu/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/'%(e[0][5:7], e[0][3:5], e[0][1:3], e[1])
-        else: ok = False
-      else: ok = False
-      if not ok: C.error("profile:perf-stat: invalid syntax in '%s'"%':'.join(e))
+      if len(e[0])==5:   e='cpu/event=0x%s,umask=0x%s,name=%s/'%(e[0][3:5], e[0][1:3], e[1])
+      elif len(e[0])==7: e='cpu/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/'%(e[0][5:7], e[0][3:5], e[0][1:3], e[1])
+      else: C.error("profile:perf-stat: invalid syntax in '%s'"%':'.join(e))
     result += (e if result=='' else ','+e)
   return result
 

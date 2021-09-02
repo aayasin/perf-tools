@@ -34,6 +34,7 @@ do = {'run':        './run.sh',
   'numactl':        1,
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
+  'perf-lbr':       '-e r20c4:pp -c 100003',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'pin':            'taskset 0x4',
@@ -242,10 +243,11 @@ def profile(log=False, out='run'):
       , 'topdown full no multiplexing')
   
   if en(8) and do['sample'] > 1:
-    perf_data = '%s.r20c4-b.perf.data'%out
-    exe(perf + ' record -b -e r20c4:pp -c 100003 -o %s -- %s'%(perf_data, r), 'sampling w/ LBRs')
+    perf_data = '%s%s.perf.data'%(out, C.chop(do['perf-lbr'], ' :/,'))
+    exe(perf + ' record -b %s -o %s -- %s'%(do['perf-lbr'], perf_data, r), 'sampling w/ LBRs')
     C.printc("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
     if do['xed']:
+      # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
       comm = C.exe_one_line(perf + " script -i %s -F comm | %s | tail -1"%(perf_data, sort2u), 1)
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "\
         "| cut -f5- | tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log "\

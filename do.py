@@ -249,10 +249,15 @@ def profile(log=False, out='run'):
     if do['xed']:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
       comm = C.exe_one_line(perf + " script -i %s -F comm | %s | tail -1"%(perf_data, sort2u), 1)
+      perf_ips = '%s.perf-ips.log'%perf_data
+      hits = '%s.perf-hitcounts.log'%perf_data
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "\
-        "| cut -f5- | tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log "\
-        "| tail"%(perf_data, comm, sort2u, out, sort2u, out), "@instruction-mix for '%s'"%comm, redir_out=None)
+        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f1 | sort -nu > %s) | cut -f5- "\
+        "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
+        (perf_data, comm, hits, perf_ips, sort2u, out, sort2u, out),
+          "@instruction-mix for '%s'"%comm, redir_out=None)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
+      exe("tail -3 "+perf_ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

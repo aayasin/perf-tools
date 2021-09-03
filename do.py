@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Aug. 2021
+# edited: Sep. 2021
 # TODO list:
+#   alderlake-hybrid suport
 #   move profile code to a seperate module
 #   toplevl 3-levels default Icelake onwards
 #   add trials support
@@ -34,7 +35,8 @@ do = {'run':        './run.sh',
   'numactl':        1,
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
-  'perf-lbr':       '-e r20c4:pp -c 100003',
+  'perf-lbr':       '-e r20c4:pp -c 1000003',
+  'perf-pebs':      '-e cpu/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/pp -c 1000003',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'pin':            'taskset 0x4',
@@ -59,6 +61,10 @@ def exe(x, msg=None, redir_out=' 2>&1', verbose=False, run=True):
   return C.exe_cmd(x, msg, redir_out, verbose, run)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
+
+def print_cmd(x):
+  C.printc(x)
+  if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
 
 def icelake(): return C.pmu_icelake()
 
@@ -228,11 +234,11 @@ def profile(log=False, out='run'):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
       tlargs='' if args.toplev_args == TOPLEV_DEF else args.toplev_args)
     exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
-    if do['sample'] > 2:
+    if do['sample'] > 3:
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
       exe(cmd, '@sampling on bottleneck')
       perf_data = cmd.split('-o ')[1].split(' ')[0]
-      C.printc("Try 'perf report -i %s' to browse sources"%perf_data)
+      print_cmd("Try 'perf report -i %s' to browse sources"%perf_data)
       for c in ('report', 'annotate'):
         exe("%s %s --stdio -i %s > %s "%(perf, c, perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
@@ -242,22 +248,33 @@ def profile(log=False, out='run'):
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
   
-  if en(8) and do['sample'] > 1:
-    perf_data = '%s%s.perf.data'%(out, C.chop(do['perf-lbr'], ' :/,'))
-    exe(perf + ' record -b %s -o %s -- %s'%(do['perf-lbr'], perf_data, r), 'sampling w/ LBRs')
-    C.printc("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
-    if do['xed']:
+  data, comm = None, None
+  def perf_record(tag, comm, watch_ipc='-- perf stat -e instructions,cycles '):
+    perf_data = '%s%s.perf.data'%(out, C.chop(do['perf-%s'%tag], ' :/,'))
+    exe(perf + ' record -b %s -o %s %s-- %s'%(
+      do['perf-%s'%tag], perf_data, watch_ipc, r), 'sampling w/ '+tag.upper())
+    print_cmd("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
+    if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
       comm = C.exe_one_line(perf + " script -i %s -F comm | %s | tail -1"%(perf_data, sort2u), 1)
-      perf_ips = '%s.perf-ips.log'%perf_data
-      hits = '%s.perf-hitcounts.log'%perf_data
+    return perf_data, comm
+  
+  if en(8) and do['sample'] > 1:
+    data, comm = perf_record('lbr', comm)
+    if do['xed']:
+      ips = '%s.ips.log'%data
+      hits = '%s.perf-hitcounts.log'%data
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "\
         "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f1 | sort -nu > %s) | cut -f5- "\
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
-        (perf_data, comm, hits, perf_ips, sort2u, out, sort2u, out),
+        (data, comm, hits, ips, sort2u, out, sort2u, out),
           "@instruction-mix for '%s'"%comm, redir_out=None)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
-      exe("tail -3 "+perf_ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
+      exe("tail -3 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
+  
+  if en(9) and do['sample'] > 2:
+    data, comm = perf_record('pebs', comm)
+    exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail"%(data, sort2u, data), "@ top-10 IPs")
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

@@ -4,7 +4,7 @@
 # edited: Aug. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.72
+__version__ = 0.73
 # TODO:
 # - functions/calls support
 # - move Paper to a seperate module
@@ -120,7 +120,7 @@ for j in range(args.unroll_factor):
     for inst in args.instructions:
       if inst in ['PF+JMP', 'JMP', 'JL', 'JG']:
         if 'PF+' in inst:
-          asm('%s%s'%(prefetch_inst, label(J.next(prefetch=True), False)))
+          asm('%s%s(%%rip)'%(prefetch_inst, label(J.next(prefetch=True), False)))
           inst = 'JMP'
         inst += label(J.next(), False)
       if args.registers and '@' in inst:

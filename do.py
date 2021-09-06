@@ -204,6 +204,7 @@ def profile(log=False, out='run'):
       do['perf-record'] += ' '
       base += C.chop(do['perf-record'], ' :')
     exe(perf + ' record -g -o %s.perf.data '%out+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
+    print_cmd("Try 'perf report -i %s.perf.data' to browse time-consuming sources"%out)
     exe(perf + " report --stdio --hierarchy --header -i %s.perf.data | grep -v ' 0\.0.%%' | tee "%out+
       base+"-modules.log | grep -A11 Overhead", '@report modules')
     base2 = base+'-code'
@@ -238,7 +239,7 @@ def profile(log=False, out='run'):
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
       exe(cmd, '@sampling on bottleneck')
       perf_data = cmd.split('-o ')[1].split(' ')[0]
-      print_cmd("Try 'perf report -i %s' to browse sources"%perf_data)
+      print_cmd("Try 'perf report -i %s' to browse sources for critical bottlenecks"%perf_data)
       for c in ('report', 'annotate'):
         exe("%s %s --stdio -i %s > %s "%(perf, c, perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
@@ -250,7 +251,7 @@ def profile(log=False, out='run'):
   
   data, comm = None, None
   def perf_record(tag, comm, watch_ipc='-- perf stat -e instructions,cycles '):
-    perf_data = '%s%s.perf.data'%(out, C.chop(do['perf-%s'%tag], ' :/,'))
+    perf_data = '%s%s.perf.data'%(out, C.chop(do['perf-%s'%tag], (' :/,=', 'cpu_core', 'cpu')))
     exe(perf + ' record -b %s -o %s %s-- %s'%(
       do['perf-%s'%tag], perf_data, watch_ipc, r), 'sampling w/ '+tag.upper())
     print_cmd("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
@@ -265,7 +266,7 @@ def profile(log=False, out='run'):
       ips = '%s.ips.log'%data
       hits = '%s.perf-hitcounts.log'%data
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "\
-        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f1 | sort -nu > %s) | cut -f5- "\
+        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu > %s) | cut -f5- "\
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
         (data, comm, hits, ips, sort2u, out, sort2u, out),
           "@instruction-mix for '%s'"%comm, redir_out=None)
@@ -324,6 +325,7 @@ def main():
   #args sanity checks
   if (args.gen_args or 'build' in args.command) and not args.app_name:
     C.error('must specify --app-name with any of: --gen-args, build')
+  assert not (args.print_only and (args.profile_mask & 0x300)), 'No print-only + lbr/pebs profile-steps'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name

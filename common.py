@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Aug. 2021
+# edited: Sep. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -41,8 +41,9 @@ def printf(x, flush=True, std=sys.stderr):
   std.write(x)
   if flush: std.flush()
 
-def annotate(x, label=''):
-  printf('%s: %s; %s\n'%(label, str(x), type(x)))
+def annotate(stuff, label=''):
+  xs = stuff if type(stuff) is tuple else [stuff]
+  for x in xs: printf('%s: %s; %s\n'%(label, str(x), type(x)))
 
 def exit(msg=''):
   printc('%s ..'%msg, color.GREEN)
@@ -147,10 +148,15 @@ def dict_load(f):
 
 # chop - clean a list of charecters from a string
 # @s:     input string
-# @chars: input charecters
-def chop(s, chars):
-  r=s
-  for i in range(len(chars)): r=r.replace(chars[i], '')
+# @stuff: input charecters as string, or a first item in a tuple of strings
+def chop(source, stuff):
+  r, chars = source, stuff
+  items = []
+  if type(stuff) is tuple:
+    items = [ stuff[x] for x in range(1, len(stuff)) ]
+    chars = stuff[0]
+  for i in range(len(chars)): items += [chars[i]]
+  for x in items: r = r.replace(x, '')
   return r.strip()
 
 def arg(num):
@@ -194,7 +200,7 @@ def pmu_name():
   return file2str(f) or 'Unknown PMU'
 #Icelake onward PMU, e.g. Intel PerfMon Version 5+
 def pmu_icelake():
-  return pmu_name() in ['icelake']
+  return pmu_name() in ['icelake'] #alderlake_hybrid #sapphire_rapids
 
 def cpu_has_feature(feature):
   flags = exe_output("lscpu | grep Flags:")

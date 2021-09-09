@@ -150,7 +150,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log'):
   if do['msr']:
     for m in do['msrs']: exe('echo "MSR %5s:\\t%16s" >> '%(m, read_msr(m)) + out)
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
-  exe("dmesg | tee setup-dmesg.log | grep 'BIOS ' | tail -1 >> " + out)
+  exe("dmesg | tee setup-dmesg.log | egrep 'Performance E|BIOS ' | tail -1 >> " + out)
   new_line()          #PMU
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
   exe('%s --version >> '%args.perf + out)
@@ -314,7 +314,7 @@ def parse_args():
     help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, ' \
     '2:+verbose-on metrics|build, 3:ASM on kernel build, 4:+args parsing, 5:+event-groups(ALL)')
-  ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS) # override global variables with python expression
+  ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS, action='append') # override global variables with python expression
   x = ap.parse_args()
   return x
 
@@ -333,12 +333,13 @@ def main():
   do['nodes'] += ("," + args.metrics)
   
   if args.tune:
-    for t in args.tune:
-      if t.startswith(':'):
-        l = t.split(':')
-        t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
-      if args.verbose > 3: print(t)
-      exec(t)
+    for tlists in args.tune:
+      for t in tlists:
+        if t.startswith(':'):
+          l = t.split(':')
+          t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
+        if args.verbose > 3: print(t)
+        exec(t)
   do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
   do['cmds_file'].write('# %s\n'%C.argv2str())
   

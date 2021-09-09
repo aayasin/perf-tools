@@ -43,7 +43,9 @@ def printf(x, flush=True, std=sys.stderr):
 
 def annotate(stuff, label=''):
   xs = stuff if type(stuff) is tuple else [stuff]
-  for x in xs: printf('%s: %s; %s\n'%(label, str(x), type(x)))
+  printf('%s: '%label, flush=False)
+  for x in xs: printf('%s of %s; '%(str(x), type(x)), flush=False)
+  printf('.\n')
 
 def exit(msg=''):
   printc('%s ..'%msg, color.GREEN)

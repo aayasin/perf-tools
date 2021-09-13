@@ -77,9 +77,10 @@ def exe_output(x, sep=";"):
     out = out.decode()
   return out.replace("\n", sep)
 
+def str2list(s): return ' '.join(s.split()).split(' ')
 def exe_one_line(x, field=None):
   res = exe_output(x, '')
-  if field: res = ' '.join(res.split()).split(' ')[field]
+  if field: res = str2list(res)[field]
   return res
 
 def file2str(f):

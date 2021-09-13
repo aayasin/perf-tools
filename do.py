@@ -14,6 +14,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
+__version__= 0.9
 
 import argparse, os, sys
 import common as C
@@ -341,7 +342,7 @@ def main():
         if args.verbose > 3: print(t)
         exec(t)
   do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
-  do['cmds_file'].write('# %s\n'%C.argv2str())
+  do['cmds_file'].write('# %s # version %.2f\n'%(C.argv2str(), __version__))
   
   for c in args.command:
     if   c == 'forgive-me':   pass

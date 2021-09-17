@@ -11,6 +11,7 @@ A collection of performance analysis tools, recipes &amp; more
   * **memcpy.c** -- a custom kernel for strings of libc demonstrating how to timestamp
   * There are more kernels produced by **build.sh** though not uploaded to git
 * **build-perf.sh** -- builds the perf tool from scratch; invoke with `./do.py setup-all --install-perf build`
+* **addrbits** -- extracts certain bits range of hexa-input
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools
   * **toplev** -- profiler featuring the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method on Intel processors
   * **ocperf** -- perf wrappers that converts Intel event names to perf-events syntax  

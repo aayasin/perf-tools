@@ -130,7 +130,9 @@ def read_perf_toplev(filename):
         continue
       elif '.' in x or x.startswith('cpu/topdown-'): pass
       else: print(r['Event'])
-      d[x.upper()] = v
+      x = x.upper()
+      if v == 0 and x in d and d[x] != 0: warn('skipping zero override in: '+r)
+      else: d[x] = v
   return d
 
 # python dictionaries
@@ -162,9 +164,9 @@ def chop(source, stuff):
   for x in items: r = r.replace(x, '')
   return r.strip()
 
-def arg(num):
-  if len(sys.argv) <= num: error("must provide %d parameters"%num)
-  return sys.argv[num]
+def arg(num, default=None):
+  if len(sys.argv) <= num and not default: error("must provide %d parameters"%num)
+  return sys.argv[num] if len(sys.argv) > num else default
 
 def argv2str(start=0):
   res = []

@@ -1,0 +1,25 @@
+#!/usr/bin/env python
+# outputs specified bit range for input addresses
+# Author: Ahmad Yasin
+# edited: Sep. 2021
+#
+from __future__ import print_function
+__author__ = 'ayasin'
+
+import common as C
+import sys
+
+# usage: addrbits left-index right-index [prepend original line]
+left = int(C.arg(1))
+right = int(C.arg(2))
+append = int(C.arg(3, -1))
+
+mask = 2**(left+1)-1
+while True:
+  line = sys.stdin.readline()
+  if not line: break
+  addr = int(line.strip(), 16)
+  bits = (addr & mask) >> right
+  bits = '%02x'%bits
+  print(bits) if append < 0 else print (bits, line, end='') 
+

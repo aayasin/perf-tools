@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-# stats on DSB misses
+# stats re path to precise events
 # Author: Ahmad Yasin
 # edited: Sep. 2021
 #
-# usage: perf script -F +brstackinsn | ./dsb_miss
+# usage: perf script -F +brstackinsn | ./lbr_stats
 from __future__ import print_function
 __author__ = 'ayasin'
 

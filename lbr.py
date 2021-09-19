@@ -19,14 +19,18 @@ def read_sample(skip_bad=True, labels=False):
     valid = 1
     while True:
       line = read_line()
-      if not line:              # input ended
+      # input ended
+      if not line:
         return None if skip_bad else lines
-      if re.match(r"^$", line): # sample ended
+      # sample ended
+      if re.match(r"^$", line):
         break
+      # invalid sample is about to end
       if skip_bad and 'not reaching sample' in line:
         valid, lines = 0, []
         assert re.match(r"^$", read_line())
         break
+      # a line with a label
       if not labels and ':' in C.str2list(line)[0]:
         continue
       lines += [ line.rstrip('\r\n') ]

@@ -283,6 +283,7 @@ def profile(log=False, out='run'):
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
     exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail"%(data, sort2u, data), "@ top-10 IPs")
+    exe(perf + " script -i %s -F +brstackinsn | ./lbr_stats | tee -a %s.ips.log"%(data, data), "@ stats on PEBS event")
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

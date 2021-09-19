@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# common functions for logging, system commands and file I/O.
+# common functions for logging, debug, strings, system commands and file I/O.
 # Author: Ahmad Yasin
 # edited: Sep. 2021
 from __future__ import print_function
@@ -37,6 +37,12 @@ def error(msg):
   if dump_stack_on_error: print(let_python_fail)
   sys.exit(' !')
 
+def exit(msg=''):
+  printc('%s ..'%msg, color.GREEN)
+  sys.exit('exiting')
+
+#debug
+#
 #print (to stderr) and flush
 def printf(x, flush=True, std=sys.stderr):
   std.write(x)
@@ -47,10 +53,6 @@ def annotate(stuff, label=''):
   printf('%s: '%label, flush=False)
   for x in xs: printf('%s of %s; '%(str(x), type(x)), flush=False)
   printf('.\n')
-
-def exit(msg=''):
-  printc('%s ..'%msg, color.GREEN)
-  sys.exit('exiting')
 
 # system
 #
@@ -78,15 +80,10 @@ def exe_output(x, sep=";"):
     out = out.decode()
   return out.replace("\n", sep)
 
-def str2list(s): return ' '.join(s.split()).split(' ')
 def exe_one_line(x, field=None):
   res = exe_output(x, '')
   if field: res = str2list(res)[field]
   return res
-
-def file2str(f):
-  out = file2lines(f)
-  return out[0].replace('\n', '') if out[0] else None
 
 import glob as python_glob
 def glob(regex):
@@ -94,6 +91,8 @@ def glob(regex):
   if len(fs) == 0: error("could not find files: %s"%regex)
   return sorted(fs)
 
+# OS
+#
 def os_installer():
   installer='yum'
   name = file2str('/etc/os-release')
@@ -112,6 +111,10 @@ def file2lines(filename, fail=False):
     else:
       warn('cannot open %s'%filename, bold=True)
       return [None]
+
+def file2str(f):
+  out = file2lines(f)
+  return out[0].replace('\n', '') if out[0] else None
 
 import csv
 def read_perf_toplev(filename):
@@ -136,6 +139,9 @@ def read_perf_toplev(filename):
       else: d[x] = v
   return d
 
+# auxiliary: strings, argv, python-stuff
+#
+
 # python dictionaries
 def dict_save(d, f):
   fo = open(f, 'wb')
@@ -148,9 +154,6 @@ def dict_load(f):
     d = pickle.load(fo)
     fo.close()
     return d
-
-# auxiliary: strings, CPU, PMU
-#
 
 # chop - clean a list of charecters from a string
 # @s:     input string
@@ -165,6 +168,9 @@ def chop(source, stuff):
   for x in items: r = r.replace(x, '')
   return r.strip()
 
+def str2list(s):
+  return ' '.join(s.split()).split(' ')
+
 def arg(num, default=None):
   if len(sys.argv) <= num and not default: error("must provide %d parameters"%num)
   return sys.argv[num] if len(sys.argv) > num else default
@@ -174,6 +180,15 @@ def argv2str(start=0):
   for a in sys.argv[start:]:
     res.append("\"%s\""%a if "'" in a else "'%s'"%a if ' ' in a else a)
   return ' '.join(res)
+
+def args_parse(d, args):
+  for x in args.split(','):
+    if len(x):
+      assert '=' in x, "expect '=' as deliminer in '%s'"%args
+      arg, val = x.split('=')
+      assert arg in d, "unknown option '%s' in '%s'!"%(arg, args)
+      d[arg] = int(val) if val.isdigit() else val
+  return d
 
 def commands_list():
   return chop(exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort"%sys.argv[0], sep=' '), "),'")
@@ -190,14 +205,9 @@ def command_basename(comm, iterations=None):
   for x in name: namestr += "%s%s"%('' if x.startswith('-') else '-', x)
   return chop(namestr, './~<>')
 
-def args_parse(d, args):
-  for x in args.split(','):
-    if len(x):
-      assert '=' in x, "expect '=' as deliminer in '%s'"%args
-      arg, val = x.split('=')
-      assert arg in d, "unknown option '%s' in '%s'!"%(arg, args)
-      d[arg] = int(val) if val.isdigit() else val
-  return d
+# stats
+def ratio(x, histo):
+  return '%s-ratio=%.1f%%'%(x, 100.0*histo[x]/histo['total'])
 
 # Architecture: CPU, PMU,
 def pmu_name():

@@ -4,7 +4,7 @@
 # edited: Sep. 2021
 # TODO list:
 #   alderlake-hybrid suport
-#   move profile code to a seperate module
+#   move profile code to a seperate module, arg for output dir
 #   toplevl 3-levels default Icelake onwards
 #   add trials support
 #   quiet mode
@@ -43,6 +43,7 @@ do = {'run':        './run.sh',
   'pin':            'taskset 0x4',
   'pmu':            C.pmu_name(),
   'python':         sys.executable,
+  'profile':        1,
   'sample':         1,
   'super':          0,
   'tee':            1,
@@ -55,10 +56,15 @@ args = argparse.Namespace() #vars(args)
 def exe(x, msg=None, redir_out=' 2>&1', verbose=False, run=True):
   if not do['tee'] and redir_out: x = x.split('|')[0]
   if 'tee >(' in x: x = 'bash -c "%s"'%x.replace('"', '\\"')
-  if len(vars(args))>0:
-    do['cmds_file'].write(x + '\n')
-    verbose = args.verbose > 0
+  if len(vars(args)):
     run = not args.print_only
+    if not do['profile']:
+      if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
+        x = '# ' + x
+        run = False
+    do['cmds_file'].write(x + '\n')
+    do['cmds_file'].flush()
+    verbose = args.verbose > 0
   return C.exe_cmd(x, msg, redir_out, verbose, run)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)

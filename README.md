@@ -13,7 +13,7 @@ A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
 * **lbr.py** -- A module for processing Last Branch Record (LBR) streams
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools
   * **toplev** -- profiler featuring the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method on Intel processors
-  * **ocperf** -- perf wrappers that converts Intel event names to perf-events syntax  
+  * **ocperf** -- perf wrapper that converts Intel event names to perf-events syntax
 ### Checkout with: 
 `git clone --recurse-submodules https://github.com/aayasin/perf-tools`
 
@@ -45,8 +45,8 @@ First, edit `run.sh` to invoke your application or use the `-a '<your app and it
 * `./do.py setup-perf profile` will do the setup and default profiling steps at once.
 * `./do.py tar` will archive all logs into a shareable tar file.
 * `./do.py all` will setup perf before doing all above profiling steps.
-* `./do.py profile -pm 222 -v1` will do selected profile steps - per-app counting, topdown 2-levels, 
-  sampling w/ PEBS - and print underlying commands as well.
+* `./do.py profile -pm 222 -v1` will do selected profile steps - *per-app counting, topdown 2-levels,
+  sampling w/ PEBS* - and print underlying commands as well.
 
 ### kernels (microbenchmarks)
 * to build pre-defined ones, simply `cd kernels/ && ./build.sh`, or

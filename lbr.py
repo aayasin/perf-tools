@@ -13,21 +13,28 @@ def read_line():
   line = sys.stdin.readline()
   return line
 
-def read_sample(skip_bad=True, labels=False):
+stat = {x: 0 for x in ('bad', 'total')}
+def read_sample(skip_bad=True, min_lines=0, labels=False):
   valid, lines = 0, []
   while not valid:
     valid = 1
+    stat['total'] += 1
     while True:
       line = read_line()
       # input ended
       if not line:
+        if len(lines): stat['bad'] += 1
         return None if skip_bad else lines
-      # sample ended
+      # a sample ended
       if re.match(r"^$", line):
+        if min_lines and (len(lines)-1) < min_lines:
+          valid, lines = 0, []
+          stat['bad'] += 1
         break
       # invalid sample is about to end
       if skip_bad and 'not reaching sample' in line:
         valid, lines = 0, []
+        stat['bad'] += 1
         assert re.match(r"^$", read_line())
         break
       # a line with a label

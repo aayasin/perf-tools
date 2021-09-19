@@ -16,7 +16,7 @@ while True:
   if not sample: break
   assert len(sample) > 2, 'invalid sample: ' + str(sample)
   c['total'] += 1
-  if not '#' in sample[-2]: c['sequential'] += 1
+  if not lbr.is_taken(sample[-2]): c['sequential'] += 1
 
 print(c, ratio('sequential', c))
 

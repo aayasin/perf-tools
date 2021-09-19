@@ -31,8 +31,12 @@ def read_sample(skip_bad=True, labels=False):
         assert re.match(r"^$", read_line())
         break
       # a line with a label
-      if not labels and ':' in C.str2list(line)[0]:
+      if not labels and is_label(line):
         continue
       lines += [ line.rstrip('\r\n') ]
   return lines
+
+def is_taken(line):   return '#' in line
+
+def is_label(line):   return ':' in C.str2list(line)[0]
 

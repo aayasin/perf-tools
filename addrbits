@@ -9,17 +9,23 @@ __author__ = 'ayasin'
 import common as C
 import sys
 
-# usage: addrbits left-index right-index [prepend original line]
+# usage: addrbits left-index right-index [field=0] [prepend=0]
 left = int(C.arg(1))
 right = int(C.arg(2))
-append = int(C.arg(3, -1))
+field = int(C.arg(3, '0'))
+prepend = int(C.arg(4, '0'))
 
 mask = 2**(left+1)-1
+
 while True:
   line = sys.stdin.readline()
   if not line: break
-  addr = int(line.strip(), 16)
+  line = line.rstrip('\r\n')
+  if line in ('--'):
+    print(line)
+    continue
+  addr = int(C.str2list(line)[field], 16)
   bits = (addr & mask) >> right
   bits = '%02x'%bits
-  print(bits) if append < 0 else print (bits, line, end='') 
+  print(bits, line) if prepend else print(bits)
 

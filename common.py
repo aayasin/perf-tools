@@ -25,8 +25,9 @@ class color:
 def printc(msg, col=color.DARKCYAN):
   print(col + msg + color.END)
 
-def warn(msg):
-  printc('WARNING: %s !'%msg, color.CYAN)
+def warn(msg, bold=False, col=color.CYAN):
+  if bold: col += color.BOLD
+  printc('WARNING: %s !'%msg, col)
 
 dump_stack_on_error = 0
 def error(msg):
@@ -109,7 +110,7 @@ def file2lines(filename, fail=False):
   except IOError:
     if fail: error('cannot open %s'%filename)
     else:
-      warn('cannot open %s'%filename)
+      warn('cannot open %s'%filename, bold=True)
       return [None]
 
 import csv
@@ -131,7 +132,7 @@ def read_perf_toplev(filename):
       elif '.' in x or x.startswith('cpu/topdown-'): pass
       else: print(r['Event'])
       x = x.upper()
-      if v == 0 and x in d and d[x] != 0: warn('skipping zero override in: '+r)
+      if v == 0 and x in d and d[x] != 0: warn('skipping zero override in: '+str(r))
       else: d[x] = v
   return d
 

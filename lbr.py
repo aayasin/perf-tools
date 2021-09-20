@@ -19,10 +19,27 @@ def skip_sample():
     line = read_line()
     assert line, 'was input truncated?'
 
+def line_ip(line):
+  x = re.match(r"\s+(\S+)\s+(\S+)", line)
+  assert x, 'expect <address> at left of %s'%line
+  ip = x.group(1).lstrip("0")
+  return ip
+
+
+loops = {}
 stat = {x: 0 for x in ('bad', 'total')}
 stat['IPs'] = {}
+
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
   valid, lines = 0, []
+  def process_insn(line):
+    ip = line_ip(line)
+    xip = line_ip(lines[-1])
+    # only simple loop-backs are supported
+    if not ip in loops and is_taken(lines[-1]) and int(ip, 16) < int(xip, 16):
+      loops[ip] = {'back': xip}
+      #todo: +loop length
+  
   while not valid:
     valid = 1
     stat['total'] += 1
@@ -55,10 +72,15 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
       # a line with a label
       if not labels and is_label(line):
         continue
+      # an instruction line (not first in stream)
+      if len(lines) > 1 and not is_label(line):
+        process_insn(line)
       lines += [ line.rstrip('\r\n') ]
   return lines
 
 def is_taken(line):   return '#' in line
 
 def is_label(line):   return ':' in C.str2list(line)[0]
+
+def is_loop(line):    return line_ip(line) in loops
 

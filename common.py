@@ -206,8 +206,8 @@ def command_basename(comm, iterations=None):
   return chop(namestr, './~<>')
 
 # stats
-def ratio(x, histo):
-  return '%s-ratio=%.1f%%'%(x, 100.0*histo[x]/histo['total'])
+def ratio(x, histo, denom='total'):
+  return '%s-ratio: %.1f%%'%(x, 100.0*histo[x]/histo[denom])
 
 # Architecture: CPU, PMU,
 def pmu_name():

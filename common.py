@@ -63,7 +63,7 @@ def annotate(stuff, label=''):
 # @redir_out:  redirect output of the (first non-piped) command as specified
 # @run:   do run the specified command
 def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True):
-  if redir_out: x = x.replace('|', redir_out + ' |', 1) if '|' in x else x + redir_out
+  if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
   if msg:
     if '@' in msg: msg='\t'+msg.replace('@', '')
     else: msg = msg + ' ..'
@@ -207,7 +207,7 @@ def command_basename(comm, iterations=None):
 
 # stats
 def ratio(x, histo, denom='total'):
-  return '%s-ratio: %.1f%%'%(x, 100.0*histo[x]/histo[denom])
+  return '%s-ratio: %.1f%%'%(x, 100.0*histo[x]/max(histo[denom], 1))
 
 # Architecture: CPU, PMU,
 def pmu_name():

@@ -14,9 +14,9 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.9
+__version__= 0.91
 
-import argparse, os, sys
+import argparse, os.path, sys
 import common as C
 from platform import python_version
 
@@ -36,8 +36,8 @@ do = {'run':        './run.sh',
   'numactl':        1,
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
-  'perf-lbr':       '-e r20c4:pp -c 1000003',
-  'perf-pebs':      '-e cpu/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/pp -c 1000003',
+  'perf-lbr':       '-j any,save_type -e r20c4:pp -c 1000003',
+  'perf-pebs':      '-b -e cpu/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/pp -c 1000003',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'pin':            'taskset 0x4',
@@ -193,9 +193,10 @@ def profile(log=False, out='run'):
       events += append(perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
-    return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, C.chop(flags,' '), grep)
+    return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, flags.strip(), grep)
   
   out = uniq_name()
+  perf_stat_log = "%s.perf_stat.log"%out
   perf = args.perf
   sort2u = 'sort | uniq -c | sort -n'
   r = do['run']
@@ -258,8 +259,9 @@ def profile(log=False, out='run'):
   
   data, comm = None, None
   def perf_record(tag, comm, watch_ipc='-- perf stat -e instructions,cycles '):
+    assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag], 'No unfiltered LBRs!'
     perf_data = '%s%s.perf.data'%(out, C.chop(do['perf-%s'%tag], (' :/,=', 'cpu_core', 'cpu')))
-    exe(perf + ' record -b %s -o %s %s-- %s'%(
+    exe(perf + ' record %s -o %s %s-- %s'%(
       do['perf-%s'%tag], perf_data, watch_ipc, r), 'sampling w/ '+tag.upper())
     print_cmd("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
     if not comm:
@@ -269,6 +271,10 @@ def profile(log=False, out='run'):
   
   if en(8) and do['sample'] > 1:
     data, comm = perf_record('lbr', comm)
+    info = '%s.info.log'%data
+    exe("perf report -i %s | grep -A11 'Branch Statistics:' | tee %s"%(data, info), "@stats")
+    if os.path.isfile(perf_stat_log):
+      exe("egrep '  branches|instructions' %s >> %s"%(perf_stat_log, info))
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.perf-hitcounts.log'%data

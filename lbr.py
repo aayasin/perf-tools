@@ -13,8 +13,15 @@ def read_line():
   line = sys.stdin.readline()
   return line
 
+def skip_sample():
+  line = read_line()
+  while not re.match(r"^$", line):
+    line = read_line()
+    assert line, 'was input truncated?'
+
 stat = {x: 0 for x in ('bad', 'total')}
-def read_sample(skip_bad=True, min_lines=0, labels=False):
+stat['IPs'] = {}
+def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
   valid, lines = 0, []
   while not valid:
     valid = 1
@@ -25,6 +32,14 @@ def read_sample(skip_bad=True, min_lines=0, labels=False):
       if not line:
         if len(lines): stat['bad'] += 1
         return None if skip_bad else lines
+      # a new sample started
+      if ip_filter and len(lines) == 0:
+        if not ip_filter in line:
+          valid = 0
+          skip_sample()
+          break
+        if not ip_filter in stat['IPs']: stat['IPs'][ip_filter] = 0
+        stat['IPs'][ip_filter] += 1
       # a sample ended
       if re.match(r"^$", line):
         if min_lines and (len(lines)-1) < min_lines:

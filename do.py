@@ -272,8 +272,8 @@ def profile(log=False, out='run'):
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.perf-hitcounts.log'%data
-      exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "\
-        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu > %s) | cut -f5- "\
+      exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "
+        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu > %s) | cut -f5- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
         (data, comm, hits, ips, sort2u, out, sort2u, out),
           "@instruction-mix for '%s'"%comm, redir_out=None)
@@ -283,7 +283,10 @@ def profile(log=False, out='run'):
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
     exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail"%(data, sort2u, data), "@ top-10 IPs")
-    exe(perf + " script -i %s -F +brstackinsn | ./lbr_stats | tee -a %s.ips.log"%(data, data), "@ stats on PEBS event")
+    top_ip = C.exe_one_line("tail -1 %s.ips.log"%data, 1)
+    exe(perf + " script -i %s -F +brstackinsn "
+      "| tee >(./lbr_stats %s | tee -a %s.ips.log) "
+      "| ./lbr_stats | tee -a %s.ips.log"%(data, top_ip, data, data), "@ stats on PEBS event")
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

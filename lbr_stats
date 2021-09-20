@@ -6,10 +6,10 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 
-import lbr
+from lbr import *
 import common as C
 
-c = {x: 0 for x in ('loop_head', 'loop_seq', 'sequential', 'total')}
+c = {x: 0 for x in ('loop_head', 'loop_seq', 'loop_jmp2mid', 'sequential', 'total')}
 
 # usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL]
 ip = C.arg(1, 'ALL')
@@ -19,15 +19,26 @@ if ip != 'ALL':
   c['ip'] = '0x'+filter
 
 while True:
-  sample = lbr.read_sample(ip_filter=filter, min_lines=2)
+  sample = read_sample(ip_filter=filter, min_lines=2)
   if not sample: break
   assert len(sample) > 2, 'invalid sample: ' + str(sample)
   c['total'] += 1
-  if not lbr.is_taken(sample[-2]): c['sequential'] += 1
-  if lbr.is_loop(sample[-1]):
+  if not is_taken(sample[-2]): c['sequential'] += 1
+  if is_loop(sample[-1]):
     c['loop_head'] += 1
-    if not lbr.is_taken(sample[-2]): c['loop_seq'] += 1
-  #print('\n'.join(sample))
+    if not is_taken(sample[-2]): c['loop_seq'] += 1
+    br = get_taken(sample, -2)
+    ip = line_ip(sample[-1])
+    if br['to'] > ip and br['to'] <= get_loop(ip)['back']:
+      c['loop_jmp2mid'] += 1
+      continue
+      print_sample(sample, 22)
+      print_loop(ip)
+      print_br(br)
+      print(c)
+      print(stat)
+      exit(0)
 
-print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'), sep=', ')
+print(c, C.ratio('sequential', c),
+  C.ratio('loop_seq', c, 'loop_head'), C.ratio('loop_jmp2mid', c, 'loop_head'), sep=', ')
 

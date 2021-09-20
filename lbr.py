@@ -19,11 +19,15 @@ def skip_sample():
     line = read_line()
     assert line, 'was input truncated?'
 
+def print_sample(sample, n=10):
+  print(sample[0])
+  print('\n'.join(sample[-n:]))
+
 def line_ip(line):
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
   assert x, 'expect <address> at left of %s'%line
   ip = x.group(1).lstrip("0")
-  return ip
+  return int(ip, 16)
 
 
 loops = {}
@@ -36,7 +40,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
     ip = line_ip(line)
     xip = line_ip(lines[-1])
     # only simple loop-backs are supported
-    if not ip in loops and is_taken(lines[-1]) and int(ip, 16) < int(xip, 16):
+    if not ip in loops and is_taken(lines[-1]) and ip < xip:
       loops[ip] = {'back': xip}
       #todo: +loop length
   
@@ -72,15 +76,37 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
       # a line with a label
       if not labels and is_label(line):
         continue
-      # an instruction line (not first in stream)
-      if len(lines) > 1 and not is_label(line):
+      # an instruction following a taken
+      if len(lines) > 1 and not is_label(line) and is_taken(lines[-1]):
         process_insn(line)
       lines += [ line.rstrip('\r\n') ]
   return lines
 
-def is_taken(line):   return '#' in line
-
 def is_label(line):   return ':' in C.str2list(line)[0]
 
 def is_loop(line):    return line_ip(line) in loops
+
+def is_taken(line):   return '#' in line
+
+def get_loop(ip):     return loops[ip] if ip in loops else None
+
+def get_taken(sample, n):
+  assert n in range(-32, -1), 'invalid n='+str(n)
+  i = len(sample)-1
+  frm, to = 0, 0
+  while i >= 0:
+    if is_taken(sample[i]):
+      n += 1
+      if n==0:
+        frm = line_ip(sample[i])
+        to = line_ip(sample[i+1])
+        break
+    i -= 1
+  return {'from': frm, 'to': to, 'taken': 1}
+
+def print_br(br):
+  print('[from: 0x%x, to: 0x%x, taken: %d]'%(br['from'], br['to'], br['taken']))
+
+def print_loop(ip):
+  print('[ip: 0x%x, back: 0x%x, %s]'%(ip, loops[ip]['back'], str(loops[ip])))
 

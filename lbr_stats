@@ -9,7 +9,7 @@ __author__ = 'ayasin'
 from lbr import *
 import common as C
 
-c = {x: 0 for x in ('loop_head', 'loop_seq', 'loop_jmp2mid', 'sequential', 'total')}
+c = {x: 0 for x in ('loop_head', 'loop_seq', 'loop_jmp2mid', 'loop_jmp2head', 'sequential', 'total')}
 
 # usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL]
 ip = C.arg(1, 'ALL')
@@ -27,6 +27,7 @@ while True:
   if is_loop(sample[-1]):
     c['loop_head'] += 1
     if not is_taken(sample[-2]): c['loop_seq'] += 1
+    elif is_taken(sample[-2]) and is_jmp_next(get_taken(sample, -1)): c['loop_jmp2head'] += 1
     br = get_taken(sample, -2)
     ip = line_ip(sample[-1])
     if br['to'] > ip and br['to'] <= get_loop(ip)['back']:
@@ -39,6 +40,6 @@ while True:
       print(stat)
       exit(0)
 
-print(c, C.ratio('sequential', c),
-  C.ratio('loop_seq', c, 'loop_head'), C.ratio('loop_jmp2mid', c, 'loop_head'), sep=', ')
+print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
+  C.ratio('loop_jmp2mid', c, 'loop_head'), C.ratio('loop_jmp2head', c, 'loop_head'), sep=', ')
 

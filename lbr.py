@@ -82,6 +82,13 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
       lines += [ line.rstrip('\r\n') ]
   return lines
 
+def is_jmp_next(br, # a hacky implementation for now
+  JS=2,             # short direct Jump Size
+  CDLA=16):         # compiler default loops alignment
+  mask = ~(CDLA - 1)
+  return (br['to'] == (br['from'] + JS)) or (
+         (br['to'] & mask) ==  ((br['from'] & mask) + CDLA))
+
 def is_label(line):   return ':' in C.str2list(line)[0]
 
 def is_loop(line):    return line_ip(line) in loops
@@ -91,15 +98,15 @@ def is_taken(line):   return '#' in line
 def get_loop(ip):     return loops[ip] if ip in loops else None
 
 def get_taken(sample, n):
-  assert n in range(-32, -1), 'invalid n='+str(n)
+  assert n in range(-32, 0), 'invalid n='+str(n)
   i = len(sample)-1
-  frm, to = 0, 0
+  frm, to = -1, -1
   while i >= 0:
     if is_taken(sample[i]):
       n += 1
       if n==0:
         frm = line_ip(sample[i])
-        to = line_ip(sample[i+1])
+        if i < (len(sample)-1): to = line_ip(sample[i+1])
         break
     i -= 1
   return {'from': frm, 'to': to, 'taken': 1}

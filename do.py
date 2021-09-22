@@ -6,7 +6,6 @@
 #   alderlake-hybrid suport
 #   move profile code to a seperate module, arg for output dir
 #   toplevl 3-levels default Icelake onwards
-#   add trials support
 #   quiet mode
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
@@ -40,6 +39,7 @@ do = {'run':        './run.sh',
   'perf-pebs':      '-b -e cpu/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/pp -c 1000003',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
+  'perf-stat-r':    1,
   'pin':            'taskset 0x4',
   'pmu':            C.pmu_name(),
   'python':         sys.executable,
@@ -53,7 +53,8 @@ do = {'run':        './run.sh',
 }
 args = argparse.Namespace() #vars(args)
 
-def exe(x, msg=None, redir_out=' 2>&1', verbose=False, run=True):
+def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True):
+  if redir_out: redir_out=' %s'%redir_out
   if not do['tee'] and redir_out: x = x.split('|')[0]
   if 'tee >(' in x: x = 'bash -c "%s"'%x.replace('"', '\\"')
   if len(vars(args)):
@@ -185,9 +186,9 @@ def profile(log=False, out='run'):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not icelake() else ''
-  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
+  def perf_stat(flags='', flags2=None, events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
     def append(x, y): return x if y == '' else ','+x
-    perf_args = flags
+    perf_args = ' '.join((flags, flags2)) if flags2 else flags
     if icelake(): events += ',topdown-'.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound}'])
     if args.events:
       events += append(perf_format(args.events), events)
@@ -202,9 +203,9 @@ def profile(log=False, out='run'):
   r = do['run']
   if en(0) or log: log_setup()
   
-  if en(1): exe(perf_stat(), 'per-app counting')
+  if en(1): exe(perf_stat(flags2='-r%d'%do['perf-stat-r']), 'per-app counting')
   
-  if en(2): exe(perf_stat('-a ', a_events(), '| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
+  if en(2): exe(perf_stat('-a ', a_events(), grep='| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
   
   if en(3) and do['sample']:
     base = out+'.perf'
@@ -216,11 +217,11 @@ def profile(log=False, out='run'):
     exe(perf + " report --stdio --hierarchy --header -i %s.perf.data | grep -v ' 0\.0.%%' | tee "%out+
       base+"-modules.log | grep -A11 Overhead", '@report modules')
     base2 = base+'-code'
-    exe(perf + " annotate --stdio -i %s.perf.data | c++filt | tee "%out + base2 + ".log" \
+    exe(perf + " annotate --stdio -i %s.perf.data | c++filt | tee "%out + base2 + ".log " \
       "| egrep -v -E ' 0\.[0-9][0-9] :|^\s+:($|\s+(Disassembly of section .text:|//|#include))' " \
       "| tee " + base2 + "_nonzero.log > /dev/null " \
       "&& egrep -n -1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
-      "| head -20", '@annotate code', '2>/dev/null')
+      "| head -20", '@annotate code', redir_out='2>/dev/null')
     if do['xed']: exe(perf + " script -i %s.perf.data -F insn --xed | %s " \
       "| tee %s-hot-insts.log | tail"%(out, sort2u, base), '@time-consuming instructions')
   
@@ -259,7 +260,7 @@ def profile(log=False, out='run'):
   
   data, comm = None, None
   def perf_record(tag, comm, watch_ipc='-- perf stat -e instructions,cycles '):
-    assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag], 'No unfiltered LBRs!'
+    assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag], 'No unfiltered LBRs! tag=%s'%tag
     perf_data = '%s%s.perf.data'%(out, C.chop(do['perf-%s'%tag], (' :/,=', 'cpu_core', 'cpu')))
     exe(perf + ' record %s -o %s %s-- %s'%(
       do['perf-%s'%tag], perf_data, watch_ipc, r), 'sampling w/ '+tag.upper())
@@ -277,7 +278,7 @@ def profile(log=False, out='run'):
       exe("egrep '  branches|instructions' %s >> %s"%(perf_stat_log, info))
     if do['xed']:
       ips = '%s.ips.log'%data
-      hits = '%s.perf-hitcounts.log'%data
+      hits = '%s.hitcounts.log'%data
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "
         "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu > %s) | cut -f5- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
@@ -290,9 +291,9 @@ def profile(log=False, out='run'):
     data, comm = perf_record('pebs', comm)
     exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail"%(data, sort2u, data), "@ top-10 IPs")
     top_ip = C.exe_one_line("tail -1 %s.ips.log"%data, 1)
-    exe(perf + " script -i %s -F +brstackinsn "
+    exe(perf + " script -i %s -F +brstackinsn --xed "
       "| tee >(./lbr_stats %s | tee -a %s.ips.log) "
-      "| ./lbr_stats | tee -a %s.ips.log"%(data, top_ip, data, data), "@ stats on PEBS event")
+      "| ./lbr_stats | tee -a %s.ips.log | head"%(data, top_ip, data, data), "@ stats on PEBS event")
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

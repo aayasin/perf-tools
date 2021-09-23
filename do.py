@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.91
+__version__= 0.92
 
 import argparse, os.path, sys
 import common as C
@@ -39,7 +39,7 @@ do = {'run':        './run.sh',
   'perf-pebs':      '-b -e cpu/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/pp -c 1000003',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
-  'perf-stat-r':    1,
+  'perf-stat-r':    3,
   'pin':            'taskset 0x4',
   'pmu':            C.pmu_name(),
   'python':         sys.executable,
@@ -186,9 +186,9 @@ def profile(log=False, out='run'):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not icelake() else ''
-  def perf_stat(flags='', flags2=None, events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
+  def perf_stat(flags='', flags2='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
     def append(x, y): return x if y == '' else ','+x
-    perf_args = ' '.join((flags, flags2)) if flags2 else flags
+    perf_args = flags + flags2
     if icelake(): events += ',topdown-'.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound}'])
     if args.events:
       events += append(perf_format(args.events), events)
@@ -203,7 +203,7 @@ def profile(log=False, out='run'):
   r = do['run']
   if en(0) or log: log_setup()
   
-  if en(1): exe(perf_stat(flags2='-r%d'%do['perf-stat-r']), 'per-app counting')
+  if en(1): exe(perf_stat(flags2=' -r%d'%do['perf-stat-r']), 'per-app counting')
   
   if en(2): exe(perf_stat('-a ', a_events(), grep='| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
   
@@ -292,8 +292,8 @@ def profile(log=False, out='run'):
     exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail"%(data, sort2u, data), "@ top-10 IPs")
     top_ip = C.exe_one_line("tail -1 %s.ips.log"%data, 1)
     exe(perf + " script -i %s -F +brstackinsn --xed "
-      "| tee >(./lbr_stats %s | tee -a %s.ips.log) "
-      "| ./lbr_stats | tee -a %s.ips.log | head"%(data, top_ip, data, data), "@ stats on PEBS event")
+      #asserts in skip_sample! "| tee >(./lbr_stats %s | tee -a %s.ips.log) "
+      "| ./lbr_stats | tee -a %s.ips.log"%(data, top_ip, data, data), "@ stats on PEBS event")
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

@@ -49,6 +49,7 @@ do = {'run':        './run.sh',
   'tee':            1,
   'toplev':         TOPLEV_DEF,
   'toplev-levels':  2,
+  'toplev-nomux':   '-vl6',
   'xed':            0,
 }
 args = argparse.Namespace() #vars(args)
@@ -182,6 +183,7 @@ def perf_format(es, result=''):
   return result
 
 def profile(log=False, out='run'):
+  out = uniq_name()
   def en(n): return args.profile_mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
@@ -195,8 +197,9 @@ def profile(log=False, out='run'):
       grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, flags.strip(), grep)
+  def record_name(flags):
+    return '%s%s'%(out, C.chop(flags, (' :/,=', 'cpu_core', 'cpu')))
   
-  out = uniq_name()
   perf_stat_log = "%s.perf_stat.log"%out
   perf = args.perf
   sort2u = 'sort | uniq -c | sort -n'
@@ -212,21 +215,22 @@ def profile(log=False, out='run'):
     if do['perf-record']:
       do['perf-record'] += ' '
       base += C.chop(do['perf-record'], ' :')
-    exe(perf + ' record -g -o %s.perf.data '%out+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
-    print_cmd("Try 'perf report -i %s.perf.data' to browse time-consuming sources"%out)
-    exe(perf + " report --stdio --hierarchy --header -i %s.perf.data | grep -v ' 0\.0.%%' | tee "%out+
+    data = '%s.perf.data'%record_name(do['perf-record'])
+    exe(perf + ' record -g -o %s '%data+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
+    print_cmd("Try 'perf report -i %s' to browse time-consuming sources"%data)
+    exe(perf + " report --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A11 Overhead", '@report modules')
     base2 = base+'-code'
-    exe(perf + " annotate --stdio -i %s.perf.data | c++filt | tee "%out + base2 + ".log " \
+    exe(perf + " annotate --stdio -i %s | c++filt | tee "%data + base2 + ".log " \
       "| egrep -v -E ' 0\.[0-9][0-9] :|^\s+:($|\s+(Disassembly of section .text:|//|#include))' " \
       "| tee " + base2 + "_nonzero.log > /dev/null " \
       "&& egrep -n -1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
       "| head -20", '@annotate code', redir_out='2>/dev/null')
-    if do['xed']: exe(perf + " script -i %s.perf.data -F insn --xed | %s " \
-      "| tee %s-hot-insts.log | tail"%(out, sort2u, base), '@time-consuming instructions')
+    if do['xed']: exe(perf + " script -i %s -F insn --xed | %s " \
+      "| tee %s-hot-insts.log | tail"%(data, sort2u, base), '@time-consuming instructions')
   
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
-  toplev+= (args.pmu_tools + '/toplev.py --no-desc ')
+  toplev+= (args.pmu_tools + '/toplev.py --no-desc')
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)' "
   def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
@@ -243,7 +247,7 @@ def profile(log=False, out='run'):
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
       tlargs='' if args.toplev_args == TOPLEV_DEF else args.toplev_args)
-    exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Adding|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
+    exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Add|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
     if do['sample'] > 3:
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
       exe(cmd, '@sampling on bottleneck')
@@ -253,7 +257,7 @@ def profile(log=False, out='run'):
         exe("%s %s --stdio -i %s > %s "%(perf, c, perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
   if en(7) and args.no_multiplex:
-    cmd, log = toplev_V('-vl6 --no-multiplex ', '-nomux', do['nodes'] + ',' + do['extra-metrics'])
+    cmd, log = toplev_V(do['toplev-nomux']+' --no-multiplex', '-nomux', do['nodes'] + ',' + do['extra-metrics'])
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
@@ -261,7 +265,7 @@ def profile(log=False, out='run'):
   data, comm = None, None
   def perf_record(tag, comm, watch_ipc='-- perf stat -e instructions,cycles '):
     assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag], 'No unfiltered LBRs! tag=%s'%tag
-    perf_data = '%s%s.perf.data'%(out, C.chop(do['perf-%s'%tag], (' :/,=', 'cpu_core', 'cpu')))
+    perf_data = '%s.perf.data'%record_name(do['perf-%s'%tag])
     exe(perf + ' record %s -o %s %s-- %s'%(
       do['perf-%s'%tag], perf_data, watch_ipc, r), 'sampling w/ '+tag.upper())
     print_cmd("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
@@ -290,10 +294,11 @@ def profile(log=False, out='run'):
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
     exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail"%(data, sort2u, data), "@ top-10 IPs")
-    top_ip = C.exe_one_line("tail -1 %s.ips.log"%data, 1)
+    #top_ip = C.exe_one_line("tail -1 %s.ips.log"%data, 1)
     exe(perf + " script -i %s -F +brstackinsn --xed "
       #asserts in skip_sample! "| tee >(./lbr_stats %s | tee -a %s.ips.log) "
-      "| ./lbr_stats | tee -a %s.ips.log"%(data, top_ip, data, data), "@ stats on PEBS event")
+      #"| ./lbr_stats | tee -a %s.ips.log"%(data, top_ip, data, data), "@ stats on PEBS event")
+      "| ./lbr_stats | tee -a %s.ips.log"%(data, data), "@ stats on PEBS event")
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

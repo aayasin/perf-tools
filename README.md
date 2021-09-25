@@ -59,8 +59,9 @@ First, edit `run.sh` to invoke your application or use the `-a '<your app and it
 
 ### tools
 A set of command-line tools to facilitate profiling
-* **lbr_stats** -- a tool to retreive stats on LBR-based profile
-* **addrbits** -- a tool to extract certain bits range of hexa-input
+* **addrbits** -- extracts certain bit-range of hexa input
+* **lbr_stats** -- calculates stats on LBR-based profile
+* **ptage** -- computes percentages & sum of number-prefixed input
 
 ### wrappers
 Shortcuts to set-up certain tools

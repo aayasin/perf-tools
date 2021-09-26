@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.92
+__version__= 0.93
 
 import argparse, os.path, sys
 import common as C
@@ -284,8 +284,9 @@ def profile(log=False, out='run'):
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
-      exe(perf + " script -i %s -F +brstackinsn --xed -c %s | egrep '^\s(00000|fffff)' | sed 's/#.*//' "
-        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu > %s) | cut -f5- "
+      exe(perf + " script -i %s -F +brstackinsn --xed -c %s "
+        "| egrep '^\s(00000|fffff)' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
+        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu > %s) | cut -f4- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
         (data, comm, hits, ips, sort2u, out, sort2u, out),
           "@instruction-mix for '%s'"%comm, redir_out=None)
@@ -294,7 +295,7 @@ def profile(log=False, out='run'):
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
-    exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail"%(data, sort2u, data), "@ top-10 IPs")
+    exe(perf + " script -i %s -F ip | %s | ./ptage | tee %s.ips.log | tail"%(data, sort2u, data), "@ top-10 IPs")
     #top_ip = C.exe_one_line("tail -1 %s.ips.log"%data, 1)
     exe(perf + " script -i %s -F +brstackinsn --xed "
       #asserts in skip_sample! "| tee >(./lbr_stats %s | tee -a %s.ips.log) "

@@ -41,5 +41,5 @@ optional arguments:
   -N, --no-multiplex    skip no-multiplexing reruns (default: True)
   -v VERBOSE, --verbose VERBOSE
                         verbose level; 0:none, 1:commands, 2:+verbose-on
-                        metrics|build, 3:ASM on kernel build, 4:+args parsing,
-                        5:+event-groups(ALL) (default: 0)
+                        metrics|build, 3:+toplev --perf|ASM on kernel build,
+                        4:+args parsing, 5:+event-groups(ALL) (default: 0)

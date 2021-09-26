@@ -232,7 +232,8 @@ def profile(log=False, out='run'):
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc')
   grep_bk= "egrep '<==|MUX|Info.Bott'"
-  grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)' "
+  grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)|##placeholder##' "
+  if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < \[|<$')
   def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
@@ -336,7 +337,7 @@ def parse_args():
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
     help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, ' \
-    '2:+verbose-on metrics|build, 3:ASM on kernel build, 4:+args parsing, 5:+event-groups(ALL)')
+    '2:+verbose-on metrics|build, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, 5:+event-groups(ALL)')
   ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS, action='append') # override global variables with python expression
   x = ap.parse_args()
   return x
@@ -350,6 +351,7 @@ def main():
     C.error('must specify --app-name with any of: --gen-args, build')
   assert not (args.print_only and (args.profile_mask & 0x300)), 'No print-only + lbr/pebs profile-steps'
   if args.verbose > 4: args.toplev_args += ' -g'
+  if args.verbose > 2: args.toplev_args += ' --perf'
   if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name
   if args.print_only and args.verbose == 0: args.verbose = 1

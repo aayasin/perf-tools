@@ -193,11 +193,14 @@ def print_all(nloops=5, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   print(stat)
   if loop_ipc:
-    C.printc('IPC histogram of loop %s:'%hex(loop_ipc))
-    tot = sum(loops[loop_ipc]['IPC'].values())
-    loops[loop_ipc]['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
-    for k in sorted(loops[loop_ipc]['IPC'].keys()):
-      print('%4s: %6d%6.1f%%'%(k, loops[loop_ipc]['IPC'][k], 100.0*loops[loop_ipc]['IPC'][k]/tot))
+    if loop_ipc in loops and 'IPC' in loops[loop_ipc]:
+      C.printc('IPC histogram of loop %s:'%hex(loop_ipc))
+      tot = sum(loops[loop_ipc]['IPC'].values())
+      loops[loop_ipc]['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
+      for k in sorted(loops[loop_ipc]['IPC'].keys()):
+        print('%4s: %6d%6.1f%%'%(k, loops[loop_ipc]['IPC'][k], 100.0*loops[loop_ipc]['IPC'][k]/tot))
+    else:
+      C.warn('Loop %s was not observed'%hex(loop_ipc))
   C.printc('top %d loops:'%nloops)
   cnt=0
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'], reverse=True)

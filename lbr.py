@@ -10,9 +10,9 @@ debug = 0
 import common as C
 import re, sys
 
-def read_line():
-  line = sys.stdin.readline()
-  return line
+def hex(ip): return '0x%x'%ip
+def inc(d, b): d[b] = d.get(b, 0) + 1
+def read_line(): return sys.stdin.readline()
 
 def skip_sample(s):
   line = read_line()
@@ -21,33 +21,35 @@ def skip_sample(s):
     assert line, 'was input truncated? sample:\n%s'%s
   return 0
 
-def print_sample(sample, n=10):
-  print(sample[0])
-  print('\n'.join(sample[-n:]))
-
 def line_ip(line):
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
   assert x, 'expect <address> at left of %s'%line
   ip = x.group(1).lstrip("0")
   return int(ip, 16)
 
-def hex(ip): return '0x%x'%ip
+def line_timing(line):
+  x = re.match(r"[^#]+# (\S+) (\d+) cycles \[\d+\] ([0-9\.]+) IPC", line)
+  assert x, 'Could not match IPC in:\n%s'%line
+  ipc = round(float(x.group(3)), 1)
+  cycles = int(x.group(2))
+  return cycles, ipc
+
 
 loops = {}
 stat = {x: 0 for x in ('bad', 'bogus', 'total')}
 stat['IPs'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
-
+loop_cycles=0
 bwd_br_tgts = [] # better make it local to read_sample..
-def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
+def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_ipc=0):
   global size_sum, bwd_br_tgts
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
   
   def detect_loop(line,
     MOLD=4e4): #Max Outer Loop Distance
-    global bwd_br_tgts #unlike nonlocal, global works in python2 too!
+    global loop_cycles, bwd_br_tgts #unlike nonlocal, global works in python2 too!
     def find_block_ip():
       x = len(lines)-2
       while x>=0:
@@ -58,6 +60,13 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
     ip = line_ip(line)
     if ip in loops:
       loops[ip]['hotness'] += 1
+      if ip == loop_ipc and is_taken(lines[-1]):
+        if not 'IPC' in loops[ip]: loops[ip]['IPC'] = {}
+        begin = find_block_ip()
+        if begin == ip and 'IPC' in lines[-1]:
+          cycles, ipc = line_timing(lines[-1])
+          inc(loops[ip]['IPC'], ipc)
+          loop_cycles += cycles
       if not loops[ip]['entry-block'] and not is_taken(lines[-1]):
         loops[ip]['entry-block'] = find_block_ip()
       return
@@ -109,8 +118,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
         if not ip_filter in line:
           valid = skip_sample(lines[0])
           break
-        if not ip_filter in stat['IPs']: stat['IPs'][ip_filter] = 0
-        stat['IPs'][ip_filter] += 1
+        inc(stat['IPs'], ip_filter)
       # a sample ended
       if re.match(r"^$", line):
         len_m1 = len(lines)-1
@@ -151,6 +159,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False):
     size_sum += size
   return lines
 
+
 def is_jmp_next(br, # a hacky implementation for now
   JS=2,             # short direct Jump Size
   CDLA=16):         # compiler default loops alignment
@@ -180,10 +189,16 @@ def get_taken(sample, n):
     i -= 1
   return {'from': frm, 'to': to, 'taken': 1}
 
-def print_all(nloops=5):
+def print_all(nloops=5, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   print(stat)
-  print('top %d loops:'%nloops)
+  if loop_ipc:
+    C.printc('IPC histogram of loop %s:'%hex(loop_ipc))
+    tot = sum(loops[loop_ipc]['IPC'].values())
+    loops[loop_ipc]['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
+    for k in sorted(loops[loop_ipc]['IPC'].keys()):
+      print('%4s: %6d%6.1f%%'%(k, loops[loop_ipc]['IPC'][k], 100.0*loops[loop_ipc]['IPC'][k]/tot))
+  C.printc('top %d loops:'%nloops)
   cnt=0
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'], reverse=True)
   for l in sloops:
@@ -201,6 +216,11 @@ def print_loop(ip):
   for x in ('back', 'entry-block'):
     print('%s: %s, '%(x, hex(loop[x])), end='')
     del loop[x]
+  if 'IPC' in loop: del loop['IPC']
   details = C.chop(str(loop), (")'", 'set('))
   print('%s]'%details)
+
+def print_sample(sample, n=10):
+  print(sample[0])
+  print('\n'.join(sample[-n:]))
 

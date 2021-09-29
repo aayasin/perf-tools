@@ -67,6 +67,16 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
           cycles, ipc = line_timing(lines[-1])
           inc(loops[ip]['IPC'], ipc)
           loop_cycles += cycles
+      if not loops[ip]['length'] and not loops[ip]['outer'] and len(lines)>2 and\
+        line_ip(lines[-1]) == loops[ip]['back']:
+        length = 0
+        x = len(lines)-2
+        while x>=0:
+          length += 1
+          if line_ip(lines[x]) == loops[ip]['back']:
+            loops[ip]['length'] = length
+            break
+          x -= 1
       if not loops[ip]['entry-block'] and not is_taken(lines[-1]):
         loops[ip]['entry-block'] = find_block_ip()
       return
@@ -80,13 +90,14 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
           inner += 1
           outs.add(hex(l))
           loops[l]['outer'] = 1
+          loops[l]['length'] = 0 #no support yet
           loops[l]['inner-loops'].add(hex(ip))
         if ip < l and xip > loops[l]['back']:
           outer = 1
           ins.add(hex(l))
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(hex(ip))
-      loops[ip] = {'back': xip, 'hotness': 1,
+      loops[ip] = {'back': xip, 'hotness': 1, 'length': 0,
         'entry-block': 0 if xip > ip else find_block_ip(),
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
@@ -193,7 +204,7 @@ def print_all(nloops=5, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   print(stat)
   if loop_ipc:
-    if loop_ipc in loops and 'IPC' in loops[loop_ipc]:
+    if loop_ipc in loops and 'IPC' in loops[loop_ipc] and sum(loops[loop_ipc]['IPC'].values()):
       C.printc('IPC histogram of loop %s:'%hex(loop_ipc))
       tot = sum(loops[loop_ipc]['IPC'].values())
       loops[loop_ipc]['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))

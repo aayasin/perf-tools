@@ -28,6 +28,7 @@ do = {'run':        './run.sh',
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'gen-kernel':     1,
+  'lbr-stats':      '- 0',
   'metrics':        "+IpTB,+L2MPKI",
   'msr':            0,
   'msrs':           ('0x8b', '0x1a4'),
@@ -69,7 +70,7 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True):
     verbose = args.verbose > 0
   return C.exe_cmd(x, msg, redir_out, verbose, run)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
-def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg)
+def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) #don't append to cmds_file
 
 def print_cmd(x):
   C.printc(x)
@@ -284,23 +285,25 @@ def profile(log=False, out='run'):
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
+      exe_v0('printf "\n# Loop Statistics:\n#\n">> %s'%info)
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s "
+        "| tee >(./lbr_stats %s >> %s) "
         "| egrep '^\s(00000|fffff)' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
         "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu > %s) | cut -f4- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
-        (data, comm, hits, ips, sort2u, out, sort2u, out),
+        (data, comm, do['lbr-stats'], info, hits, ips, sort2u, out, sort2u, out),
           "@instruction-mix for '%s'"%comm, redir_out=None)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -3 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
-    exe(perf + " script -i %s -F ip | %s | ./ptage | tee %s.ips.log | tail"%(data, sort2u, data), "@ top-10 IPs")
+    exe(perf + " script -i %s -F ip | %s | ./ptage | tee %s.ips.log | tail -11"%(data, sort2u, data), "@ top-10 IPs")
     #top_ip = C.exe_one_line("tail -1 %s.ips.log"%data, 1)
     exe(perf + " script -i %s -F +brstackinsn --xed "
       #asserts in skip_sample! "| tee >(./lbr_stats %s | tee -a %s.ips.log) "
       #"| ./lbr_stats | tee -a %s.ips.log"%(data, top_ip, data, data), "@ stats on PEBS event")
-      "| ./lbr_stats | tee -a %s.ips.log"%(data, data), "@ stats on PEBS event")
+      "| ./lbr_stats %s | tee -a %s.ips.log"%(data, do['lbr-stats'], data), "@ stats on PEBS event")
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

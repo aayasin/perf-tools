@@ -67,14 +67,14 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
           cycles, ipc = line_timing(lines[-1])
           inc(loops[ip]['IPC'], ipc)
           loop_cycles += cycles
-      if not loops[ip]['length'] and not loops[ip]['outer'] and len(lines)>2 and\
+      if not loops[ip]['size'] and not loops[ip]['outer'] and len(lines)>2 and\
         line_ip(lines[-1]) == loops[ip]['back']:
-        length = 0
+        size = 0
         x = len(lines)-2
-        while x>=0:
-          length += 1
+        while x>=1:
+          size += 1
           if line_ip(lines[x]) == loops[ip]['back']:
-            loops[ip]['length'] = length
+            loops[ip]['size'] = size
             break
           x -= 1
       if not loops[ip]['entry-block'] and not is_taken(lines[-1]):
@@ -90,18 +90,18 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
           inner += 1
           outs.add(hex(l))
           loops[l]['outer'] = 1
-          loops[l]['length'] = 0 #no support yet
+          loops[l]['size'] = 0 #no support yet
           loops[l]['inner-loops'].add(hex(ip))
         if ip < l and xip > loops[l]['back']:
           outer = 1
           ins.add(hex(l))
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(hex(ip))
-      loops[ip] = {'back': xip, 'hotness': 1, 'length': 0,
+      loops[ip] = {'back': xip, 'hotness': 1, 'size': 0,
         'entry-block': 0 if xip > ip else find_block_ip(),
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
-      #todo: +tripcount, +loop length
+      #todo: +tripcount
       bwd_br_tgts.remove(ip)
       return
     if is_taken(lines[-1]) and ip < xip and\
@@ -200,7 +200,7 @@ def get_taken(sample, n):
     i -= 1
   return {'from': frm, 'to': to, 'taken': 1}
 
-def print_all(nloops=5, loop_ipc=0):
+def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   print(stat)
   if loop_ipc:

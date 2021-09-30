@@ -35,6 +35,7 @@ def line_timing(line):
   return cycles, ipc
 
 
+event=None
 loops = {}
 stat = {x: 0 for x in ('bad', 'bogus', 'total')}
 stat['IPs'] = {}
@@ -43,7 +44,7 @@ size_sum=0
 loop_cycles=0
 bwd_br_tgts = [] # better make it local to read_sample..
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_ipc=0):
-  global size_sum, bwd_br_tgts
+  global event, size_sum, bwd_br_tgts
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
   
@@ -119,12 +120,19 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
         if size_stats_en:
           total = stat['IPs'][ip_filter] if ip_filter else stat['total']
           stat['size']['avg'] = round(size_sum / (total - stat['bad'] - stat['bogus']), 1)
-        if len(lines):
-          stat['bogus'] += 1
-          if not skip_bad: return lines
-        return None
+        if len(lines): stat['bogus'] += 1
+        if stat['total'] == stat['bogus']:
+          print_all()
+          C.error('No LBR data in profile')
+        return lines if len(lines) and not skip_bad else None
+      # first sample here
+      if not event:
+        x = re.match(r"([^:]*):\s+(\d+)\s(\S*):\s+(\S*)", line)
+        assert x, "expect <event> in:\n%s"%line
+        event = x.group(3)
+        print('event= %s'%event, file=sys.stderr)
       # a new sample started
-      #             perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
+      # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
       if ip_filter and len(lines) == 0:
         if not ip_filter in line:
           valid = skip_sample(lines[0])
@@ -140,6 +148,12 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
           valid = 0
           stat['bogus'] += 1
         break
+      elif is_header(line) and len(lines): # sample had no LBR data; new one started
+        # exchange2_r_0.j 57729 3736595.069891:    1000003 r20c4:pp:            41f47a brute_force_mp_brute_+0x43aa (/home/admin1/ayasin/perf-tools/exchange2_r_0.jmpi4)
+        # exchange2_r_0.j 57729 3736595.069892:    1000003 r20c4:pp:            41fad4 brute_force_mp_brute_+0x4a04 (/home/admin1/ayasin/perf-tools/exchange2_r_0.jmpi4)
+        lines = []
+        stat['bogus'] += 1 # for this one
+        stat['total'] += 1 # for new one
       # invalid sample is about to end
       if skip_bad and 'not reaching sample' in line:
         valid = 0
@@ -170,6 +184,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
     size_sum += size
   return lines
 
+def is_header(line):  return event in line
 
 def is_jmp_next(br, # a hacky implementation for now
   JS=2,             # short direct Jump Size
@@ -212,13 +227,14 @@ def print_all(nloops=10, loop_ipc=0):
         print('%4s: %6d%6.1f%%'%(k, loops[loop_ipc]['IPC'][k], 100.0*loops[loop_ipc]['IPC'][k]/tot))
     else:
       C.warn('Loop %s was not observed'%hex(loop_ipc))
-  C.printc('top %d loops:'%nloops)
-  cnt=0
-  sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'], reverse=True)
-  for l in sloops:
-    print_loop(l[0])
-    cnt += 1
-    if cnt >= nloops: break
+  if len(loops):
+    C.printc('top %d loops:'%nloops)
+    cnt=0
+    sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'], reverse=True)
+    for l in sloops:
+      print_loop(l[0])
+      cnt += 1
+      if cnt >= nloops: break
 
 def print_br(br):
   print('[from: 0x%x, to: 0x%x, taken: %d]'%(br['from'], br['to'], br['taken']))

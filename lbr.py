@@ -130,7 +130,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
         x = re.match(r"([^:]*):\s+(\d+)\s(\S*):\s+(\S*)", line)
         assert x, "expect <event> in:\n%s"%line
         event = x.group(3)
-        print('event= %s'%event, file=sys.stderr)
+        C.printf('event= %s\n'%event)
       # a new sample started
       # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
       if ip_filter and len(lines) == 0:

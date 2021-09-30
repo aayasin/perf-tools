@@ -10,13 +10,14 @@ import sys, os, re, pickle
 # logging
 #
 class color:
-  PURPLE = '\033[95m'
-  CYAN = '\033[96m'
-  DARKCYAN = '\033[36m'
-  BLUE = '\033[94m'
-  GREEN = '\033[92m'
-  YELLOW = '\033[93m'
-  RED = '\033[91m'
+  BLUE      = '\033[94m'
+  CYAN      = '\033[96m'
+  DARKCYAN  = '\033[36m'
+  GREY      = '\033[90m'
+  GREEN     = '\033[92m'
+  PURPLE    = '\033[95m'
+  RED       = '\033[91m'
+  YELLOW    = '\033[93m'
   BOLD = '\033[1m'
   UNDERLINE = '\033[4m'
   END = '\033[0m'
@@ -45,6 +46,7 @@ def exit(msg=''):
 #
 #print (to stderr) and flush
 def printf(x, flush=True, std=sys.stderr):
+  if std == sys.stderr: x = color.GREY + x + color.END
   std.write(x)
   if flush: std.flush()
 

@@ -11,15 +11,16 @@ import common as C
 
 c = {x: 0 for x in ('loop_head', 'loop_seq', 'loop_jmp2mid', 'loop_jmp2head', 'sequential', 'total')}
 
-# usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL]
+# usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL] [ip-of-loop=0]
 ip = C.arg(1, 'ALL')
 filter = None
-if ip != 'ALL':
+if ip not in ('ALL', '-'):
   filter = '%x'%int(ip, 16) #asserts in hexa
   c['ip'] = '0x'+filter
+loop = int(C.arg(2, '0'), 16)
 
 while True:
-  sample = read_sample(ip_filter=filter, min_lines=2)
+  sample = read_sample(ip_filter=filter, min_lines=2, loop_ipc=loop)
   if not sample: break
   assert len(sample) > 2, 'invalid sample: ' + str(sample)
   c['total'] += 1
@@ -42,5 +43,5 @@ while True:
 
 print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
   C.ratio('loop_jmp2mid', c, 'loop_head'), C.ratio('loop_jmp2head', c, 'loop_head'), sep=', ')
-print_all()
+print_all(loop_ipc=loop)
 

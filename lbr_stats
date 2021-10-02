@@ -9,6 +9,7 @@ __author__ = 'ayasin'
 from lbr import *
 import common as C
 
+dump_only = 0
 c = {x: 0 for x in ('loop_head', 'loop_seq', 'loop_jmp2mid', 'loop_jmp2head', 'sequential', 'total')}
 
 # usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL] [ip-of-loop=0]
@@ -23,6 +24,9 @@ while True:
   sample = read_sample(ip_filter=filter, min_lines=2, loop_ipc=loop)
   if not sample: break
   assert len(sample) > 2, 'invalid sample: ' + str(sample)
+  if dump_only:
+    print_sample(sample, 0)
+    continue
   c['total'] += 1
   if not is_taken(sample[-2]): c['sequential'] += 1
   if is_loop(sample[-1]):
@@ -41,7 +45,12 @@ while True:
       print(stat)
       exit(0)
 
-print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
-  C.ratio('loop_jmp2mid', c, 'loop_head'), C.ratio('loop_jmp2head', c, 'loop_head'), sep=', ')
-print_all(loop_ipc=loop)
+if not dump_only:
+  print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
+    C.ratio('loop_jmp2mid', c, 'loop_head'), C.ratio('loop_jmp2head', c, 'loop_head'), sep=', ')
+  if filter:
+    print_loop(filter)
+    print(stat)
+  else:
+    print_all(loop_ipc=loop)
 

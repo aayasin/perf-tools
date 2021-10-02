@@ -135,7 +135,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
         x = re.match(r"([^:]*):\s+(\d+)\s(\S*):\s+(\S*)", line)
         assert x, "expect <event> in:\n%s"%line
         event = x.group(3)
-        C.printf('event= %s\n'%event)
+        x = 'event= %s'%event
+        if ip_filter: x += ' ip_filter= %s'%ip_filter
+        C.printf(x+'\n')
       # a new sample started
       # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
       if ip_filter and len(lines) == 0:
@@ -170,6 +172,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
         continue
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
       if skip_bad and len(lines) and not line.strip().startswith('0'):
+        if debug:
+          x='DBG: %s %s\n\n\n'%(line, lines[0])
+          C.printf(x)
+          print(stat)
+          print_sample(lines)
         valid = skip_sample(lines[0])
         stat['bogus'] += 1
         break
@@ -245,6 +252,10 @@ def print_br(br):
   print('[from: 0x%x, to: 0x%x, taken: %d]'%(br['from'], br['to'], br['taken']))
 
 def print_loop(ip):
+  if not isinstance(ip, int): ip = int(ip, 16) #should use (int, long) but fails on python3
+  if not ip in loops:
+    print('No loop was detected at %s!'%hex(ip))
+    return
   loop = loops[ip]
   print('[ip: %s, hotness: %6d, '%(hex(ip), loop['hotness']), end='')
   del loop['hotness']
@@ -256,6 +267,6 @@ def print_loop(ip):
   print('%s]'%details)
 
 def print_sample(sample, n=10):
-  print(sample[0])
+  print('sample#%d'%stat['total'], sample[0], sep='\n')
   print('\n'.join(sample[-n:] if n else sample))
 

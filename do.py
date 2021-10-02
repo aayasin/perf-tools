@@ -299,11 +299,21 @@ def profile(log=False, out='run'):
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
     exe(perf + " script -i %s -F ip | %s | ./ptage | tee %s.ips.log | tail -11"%(data, sort2u, data), "@ top-10 IPs")
-    #top_ip = C.exe_one_line("tail -1 %s.ips.log"%data, 1)
-    exe(perf + " script -i %s -F +brstackinsn --xed "
-      #asserts in skip_sample! "| tee >(./lbr_stats %s | tee -a %s.ips.log) "
-      #"| ./lbr_stats | tee -a %s.ips.log"%(data, top_ip, data, data), "@ stats on PEBS event")
-      "| ./lbr_stats %s | tee -a %s.ips.log"%(data, do['lbr-stats'], data), "@ stats on PEBS event")
+    top = 0
+    if top == 1:
+      top_ip = C.exe_one_line("tail -2 %s.ips.log | head -1"%data, 2)
+      exe(perf + " script -i %s -F +brstackinsn --xed "
+        "| tee >(./lbr_stats %s | tee -a %s.ips.log) " # asserts in skip_sample() only if piped!!
+        "| ./lbr_stats %s | tee -a %s.ips.log"%(data, top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event")
+    else:
+      exe(perf + " script -i %s -F +brstackinsn --xed "
+        "| ./lbr_stats %s | tee -a %s.ips.log"%(data, do['lbr-stats'], data), "@ stats on PEBS event")
+    if top > 1:
+      while top > 0:
+        top_ip = C.exe_one_line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1"%(data, top+1), 2)
+        exe(perf + " script -i %s -F +brstackinsn --xed "
+          "| ./lbr_stats %s | tee -a %s.ips.log"%(data, top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
+        top -= 1
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['','log','csv'] + ext

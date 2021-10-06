@@ -1,5 +1,5 @@
 #!/bin/sh
-set -x
+set -xe
 git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 cd ./linux/tools/perf/
 sudo apt-get install -y flex

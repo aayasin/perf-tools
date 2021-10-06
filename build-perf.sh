@@ -1,6 +1,8 @@
 #!/bin/sh
 set -xe
 git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+# if previous command fails, try this alternative :
+# wget https://mirrors.edge.kernel.org/pub/linux/kernel/tools/perf/v5.14.0/perf-5.14.0.tar.xz && tar -xvf ./perf-5.14.0.tar.xz
 cd ./linux/tools/perf/
 sudo apt-get install -y flex
 sudo apt-get install -y bison

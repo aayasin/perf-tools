@@ -379,7 +379,7 @@ def main():
       tools_install()
       setup_perf('set')
     elif c == 'build-perf':   exe('./do.py setup-all --install-perf build -v%d --tune %s'%(args.verbose,
-                                  ' '.join([':%s:0'%x for x in (do['packages']+('xed',))])))
+                                  ' '.join([':%s:0'%x for x in (do['packages']+('xed', 'tee'))])))
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()

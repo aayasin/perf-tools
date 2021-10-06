@@ -204,6 +204,7 @@ def profile(log=False, out='run'):
   perf_stat_log = "%s.perf_stat.log"%out
   perf = args.perf
   sort2u = 'sort | uniq -c | sort -n'
+  sort2up = sort2u + ' | ./ptage'
   r = do['run']
   if en(0) or log: log_setup()
   
@@ -228,7 +229,7 @@ def profile(log=False, out='run'):
       "&& egrep -n -1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
       "| head -20", '@annotate code', redir_out='2>/dev/null')
     if do['xed']: exe(perf + " script -i %s -F insn --xed | %s " \
-      "| tee %s-hot-insts.log | tail"%(data, sort2u, base), '@time-consuming instructions')
+      "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
   
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc')
@@ -288,17 +289,17 @@ def profile(log=False, out='run'):
       exe_v0('printf "\n# Loop Statistics:\n#\n">> %s'%info)
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s "
         "| tee >(./lbr_stats %s >> %s) "
-        "| egrep '^\s(00000|fffff)' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
-        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu > %s) | cut -f4- "
+        "| egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
+        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) | cut -f4- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
-        (data, comm, do['lbr-stats'], info, hits, ips, sort2u, out, sort2u, out),
+        (data, comm, do['lbr-stats'], info, hits, ips, sort2up, out, sort2up, out),
           "@instruction-mix for '%s'"%comm, redir_out=None)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -3 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
-    exe(perf + " script -i %s -F ip | %s | ./ptage | tee %s.ips.log | tail -11"%(data, sort2u, data), "@ top-10 IPs")
+    exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     #top_ip = C.exe_one_line("tail -1 %s.ips.log"%data, 1)
     exe(perf + " script -i %s -F +brstackinsn --xed "
       #asserts in skip_sample! "| tee >(./lbr_stats %s | tee -a %s.ips.log) "

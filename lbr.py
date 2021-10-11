@@ -241,12 +241,9 @@ def print_all(nloops=10, loop_ipc=0):
       C.warn('Loop %s was not observed'%hex(loop_ipc))
   if len(loops):
     C.printc('top %d loops:'%nloops)
-    cnt=0
-    sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'], reverse=True)
-    for l in sloops:
+    sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])#, reverse=True)
+    for l in sloops[-nloops:] if len(loops) > nloops else sloops:
       print_loop(l[0])
-      cnt += 1
-      if cnt >= nloops: break
 
 def print_br(br):
   print('[from: 0x%x, to: 0x%x, taken: %d]'%(br['from'], br['to'], br['taken']))

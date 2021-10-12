@@ -295,7 +295,8 @@ def profile(log=False, out='run'):
         (data, comm, do['lbr-stats'], info, hits, ips, sort2up, out, sort2up, out),
           "@instruction-mix for '%s'"%comm, redir_out=None)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
-      exe("tail -3 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
+      exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
+      exe("tail -12 %s"%info, "@hottest loops")
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Sep. 2021
+# edited: Oct. 2021
 # TODO list:
 #   alderlake-hybrid suport
 #   move profile code to a seperate module, arg for output dir
@@ -85,7 +85,8 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
   pkg_name = {'msr': 'msr-tools'}
   if args.install_perf:
     if args.install_perf == 'install':
-      if not do['package-mgr'] == 'dnf': packages += ['linux-tools-generic && ' + Find_perf]
+      if do['package-mgr'] == 'dnf': exe('sudo yum install perf', 'installing perf')
+      else: packages += ['linux-tools-generic && ' + Find_perf]
     elif args.install_perf == 'build':
       b='./build-perf'
       exe('sed -i s/apt\-get/%s/ %s.sh && %s.sh | tee %s.log'%(do['package-mgr'],b,b,b), 'building perf anew')

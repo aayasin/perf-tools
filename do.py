@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Oct. 2021
+# edited: Nov. 2021
 # TODO list:
 #   alderlake-hybrid suport
 #   move profile code to a seperate module, arg for output dir
@@ -21,6 +21,7 @@ from platform import python_version
 
 TOPLEV_DEF='--metric-group +Summary' #FIXME: argparse should tell whether user specified an options
 Find_perf = 'sudo find / -name perf -executable -type f'
+cpu = 'cpu_core' if 'hybrid' in C.pmu_name() else 'cpu'
 do = {'run':        './run.sh',
   'cmds_file':      None,
   'compiler':       'gcc -O2', #~/tools/llvm-6.0.0/bin/clang',
@@ -29,7 +30,7 @@ do = {'run':        './run.sh',
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'gen-kernel':     1,
   'lbr-stats':      '- 0',
-  'metrics':        "+IpTB,+L2MPKI",
+  'metrics':        "+L2MPKI,+IpTB,+IpMispredict",
   'msr':            0,
   'msrs':           ('0x8b', '0x1a4'),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX", #,+UPI once ICL mux fixed
@@ -37,7 +38,7 @@ do = {'run':        './run.sh',
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e r20c4:pp -c 1000003',
-  'perf-pebs':      '-b -e cpu/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/pp -c 1000003',
+  'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/pp -c 1000003'%cpu,
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'perf-stat-r':    3,
@@ -117,7 +118,7 @@ def setup_perf(actions=('set', 'log'), out=None):
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
     ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e9), 'root'),
-    ('/sys/devices/cpu%s/perf_event_mux_interval_ms'%('_core' if 'hybrid' in do['pmu'] else ''), 100, ),
+    ('/sys/devices/%s/perf_event_mux_interval_ms'%cpu, 100, ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/nmi_watchdog', 0, ),
     ('/proc/sys/kernel/soft_watchdog', 0, ),
@@ -178,8 +179,8 @@ def perf_format(es, result=''):
   for e in es.split(','):
     if e.startswith('r') and ':' in e:
       e = e.split(':')
-      if len(e[0])==5:   e='cpu/event=0x%s,umask=0x%s,name=%s/'%(e[0][3:5], e[0][1:3], e[1])
-      elif len(e[0])==7: e='cpu/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/'%(e[0][5:7], e[0][3:5], e[0][1:3], e[1])
+      if len(e[0])==5:   e='%s/event=0x%s,umask=0x%s,name=%s/'%(cpu, e[0][3:5], e[0][1:3], e[1])
+      elif len(e[0])==7: e='%s/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/'%(cpu, e[0][5:7], e[0][3:5], e[0][1:3], e[1])
       else: C.error("profile:perf-stat: invalid syntax in '%s'"%':'.join(e))
     result += (e if result=='' else ','+e)
   return result

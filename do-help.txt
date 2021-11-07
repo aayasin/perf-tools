@@ -24,7 +24,7 @@ optional arguments:
                         False)
   -m METRICS, --metrics METRICS
                         user metrics to pass to toplev's --nodes (default:
-                        +IpTB,+L2MPKI)
+                        +L2MPKI,+IpTB,+IpMispredict)
   -e EVENTS, --events EVENTS
                         user events to pass to perf-stat's -e (default: None)
   --power               collect power metrics/events as well (default: False)

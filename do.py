@@ -30,10 +30,10 @@ do = {'run':        './run.sh',
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'gen-kernel':     1,
   'lbr-stats':      '- 0',
-  'metrics':        "+L2MPKI,+IpTB,+IpMispredict",
+  'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
   'msr':            0,
   'msrs':           ('0x8b', '0x1a4'),
-  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX", #,+UPI once ICL mux fixed
+  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX",
   'numactl':        1,
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),

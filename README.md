@@ -10,6 +10,7 @@ A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
   * **sse2avx.c** -- another auto-generated kernel for SSE <-> AVX ISA transition penalty
   * **memcpy.c** -- a custom kernel for strings of libc demonstrating how to timestamp a region-of-interest
   * **fp-arith-mix.c** -- demonstrates utilization of extra counters in Icelake's PMU
+  * **rfetch3m** -- a random fetcher across 3MB code footprint (auto-generated)
   * There are more kernels produced by **build.sh** though not uploaded to git
 * **lbr.py** -- A module for processing Last Branch Record (LBR) streams
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools

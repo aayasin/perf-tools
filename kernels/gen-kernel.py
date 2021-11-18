@@ -4,7 +4,7 @@
 # edited: Sep. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.74
+__version__ = 0.75
 # TODO:
 # - functions/calls support
 
@@ -57,16 +57,19 @@ def itemize(insts):
   if not '#' in ' '.join(insts): return insts
   out=[]
   for i in insts:
-    if '#' in i:
+    if '#' in i and not '+' in i:
       l = i.split('#')
-      if len(l)!=2 or not l[1].isdigit(): error('Invalid syntax: %s'%i)
+      if len(l)!=2 or not l[1].isdigit(): error('itemize(): Invalid syntax: %s'%i)
       n=int(l[1])
       out += [l[0] for x in range(n)]
     else: out.append(i)
   #C.annotate(out, 'aft')
   return out
 
-def asm(x, tabs=1, spaces=8+4*(args.loops-1)): print(x86_asm(x, tabs, spaces))
+def asm(x, tabs=1, spaces=8+4*(args.loops-1)):
+  if ';' in x:
+    for i in x.split(';'): print(x86_asm(i, tabs, spaces))
+  else: print(x86_asm(x, tabs, spaces))
 
 def label(n, declaration=True, local=False):
  lbl = '%s%05d'%(args.label_prefix, n) if isinstance(n, int) else n
@@ -118,9 +121,13 @@ for j in range(args.unroll_factor):
   if jumpy(): asm(label(j), tabs=0)
   for r in range(max(args.registers, 1)):
     for inst in args.instructions:
-      if inst in ['PF+JMP', 'JMP', 'JL', 'JG']:
+      if inst in ['PF+JMP', 'JMP', 'JL', 'JG'] or inst.startswith('PF+NOP'):
         if 'PF+' in inst:
+          assert prefetch_inst, "was --mode-args set properly?"
           asm('%s%s(%%rip)'%(prefetch_inst, label(J.next(prefetch=True), False)))
+          if '#' in inst:
+            assert inst.endswith('+JMP'), "support only 'PF+NOP#\d+JMP' pattern"
+            asm(';'.join(itemize([C.chop(inst, ('', 'PF+', '+JMP'))])))
           inst = 'JMP'
         inst += label(J.next(), False)
       if args.registers and '@' in inst:

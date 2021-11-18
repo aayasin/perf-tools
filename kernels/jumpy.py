@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # Author: Ahmad Yasin
-# edited: Aug. 2021
+# edited: Nov. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -22,7 +22,7 @@ def init(mode, n, args):
                         'numbers-labels': 0}, args)
   flags['mode'] = mode
   flags['n'] = n
-  return flags['prefetch-inst']
+  return flags['prefetch-inst'] if flags['prefetch'] else None
 
 def print_list(l):
   x=0

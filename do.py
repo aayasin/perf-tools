@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.93
+__version__= 0.94
 
 import argparse, os.path, sys
 import common as C
@@ -38,7 +38,7 @@ do = {'run':        './run.sh',
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e r20c4:pp -c 1000003',
-  'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/pp -c 1000003'%cpu,
+  'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/upp -c 1000003'%cpu,
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'perf-stat-r':    3,

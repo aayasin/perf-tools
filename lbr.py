@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: Sep. 2021
+# edited: Nov. 2021
 #
 from __future__ import print_function
 __author__ = 'ayasin'
@@ -10,7 +10,7 @@ debug = 0
 import common as C
 import re, sys
 
-def hex(ip): return '0x%x'%ip
+def hex(ip): return '0x%x'%ip if ip else '-'
 def inc(d, b): d[b] = d.get(b, 0) + 1
 def read_line(): return sys.stdin.readline()
 
@@ -118,6 +118,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
     stat['total'] += 1
+    if stat['total'] % 100 == 0: C.printf('.')
     while True:
       line = read_line()
       # input ended
@@ -129,6 +130,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
         if stat['total'] == stat['bogus']:
           print_all()
           C.error('No LBR data in profile')
+        C.printf(' .\n')
         return lines if len(lines) and not skip_bad else None
       # first sample here
       if not event:
@@ -254,14 +256,24 @@ def print_loop(ip):
     print('No loop was detected at %s!'%hex(ip))
     return
   loop = loops[ip]
-  print('[ip: %s, hotness: %6d, '%(hex(ip), loop['hotness']), end='')
-  del loop['hotness']
+  def set2str(s, top=3):
+    new = loop[s]
+    if len(new) > top:
+      n = len(new) - top
+      new = set()
+      while top > 0:
+        new.add(loop[s].pop())
+        top -= 1
+      new.add('.. %d more'%n)
+    loop[s] = C.chop(str(sorted(new, reverse=True)), (")", 'set('))
+  print('[ip: %s, hotness: %6d, size: %s, '%(hex(ip), loop['hotness'], '%d'%loop['size'] if loop['size'] else '-'), end='')
+  for x in ('hotness', 'size'): del loop[x]
   for x in ('back', 'entry-block'):
     print('%s: %s, '%(x, hex(loop[x])), end='')
     del loop[x]
+  for x in ('inn', 'out'): set2str(x + 'er-loops')
   if 'IPC' in loop: del loop['IPC']
-  details = C.chop(str(loop), (")'", 'set('))
-  print('%s]'%details)
+  print(C.chop(str(loop), "'{}\"") + ']')
 
 def print_sample(sample, n=10):
   print('sample#%d'%stat['total'], sample[0], sep='\n')

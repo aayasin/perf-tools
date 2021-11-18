@@ -330,7 +330,7 @@ def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
   app = args.app_name
   if do['gen-kernel']:
-    exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app)
+    exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app, redir_out=None)
     if args.verbose > 1: exe(fixup('grep instructions ./%s.c'%app))
   exe(fixup('%s -g -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
   do['run'] = fixup('%s ./%s %d'%(do['pin'], app, int(float(args.app_iterations))))

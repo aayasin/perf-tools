@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.94
+__version__= 0.95
 
 import argparse, os.path, sys
 import common as C
@@ -76,6 +76,8 @@ def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) #don't append to cmds_f
 def print_cmd(x):
   C.printc(x)
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
+
+def rp(x): return os.path.realpath(__file__).replace('do.py', '') + x
 
 def icelake(): return C.pmu_icelake()
 
@@ -206,7 +208,7 @@ def profile(log=False, out='run'):
   perf_stat_log = "%s.perf_stat.log"%out
   perf = args.perf
   sort2u = 'sort | uniq -c | sort -n'
-  sort2up = sort2u + ' | ./ptage'
+  sort2up = sort2u + ' | %s'%rp('ptage')
   r = do['run']
   if en(0) or log: log_setup()
   
@@ -290,11 +292,11 @@ def profile(log=False, out='run'):
       hits = '%s.hitcounts.log'%data
       exe_v0('printf "\n# Loop Statistics:\n#\n">> %s'%info)
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s "
-        "| tee >(./lbr_stats %s >> %s) "
+        "| tee >(%s %s >> %s) "
         "| egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
-        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) | cut -f4- "
+        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
-        (data, comm, do['lbr-stats'], info, hits, ips, sort2up, out, sort2up, out),
+        (data, comm, rp('lbr_stats'), do['lbr-stats'], info, hits, rp('ptage'), ips, sort2up, out, sort2up, out),
           "@instruction-mix for '%s'"%comm, redir_out=None)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
@@ -307,16 +309,17 @@ def profile(log=False, out='run'):
     if top == 1:
       top_ip = C.exe_one_line("tail -2 %s.ips.log | head -1"%data, 2)
       exe(perf + " script -i %s -F +brstackinsn --xed "
-        "| tee >(./lbr_stats %s | tee -a %s.ips.log) " # asserts in skip_sample() only if piped!!
-        "| ./lbr_stats %s | tee -a %s.ips.log"%(data, top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event")
+        "| tee >(%s %s | tee -a %s.ips.log) " # asserts in skip_sample() only if piped!!
+        "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data,
+            rp('lbr_stats'), do['lbr-stats'], data), "@ stats on PEBS event")
     else:
       exe(perf + " script -i %s -F +brstackinsn --xed "
-        "| ./lbr_stats %s | tee -a %s.ips.log"%(data, do['lbr-stats'], data), "@ stats on PEBS event")
+        "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), do['lbr-stats'], data), "@ stats on PEBS event")
     if top > 1:
       while top > 0:
         top_ip = C.exe_one_line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1"%(data, top+1), 2)
         exe(perf + " script -i %s -F +brstackinsn --xed "
-          "| ./lbr_stats %s | tee -a %s.ips.log"%(data, top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
+          "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
         top -= 1
 
 def do_logs(cmd, ext=[], tag=''):

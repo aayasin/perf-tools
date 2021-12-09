@@ -91,8 +91,9 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
       if do['package-mgr'] == 'dnf': exe('sudo yum install perf', 'installing perf')
       else: packages += ['linux-tools-generic && ' + Find_perf]
     elif args.install_perf == 'build':
-      b='./build-perf'
-      exe('sed -i s/apt\-get/%s/ %s.sh && %s.sh | tee %s.log'%(do['package-mgr'],b,b,b), 'building perf anew')
+      b='./build-perf.sh'
+      if 'apt-get' in C.file2str(b): exe('sed -i s/apt\-get/%s/ %s'%(do['package-mgr'],b))
+      exe('%s | tee %s.log'%(b, b.replace('.sh','')), 'building perf anew')
     elif args.install_perf == 'patch':
       exe_v0(msg='setting default perf')
       a_perf = C.exe_output(Find_perf + ' | grep -v /usr/bin/perf | head -1', '')

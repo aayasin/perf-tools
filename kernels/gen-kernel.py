@@ -127,7 +127,7 @@ for j in range(args.unroll_factor):
           asm('%s%s(%%rip)'%(prefetch_inst, label(J.next(prefetch=True), False)))
           if '#' in inst:
             assert inst.endswith('+JMP'), "support only 'PF+NOP#\d+JMP' pattern"
-            asm(';'.join(itemize([C.chop(inst, ('', 'PF+', '+JMP'))])))
+            asm(';'.join(itemize(C.chop(inst, ('', 'PF+', '+JMP')).split('+'))))
           inst = 'JMP'
         inst += label(J.next(), False)
       if args.registers and '@' in inst:

@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.95
+__version__= 0.96
 
 import argparse, os.path, sys
 import common as C
@@ -166,7 +166,8 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log'):
   if do['msr']:
     for m in do['msrs']: exe('echo "MSR %5s:\\t%16s" >> '%(m, read_msr(m)) + out)
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
-  exe("dmesg | tee setup-dmesg.log | egrep 'Performance E|BIOS ' | tail -1 >> " + out)
+  exe("dmesg -T | tee setup-dmesg.log | egrep 'Performance E|micro' >> %s" \
+      " && grep 'BIOS ' setup-dmesg.log | tail -1 >> %s"%(out, out))
   new_line()          #PMU
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
   exe('%s --version >> '%args.perf + out)

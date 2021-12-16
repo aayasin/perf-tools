@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # generate C-language kernels with ability to incorporate x86 Assembly with certain control-flow constructs
 # Author: Ahmad Yasin
-# edited: Sep. 2021
+# edited: Dec. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.74
+__version__ = 0.76
 # TODO:
 # - functions/calls support
 
@@ -44,7 +44,7 @@ def error(x):
 if args.label_prefix == '':
   if args.mode == 'jumpy-random': args.mode_args += '%snumbers-labels=1'%(',' if len(args.mode_args) else '')
   else: error('empty label-prefix is supported with jumpy-random mode only')
-prefetch_inst = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else None
+prefetch = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else None
 
 if args.registers > 0:
   if not '@' in ' '.join(args.instructions): error("expect '@' in --instructions")
@@ -57,16 +57,19 @@ def itemize(insts):
   if not '#' in ' '.join(insts): return insts
   out=[]
   for i in insts:
-    if '#' in i:
+    if '#' in i and not '+' in i:
       l = i.split('#')
-      if len(l)!=2 or not l[1].isdigit(): error('Invalid syntax: %s'%i)
+      if len(l)!=2 or not l[1].isdigit(): error('itemize(): Invalid syntax: %s'%i)
       n=int(l[1])
       out += [l[0] for x in range(n)]
     else: out.append(i)
   #C.annotate(out, 'aft')
   return out
 
-def asm(x, tabs=1, spaces=8+4*(args.loops-1)): print(x86_asm(x, tabs, spaces))
+def asm(x, tabs=1, spaces=8+4*(args.loops-1)):
+  if ';' in x:
+    for i in x.split(';'): print(x86_asm(i, tabs, spaces))
+  else: print(x86_asm(x, tabs, spaces))
 
 def label(n, declaration=True, local=False):
  lbl = '%s%05d'%(args.label_prefix, n) if isinstance(n, int) else n
@@ -118,9 +121,14 @@ for j in range(args.unroll_factor):
   if jumpy(): asm(label(j), tabs=0)
   for r in range(max(args.registers, 1)):
     for inst in args.instructions:
-      if inst in ['PF+JMP', 'JMP', 'JL', 'JG']:
+      if inst in ['PF+JMP', 'JMP', 'JL', 'JG'] or inst.startswith('PF+NOP'):
         if 'PF+' in inst:
-          asm('%s%s(%%rip)'%(prefetch_inst, label(J.next(prefetch=True), False)))
+          assert prefetch, "was --mode-args set properly?"
+          if prefetch['rate']==0 or (j % prefetch['rate'])==0:
+            asm('%s%s(%%rip)'%(prefetch['prefetch-inst'], label(J.next(prefetch=True), False)))
+          if '#' in inst:
+            assert inst.endswith('+JMP'), "support only 'PF+NOP#\d+JMP' pattern"
+            asm(';'.join(itemize(C.chop(inst, ('', 'PF+', '+JMP')).split('+'))))
           inst = 'JMP'
         inst += label(J.next(), False)
       if args.registers and '@' in inst:

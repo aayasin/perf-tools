@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # Author: Ahmad Yasin
-# edited: Aug. 2021
+# edited: Nov. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -19,10 +19,10 @@ flags = None
 def init(mode, n, args):
   global flags
   flags = C.args_parse({'prefetch': 0, 'prefetch-inst': 'prefetcht2',
-                        'numbers-labels': 0}, args)
+      'rate': 100, 'numbers-labels': 0}, args)
   flags['mode'] = mode
   flags['n'] = n
-  return flags['prefetch-inst']
+  return {x: flags[x] for x in ('prefetch-inst', 'rate')} if flags['prefetch'] else None
 
 def print_list(l):
   x=0

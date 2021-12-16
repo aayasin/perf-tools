@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # Assembly support specific to x86
 # Author: Ahmad Yasin
-# edited: Aug. 2021
+# edited: Dec. 2021
 __author__ = 'ayasin'
-__version__ = 0.21
+__version__ = 0.23
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -18,6 +18,8 @@ def long_nop(n):
   return bytes('66 '*(n-9) + '2E 0F 1F 84 00 00 00 00 00')
 
 aliases = {MOVLG: 'movabs $0x8877665544332211, %r15',
+  'LCP':  'test $0x1122,%cx',
+  'RMW':  'addl $1, 0(%rsp)',
   'NOP1': 'nop',
   'NOP2': bytes('66 90'),
   'NOP3': bytes('0F 1F 00'),

@@ -24,15 +24,18 @@ optional arguments:
                         False)
   -m METRICS, --metrics METRICS
                         user metrics to pass to toplev's --nodes (default:
-                        +L2MPKI,+IpTB,+IpMispredict)
+                        +L2MPKI,+ILP,+IpTB,+IpMispredict)
   -e EVENTS, --events EVENTS
                         user events to pass to perf-stat's -e (default: None)
   --power               collect power metrics/events as well (default: False)
-  -g GEN_ARGS, --gen-args GEN_ARGS
-                        args to gen-kernel.py (default: None)
   -a APP_NAME, --app-name APP_NAME
                         name of user-application/kernel/command to profile
                         (default: None)
+  -s SYS_WIDE, --sys-wide SYS_WIDE
+                        profile system-wide for x seconds. disabled by default
+                        (default: 0)
+  -g GEN_ARGS, --gen-args GEN_ARGS
+                        args to gen-kernel.py (default: None)
   -ki APP_ITERATIONS, --app-iterations APP_ITERATIONS
                         num-iterations of kernel (default: 1e9)
   -pm PROFILE_MASK, --profile-mask PROFILE_MASK

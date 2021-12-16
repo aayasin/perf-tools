@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Nov. 2021
+# edited: Dec. 2021
 # TODO list:
 #   alderlake-hybrid suport
 #   move profile code to a seperate module, arg for output dir
@@ -40,6 +40,7 @@ do = {'run':        './run.sh',
   'perf-lbr':       '-j any,save_type -e r20c4:pp -c 1000003',
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/upp -c 1000003'%cpu,
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
+  'perf-stat':      '',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'perf-stat-r':    3,
   'pin':            'taskset 0x4',
@@ -194,9 +195,9 @@ def profile(log=False, out='run'):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not icelake() else ''
-  def perf_stat(flags='', flags2='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
+  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
     def append(x, y): return x if y == '' else ','+x
-    perf_args = flags + flags2
+    perf_args = flags + do['perf-stat']
     if icelake(): events += ',topdown-'.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound}'])
     if args.events:
       events += append(perf_format(args.events), events)
@@ -213,7 +214,7 @@ def profile(log=False, out='run'):
   r = do['run']
   if en(0) or log: log_setup()
   
-  if en(1): exe(perf_stat(flags2=' -r%d'%do['perf-stat-r']), 'per-app counting')
+  if en(1): exe(perf_stat(flags=' -r%d'%do['perf-stat-r']), 'per-app counting')
   
   if en(2): exe(perf_stat('-a ', a_events(), grep='| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
   
@@ -352,8 +353,9 @@ def parse_args():
   ap.add_argument('-m', '--metrics', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
   ap.add_argument('-e', '--events', help='user events to pass to perf-stat\'s -e')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
-  ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-a', '--app-name', default=None, help='name of user-application/kernel/command to profile')
+  ap.add_argument('-s', '--sys-wide', type=int, default=0, help='profile system-wide for x seconds. disabled by default')
+  ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
   ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='FF', help='mask to control stages in the profile command')
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
@@ -372,10 +374,16 @@ def main():
   if (args.gen_args or 'build' in args.command) and not args.app_name:
     C.error('must specify --app-name with any of: --gen-args, build')
   assert not (args.print_only and (args.profile_mask & 0x300)), 'No print-only + lbr/pebs profile-steps'
+  assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
   if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name
+  if args.sys_wide:
+    do['run'] = 'sleep %d'%args.sys_wide
+    for x in ('stat', 'record', 'lbr', 'pebs'): do['perf-'+x] += ' -a'
+    args.toplev_args += ' -a'
+    args.profile_mask &= 0xFFB # disable system-wide profile-step
   if args.print_only and args.verbose == 0: args.verbose = 1
   do['nodes'] += ("," + args.metrics)
   

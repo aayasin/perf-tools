@@ -44,7 +44,7 @@ def error(x):
 if args.label_prefix == '':
   if args.mode == 'jumpy-random': args.mode_args += '%snumbers-labels=1'%(',' if len(args.mode_args) else '')
   else: error('empty label-prefix is supported with jumpy-random mode only')
-prefetch_inst = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else None
+prefetch = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else None
 
 if args.registers > 0:
   if not '@' in ' '.join(args.instructions): error("expect '@' in --instructions")
@@ -123,8 +123,9 @@ for j in range(args.unroll_factor):
     for inst in args.instructions:
       if inst in ['PF+JMP', 'JMP', 'JL', 'JG'] or inst.startswith('PF+NOP'):
         if 'PF+' in inst:
-          assert prefetch_inst, "was --mode-args set properly?"
-          asm('%s%s(%%rip)'%(prefetch_inst, label(J.next(prefetch=True), False)))
+          assert prefetch, "was --mode-args set properly?"
+          if prefetch['rate']==0 or (j % prefetch['rate'])==0:
+            asm('%s%s(%%rip)'%(prefetch['prefetch-inst'], label(J.next(prefetch=True), False)))
           if '#' in inst:
             assert inst.endswith('+JMP'), "support only 'PF+NOP#\d+JMP' pattern"
             asm(';'.join(itemize(C.chop(inst, ('', 'PF+', '+JMP')).split('+'))))

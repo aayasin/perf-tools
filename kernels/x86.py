@@ -54,4 +54,3 @@ def x86_inst(x):
 
 def x86_asm(x, tabs=1, spaces=8):
   return ' '*spaces + 'asm("' + '\t'*tabs + x86_inst(x) + '");'
-

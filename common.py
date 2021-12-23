@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, debug, strings, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Sep. 2021
+# edited: Dec. 2021
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -84,7 +84,7 @@ def exe_output(x, sep=";"):
 
 def exe_one_line(x, field=None):
   res = exe_output(x, '')
-  if field: res = str2list(res)[field]
+  if field is not None: res = str2list(res)[field]
   return res
 
 import glob as python_glob

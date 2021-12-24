@@ -199,6 +199,7 @@ def command_basename(comm, iterations=None):
   if comm is None: return 'run%d'%os.getpid()
   name = comm.strip().split(' ')
   if 'taskset' in name[0]: name = name[2:]
+  if 'omp-bin' in name[0]: name = name[1:]
   if '/' in name[0]:
     if not os.access(name[0], os.X_OK): error("user-app '%s' is not executable"%name[0])
     name[0] = name[0].split('/')[-1].replace('.sh', '')

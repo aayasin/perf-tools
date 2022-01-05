@@ -4,11 +4,13 @@
 # edited: Dec. 2021
 # TODO list:
 #   alderlake-hybrid suport
+#   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
 #   toplevl 3-levels default Icelake onwards
 #   quiet mode
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
+#   replace rp() centrally inside exe()
 #   support disable nmi_watchdog in CentOS
 #   check sudo permissions
 from __future__ import print_function

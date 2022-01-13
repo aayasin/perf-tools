@@ -20,7 +20,7 @@ A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
 `git clone --recurse-submodules https://github.com/aayasin/perf-tools`
 
 
-## Usage:
+## Usage
 ### setting up system (for more robust profiling)
 * to setup the perf tool, invoke `./do.py setup-perf`
 * to turn-off SMT (CPU hyper-threading), invoke `./do.py disable-smt`; don't forget to re-enable it once done, e.g. `./do.py enable-smt`
@@ -36,13 +36,15 @@ First, edit `run.sh` to invoke your application or use the `-a '<your app and it
     via basic profiling and output top CPU-time consuming commands/modules/functions as well as
     the source/disassembly for top function(s).
   * **topdown profiling** steps: collect reduced tree, auto drill-down and full-tree collections with multiple re-runs. 
-  * **advanced sampling** steps: do more profiling using advanced capabilities of the PMU (update
-    to newer kernels may be required), and output certain reports at the assembly level (of hottest command).
+  * **advanced sampling** steps: do more profiling using advanced capabilities of the PMU, and output certain reports 
+    at the assembly level (of hottest command).
     Example reports include instruction-mixes, hitcounts (basic-block execution counts), paths to precise
     events and related-stats. Note these steps are disabled by default; enable with `-pm 300`
-  * A filtered output will be dumped on screen while all logs are saved to the current directory.
-  * Use `--profile-mask 42`, as an example, to invoke subset of all steps,
-    or `-N` to disable the step with re-runs. 
+
+  A filtered output will be dumped on screen while all logs are saved to the current directory.  
+  Use `--profile-mask 42`, as an example, to invoke subset of all steps,
+    or `-N` to disable the step with re-runs.  
+  For topdowng profiling and advanced sampling, see [system requirements](#head3sys).
 * `./do.py log` will only log hardware and software setup.
 * `./do.py setup-perf profile` will do the setup and default profiling steps at once.
 * `./do.py tar` will archive all logs into a shareable tar file.
@@ -71,3 +73,11 @@ Shortcuts to set-up certain tools
     use the installer of your Linux distribution (Ubuntu is the default).
 * **build-xed.sh** -- downloads & builds Intel's xed. Note xed usage is disabled by default;
     invoke with `./do.py setup-all --tune :xed:1`.
+
+## More information
+### <a name="head3sys">System requirements</a>
+Required Linux kernel for most recent processors :tada:  
+Intel product | Kernel version
+------------- | --------------
+Rocket Lake | 5.11
+Alder Lake | 5.13

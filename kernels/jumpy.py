@@ -19,7 +19,7 @@ flags = None
 def init(mode, n, args):
   global flags
   flags = C.args_parse({'prefetch': 0, 'prefetch-inst': 'prefetcht2',
-      'rate': 100, 'numbers-labels': 0}, args)
+      'rate': 1, 'numbers-labels': 0}, args)
   flags['mode'] = mode
   flags['n'] = n
   return {x: flags[x] for x in ('prefetch-inst', 'rate')} if flags['prefetch'] else None

@@ -79,5 +79,6 @@ Shortcuts to set-up certain tools
 Required Linux kernel for most recent processors :tada:  
 Intel product | Kernel version
 ------------- | --------------
+Ice Lake | 5.10
 Rocket Lake | 5.11
 Alder Lake | 5.13

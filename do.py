@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Dec. 2021
+# edited: Jan. 2022
 # TODO list:
 #   alderlake-hybrid suport
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
@@ -114,7 +114,8 @@ def tools_update(kernels=[]):
   exe('git pull')
   exe('git checkout HEAD run.sh' + ' kernels/'.join(ks))
   exe('git submodule update --remote')
-  if do['super']: exe(args.pmu_tools + "/event_download.py ") # requires sudo; add '-a' to download all CPUs
+  exe(args.pmu_tools + "/event_download.py ")
+  if do['super']: exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs
 
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
 def setup_perf(actions=('set', 'log'), out=None):

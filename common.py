@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, debug, strings, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Dec. 2021
+# edited: Jan. 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -211,25 +211,4 @@ def command_basename(comm, iterations=None):
 # stats
 def ratio(x, histo, denom='total'):
   return '%s-ratio: %.1f%%'%(x, 100.0*histo[x]/max(histo[denom], 1))
-
-# Architecture: CPU, PMU,
-def pmu_name():
-  f = '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
-  f += '/caps/pmu_name'
-  return file2str(f) or 'Unknown PMU'
-#Icelake onward PMU, e.g. Intel PerfMon Version 5+
-def pmu_icelake():
-  return pmu_name() in ['icelake'] #alderlake_hybrid #sapphire_rapids
-
-def cpu_has_feature(feature):
-  flags = exe_output("lscpu | grep Flags:")
-  return feature in flags
-
-def cpu_pipeline_width():
-  width = 4
-  if pmu_icelake(): width = 5
-  return width
-
-def cpu_peak_kernels(widths=range(4,6)):
-  return ['peak%dwide'%x for x in widths]
 

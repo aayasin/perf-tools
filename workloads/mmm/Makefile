@@ -1,5 +1,5 @@
-all: install
-	@echo done
+all: run-textbook
+	@echo mmm running in background ..
 install:
 	sudo apt install libomp-dev
 run-textbook:

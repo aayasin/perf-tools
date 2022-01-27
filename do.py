@@ -110,7 +110,7 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
 
 def tools_update(kernels=[]):
-  ks = [''] + [x+'.c' for x in (C.cpu_peak_kernels() + ['jumpy5p14', 'sse2avx'])] + kernels
+  ks = [''] + C.exe2list("git status | grep 'modified.*kernels' | cut -d/ -f2") + kernels
   exe('git pull')
   exe('git checkout HEAD run.sh' + ' kernels/'.join(ks))
   exe('git submodule update --remote')

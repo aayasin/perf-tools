@@ -82,6 +82,8 @@ def exe_output(x, sep=";"):
     out = out.decode()
   return out.replace("\n", sep)
 
+def exe2list(x): return str2list(exe_output(x, ' '))
+
 def exe_one_line(x, field=None):
   res = exe_output(x, '')
   if field is not None: res = str2list(res)[field]

@@ -5,6 +5,7 @@
 # TODO list:
 #   alderlake-hybrid suport
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
+#   MSR 0x6d for servers (LLC prefetch)
 #   move profile code to a seperate module, arg for output dir
 #   toplevl 3-levels default Icelake onwards
 #   quiet mode
@@ -15,15 +16,16 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.96
+__version__= 0.97
 
 import argparse, os.path, sys
 import common as C
+import pmu
 from platform import python_version
 
 TOPLEV_DEF='--metric-group +Summary' #FIXME: argparse should tell whether user specified an options
 Find_perf = 'sudo find / -name perf -executable -type f'
-cpu = 'cpu_core' if 'hybrid' in C.pmu_name() else 'cpu'
+cpu = 'cpu_core' if 'hybrid' in pmu.name() else 'cpu'
 do = {'run':        './run.sh',
   'cmds_file':      None,
   'compiler':       'gcc -O2', #~/tools/llvm-6.0.0/bin/clang',
@@ -46,7 +48,7 @@ do = {'run':        './run.sh',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'perf-stat-r':    3,
   'pin':            'taskset 0x4',
-  'pmu':            C.pmu_name(),
+  'pmu':            pmu.name(),
   'python':         sys.executable,
   'profile':        1,
   'sample':         1,
@@ -81,8 +83,6 @@ def print_cmd(x):
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
 
 def rp(x): return os.path.realpath(__file__).replace('do.py', '') + x
-
-def icelake(): return C.pmu_icelake()
 
 def uniq_name():
   return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
@@ -167,7 +167,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log'):
   new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
-    for m in do['msrs']: exe('echo "MSR %5s:\\t%16s" >> '%(m, read_msr(m)) + out)
+    for m in do['msrs']: exe('echo "MSR %5s:\t%16s" >> '%(m, read_msr(m)) + out)
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
   exe("dmesg -T | tee setup-dmesg.log | egrep 'Performance E|micro' >> %s" \
       " && grep 'BIOS ' setup-dmesg.log | tail -1 >> %s"%(out, out))
@@ -198,11 +198,13 @@ def profile(log=False, out='run'):
   def en(n): return args.profile_mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
-    return power() if args.power and not icelake() else ''
+    return power() if args.power and not pmu.v5p() else ''
   def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
     def append(x, y): return x if y == '' else ','+x
     perf_args = flags + do['perf-stat']
-    if icelake(): events += ',topdown-'.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound}'])
+    if pmu.perfmetrics():
+      events += ',topdown-'.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
+      events += (',topdown-'.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}']) if pmu.goldencove() else '}')
     if args.events:
       events += append(perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events
@@ -243,6 +245,7 @@ def profile(log=False, out='run'):
   
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc')
+  if pmu.alderlake(): toplev+= ' --cputype=core'
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)|##placeholder##' "
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < \[|<$')

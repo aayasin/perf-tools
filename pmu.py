@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Abstraction of Intel Architecture's Performance Monitoring Unit (PMU)
+# Abstraction of Intel Architecture and its Performance Monitoring Unit (PMU)
 # Author: Ahmad Yasin
 # edited: Jan. 2022
 from __future__ import print_function
@@ -10,6 +10,7 @@ import common as C
 
 #
 # PMU, no prefix
+#
 def name():
   f = '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
   f += '/caps/pmu_name'
@@ -34,6 +35,7 @@ def perfmetrics():
 
 #
 # CPU, cpu_ prefix
+#
 def cpu_has_feature(feature):
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags
@@ -41,9 +43,8 @@ def cpu_has_feature(feature):
 def cpu_pipeline_width():
   width = 4
   if icelake(): width = 5
-  elif goldencover(): width = 6
+  elif goldencove(): width = 6
   return width
 
 def cpu_peak_kernels(widths=range(4,7)):
   return ['peak%dwide'%x for x in widths]
-

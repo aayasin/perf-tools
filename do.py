@@ -203,8 +203,10 @@ def profile(log=False, out='run'):
     def append(x, y): return x if y == '' else ','+x
     perf_args = flags + do['perf-stat']
     if pmu.perfmetrics():
-      events += ',topdown-'.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
-      events += (',topdown-'.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}']) if pmu.goldencove() else '}')
+      prefix = ',topdown-'
+      events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
+      events += (prefix.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}']) if pmu.goldencove() else '}')
+      if pmu.alderlake(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
     if args.events:
       events += append(perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events

@@ -44,7 +44,7 @@ do = {'run':        './run.sh',
   'perf-lbr':       '-j any,save_type -e r20c4:pp -c 1000003',
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/upp -c 1000003'%cpu,
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
-  'perf-stat':      '',
+  'perf-stat':      '',#'--topdown' if pmu.perfmetrics() else '',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
   'perf-stat-r':    3,
   'pin':            'taskset 0x4',
@@ -65,6 +65,7 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True):
   if redir_out: redir_out=' %s'%redir_out
   if not do['tee'] and redir_out: x = x.split('|')[0]
   if 'tee >(' in x: x = 'bash -c "%s"'%x.replace('"', '\\"')
+  x = x.replace('  ', ' ')
   if len(vars(args)):
     run = not args.print_only
     if not do['profile']:
@@ -201,7 +202,7 @@ def profile(log=False, out='run'):
     return power() if args.power and not pmu.v5p() else ''
   def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
     def append(x, y): return x if y == '' else ','+x
-    perf_args = flags + do['perf-stat']
+    perf_args = ' '.join((flags, do['perf-stat']))
     if pmu.perfmetrics():
       prefix = ',topdown-'
       events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
@@ -222,9 +223,9 @@ def profile(log=False, out='run'):
   r = do['run']
   if en(0) or log: log_setup()
   
-  if en(1): exe(perf_stat(flags=' -r%d'%do['perf-stat-r']), 'per-app counting')
+  if en(1): exe(perf_stat(flags='-r%d'%do['perf-stat-r']), 'per-app counting')
   
-  if en(2): exe(perf_stat('-a ', a_events(), grep='| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
+  if en(2): exe(perf_stat('-a', a_events(), grep='| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
   
   if en(3) and do['sample']:
     base = out+'.perf'

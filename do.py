@@ -318,7 +318,7 @@ def profile(log=False, out='run'):
     data, comm = perf_record('pebs', comm)
     exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     if pmu.goldencove() and 'DSB_MISS' in do['perf-pebs']:
-      exe(perf + " script -i %s -F ip | ./addrbits 10 6 | %s > %s.dsb-sets.log | tail -11"%(data, sort2up, data), "@ DSB-miss sets")
+      exe(perf + " script -i %s -F ip | %s 10 6 | %s > %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
     top = 0
     if top == 1:
       top_ip = C.exe_one_line("tail -2 %s.ips.log | head -1"%data, 2)

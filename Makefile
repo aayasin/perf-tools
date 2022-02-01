@@ -4,6 +4,9 @@ all: tramp3d-v4
 	@echo done
 install:
 	sudo apt -y -q install curl clang
+intel:
+	git clone https://gitlab.devtools.intel.com/micros/dtlb
+	cd dtlb; ./build.sh
 tramp3d-v4: pmu-tools/workloads/CLTRAMP3D
 	cd pmu-tools/workloads; ./CLTRAMP3D; cp tramp3d-v4.cpp CLTRAMP3D ../..; rm tramp3d-v4.cpp
 	sed -i "s/11 tramp3d-v4.cpp/11 tramp3d-v4.cpp -o $@/" CLTRAMP3D

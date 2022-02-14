@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Jan. 2022
+# edited: Feb. 2022
 # TODO list:
 #   alderlake-hybrid suport
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
@@ -56,7 +56,7 @@ do = {'run':        './run.sh',
   'tee':            1,
   'toplev':         TOPLEV_DEF,
   'toplev-levels':  2,
-  'toplev-nomux':   '-vl6',
+  'toplev-full':    '-vl6',
   'xed':            0,
 }
 args = argparse.Namespace() #vars(args)
@@ -148,7 +148,7 @@ def setup_perf(actions=('set', 'log'), out=None):
 def smt(x='off'):
   set_sysfile('/sys/devices/system/cpu/smt/control', x)
 def atom(x='offline'):
-  exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
+  exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s | sh"%x)
 def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')):
   if x == 'on':
     for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_m*_freq'):
@@ -257,7 +257,7 @@ def profile(log=False, out='run'):
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
               o.replace('.log', '-perf.csv'), tlargs, r), o
   
-  cmd, log = toplev_V('-vl6')
+  cmd, log = toplev_V(do['toplev-full'])
   if en(4): exe(cmd + ' | tee %s | %s'%(log, grep_bk), 'topdown full')
   
   cmd, log = toplev_V('-vl%d'%do['toplev-levels'])
@@ -276,7 +276,7 @@ def profile(log=False, out='run'):
         exe("%s %s --stdio -i %s > %s "%(perf, c, perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
   if en(7) and args.no_multiplex:
-    cmd, log = toplev_V(do['toplev-nomux']+' --no-multiplex', '-nomux', do['nodes'] + ',' + do['extra-metrics'])
+    cmd, log = toplev_V(do['toplev-full']+' --no-multiplex', '-nomux', do['nodes'] + ',' + do['extra-metrics'])
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')

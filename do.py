@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.97
+__version__= 0.98
 
 import argparse, os.path, sys
 import common as C
@@ -147,8 +147,9 @@ def setup_perf(actions=('set', 'log'), out=None):
 
 def smt(x='off'):
   set_sysfile('/sys/devices/system/cpu/smt/control', x)
+  if do['super']: exe(args.pmu_tools + '/cputop "thread == 1" %sline | sudo sh'%x)
 def atom(x='offline'):
-  exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s | sh"%x)
+  exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s | sudo sh"%x)
 def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')):
   if x == 'on':
     for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_m*_freq'):
@@ -229,11 +230,11 @@ def profile(log=False, out='run'):
   
   if en(3) and do['sample']:
     base = out+'.perf'
-    if do['perf-record']:
+    if do['perf-record'] and len(do['perf-record']):
       do['perf-record'] += ' '
       base += C.chop(do['perf-record'], ' :')
     data = '%s.perf.data'%record_name(do['perf-record'])
-    exe(perf + ' record -g -o %s '%data+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
+    exe(perf + ' record -c 1000003 -g -o %s '%data+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
     print_cmd("Try 'perf report -i %s' to browse time-consuming sources"%data)
     exe(perf + " report --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A11 Overhead", '@report modules')

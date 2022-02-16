@@ -7,5 +7,5 @@ cd xed
 ./mfile.py examples
 sudo ./mfile.py --prefix=/usr/local install
 sudo ldconfig
-sudo cp obj/wkit/examples/obj/xed /usr/local/bin
+sudo install -m 755 obj/wkit/examples/obj/xed /usr/local/bin
 set +x

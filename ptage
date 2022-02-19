@@ -17,12 +17,12 @@ while True:
   line = sys.stdin.readline()
   if not line: break
   if not line.strip()[0].isdigit(): continue
-  total += int(C.str2list(line)[0])
+  total += float(C.str2list(line)[0])
   lines.append(line.rstrip('\r\n'))
 
 for l in lines:
-  n = int(C.str2list(l)[0])
+  n = float(C.str2list(l)[0])
   print("%.1f%%\t"%(100.0*n/total) + l)
  
-print("100%%\t %d\t\t\t===total"%total)
+print("100%%\t %d\t\t\t===total"%int(total))
 

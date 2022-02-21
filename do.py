@@ -27,6 +27,7 @@ TOPLEV_DEF='--metric-group +Summary' #FIXME: argparse should tell whether user s
 Find_perf = 'sudo find / -name perf -executable -type f'
 cpu = 'cpu_core' if 'hybrid' in pmu.name() else 'cpu'
 do = {'run':        './run.sh',
+  'asm-dump':       30,
   'cmds_file':      None,
   'compiler':       'gcc -O2', #~/tools/llvm-6.0.0/bin/clang',
   'cpuid':          1,
@@ -149,7 +150,8 @@ def smt(x='off'):
   set_sysfile('/sys/devices/system/cpu/smt/control', x)
   if do['super']: exe(args.pmu_tools + '/cputop "thread == 1" %sline | sudo sh'%x)
 def atom(x='offline'):
-  exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s | sudo sh"%x)
+  exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
+  exe("for x in {16..23}; do echo 0 | sudo tee /sys/devices/system/cpu/cpu$x/online; done")
 def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')):
   if x == 'on':
     for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_m*_freq'):
@@ -319,7 +321,7 @@ def profile(log=False, out='run'):
     data, comm = perf_record('pebs', comm)
     exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     if pmu.goldencove() and 'DSB_MISS' in do['perf-pebs']:
-      exe(perf + " script -i %s -F ip | %s 10 6 | %s > %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
+      exe(perf + " script -i %s -F ip | %s 10 6 | %s | tee %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
     top = 0
     if top == 1:
       top_ip = C.exe_one_line("tail -2 %s.ips.log | head -1"%data, 2)
@@ -352,7 +354,7 @@ def build_kernel(dir='./kernels/'):
     if args.verbose > 1: exe(fixup('grep instructions ./%s.c'%app))
   exe(fixup('%s -g -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
   do['run'] = fixup('%s ./%s %d'%(do['pin'], app, int(float(args.app_iterations))))
-  if args.verbose > 2: exe(fixup("objdump -dw ./%s | grep -A30 pause | egrep '[ 0-9a-f]+:'"%app), '@kernel ASM')
+  if args.verbose > 2: exe(fixup("objdump -dw ./%s | grep -A%d pause | egrep '[ 0-9a-f]+:'"%(app, do['asm-dump'])), '@kernel ASM')
 
 def parse_args():
   ap = argparse.ArgumentParser(usage='do.py command [command ..] [options]', formatter_class=argparse.ArgumentDefaultsHelpFormatter)

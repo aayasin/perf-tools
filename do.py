@@ -239,7 +239,7 @@ def profile(log=False, out='run'):
     exe(perf + ' record -c 1000003 -g -o %s '%data+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
     print_cmd("Try 'perf report -i %s' to browse time-consuming sources"%data)
     exe(perf + " report --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
-      base+"-modules.log | grep -A11 Overhead", '@report modules')
+      base+"-modules.log | grep -A22 Overhead", '@report modules')
     base2 = base+'-code'
     exe(perf + " annotate --stdio -i %s | c++filt | tee "%data + base2 + ".log " \
       "| egrep -v -E ' 0\.[0-9][0-9] :|^\s+:($|\s+(Disassembly of section .text:|//|#include))' " \

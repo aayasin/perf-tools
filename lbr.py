@@ -118,7 +118,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
     stat['total'] += 1
-    if stat['total'] % 100 == 0: C.printf('.')
+    if stat['total'] % 1000 == 0: C.printf('.')
     while True:
       line = read_line()
       # input ended

@@ -1,7 +1,9 @@
 #!/bin/sh
 CLONE=${CLONE:-1}
 PERFV=${PERFV:-5.15.0}
+OBJDUMP=${OBJDUMP:-0}
 
+#if false; then
 perfdir=linux/tools/perf/
 set -xe
 if [ $CLONE -eq 1 ]; then
@@ -19,10 +21,23 @@ sudo apt-get install libslang2-dev
 #sudo apt-get install libiberty-dev libzstd-dev #demangle
 #sudo apt-get install libelf
 sudo apt-get install make
-#warning: next line was tested on Ubuntu
+#warning: next line was tested only on Ubuntu
 sudo apt-get install -y libbfd-dev libdwarf-dev libelf-dev libdw-dev libunwind-dev
 make clean
 make
 ls -l $PWD/perf
 cp perf ../../../../
+cd -
+
+#fi
+if [ $OBJDUMP -eq 1 ]; then
+sudo apt-get install -y libgmp-dev
+git clone http://sourceware.org/git/binutils-gdb.git
+cd binutils-gdb/
+./configure
+make
+cd ..
+ls -l ./binutils-gdb/binutils/objdump
+fi
+
 set +x

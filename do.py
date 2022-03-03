@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Feb. 2022
+# edited: March 2022
 # TODO list:
 #   alderlake-hybrid suport
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
@@ -40,6 +40,7 @@ do = {'run':        './run.sh',
   'msrs':           ('0x8b', '0x1a4'),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX",
   'numactl':        1,
+  'objdump':        './binutils-gdb/binutils/objdump',
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e r20c4:pp -c 1000003',
@@ -221,6 +222,7 @@ def profile(log=False, out='run'):
   
   perf_stat_log = "%s.perf_stat.log"%out
   perf = args.perf
+  perf_report = ' '.join((perf, 'report', '--objdump %s'%do['objdump'] if os.path.isfile(do['objdump']) else None))
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | %s'%rp('ptage')
   r = do['run']
@@ -237,8 +239,8 @@ def profile(log=False, out='run'):
       base += C.chop(do['perf-record'], ' :')
     data = '%s.perf.data'%record_name(do['perf-record'])
     exe(perf + ' record -c 1000003 -g -o %s '%data+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
-    print_cmd("Try 'perf report -i %s' to browse time-consuming sources"%data)
-    exe(perf + " report --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
+    print_cmd("Try '%s -i %s' to browse time-consuming sources"%(perf_report, data))
+    exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A22 Overhead", '@report modules')
     base2 = base+'-code'
     exe(perf + " annotate --stdio -i %s | c++filt | tee "%data + base2 + ".log " \
@@ -274,7 +276,7 @@ def profile(log=False, out='run'):
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
       exe(cmd, '@sampling on bottleneck')
       perf_data = cmd.split('-o ')[1].split(' ')[0]
-      print_cmd("Try 'perf report -i %s' to browse sources for critical bottlenecks"%perf_data)
+      print_cmd("Try '%s -i %s' to browse sources for critical bottlenecks"%(perf_report, perf_data))
       for c in ('report', 'annotate'):
         exe("%s %s --stdio -i %s > %s "%(perf, c, perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
@@ -290,7 +292,7 @@ def profile(log=False, out='run'):
     perf_data = '%s.perf.data'%record_name(do['perf-%s'%tag])
     exe(perf + ' record %s -o %s %s-- %s'%(
       do['perf-%s'%tag], perf_data, watch_ipc, r), 'sampling w/ '+tag.upper())
-    print_cmd("Try 'perf report -i %s --branch-history --samples 9' to browse streams"%perf_data)
+    print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
       comm = C.exe_one_line(perf + " script -i %s -F comm | %s | tail -1"%(perf_data, sort2u), 1)
@@ -299,7 +301,7 @@ def profile(log=False, out='run'):
   if en(8) and do['sample'] > 1:
     data, comm = perf_record('lbr', comm)
     info = '%s.info.log'%data
-    exe("perf report -i %s | grep -A11 'Branch Statistics:' | tee %s"%(data, info), "@stats")
+    exe(perf +" report -i %s | grep -A11 'Branch Statistics:' | tee %s"%(data, info), "@stats")
     if os.path.isfile(perf_stat_log):
       exe("egrep '  branches|instructions' %s >> %s"%(perf_stat_log, info))
     if do['xed']:

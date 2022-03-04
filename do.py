@@ -81,8 +81,8 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True):
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) #don't append to cmds_file
 
-def print_cmd(x):
-  C.printc(x)
+def print_cmd(x, show=True):
+  if show: C.printc(x)
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
 
 def rp(x): return os.path.realpath(__file__).replace('do.py', '') + x
@@ -222,7 +222,7 @@ def profile(log=False, out='run'):
   
   perf_stat_log = "%s.perf_stat.log"%out
   perf = args.perf
-  perf_report = ' '.join((perf, 'report', '--objdump %s'%do['objdump'] if os.path.isfile(do['objdump']) else None))
+  perf_report = ' '.join((perf, 'report', '--objdump %s'%do['objdump'] if os.path.isfile(do['objdump']) else ''))
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | %s'%rp('ptage')
   r = do['run']
@@ -255,7 +255,8 @@ def profile(log=False, out='run'):
   toplev+= (args.pmu_tools + '/toplev.py --no-desc')
   if pmu.alderlake(): toplev+= ' --cputype=core'
   grep_bk= "egrep '<==|MUX|Info.Bott'"
-  grep_nz= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)|##placeholder##' "
+  grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)|##placeholder##' "
+  grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < \[|<$')
   def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
@@ -285,6 +286,7 @@ def profile(log=False, out='run'):
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
+    print_cmd("cat %s | %s"%(log, grep_NZ), False)
   
   data, comm = None, None
   def perf_record(tag, comm, watch_ipc='-- perf stat -e instructions,cycles '):
@@ -309,7 +311,7 @@ def profile(log=False, out='run'):
       hits = '%s.hitcounts.log'%data
       exe_v0('printf "\n# Loop Statistics:\n#\n">> %s'%info)
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s "
-        "| tee >(%s %s >> %s) "
+        "| tee >(%s %s | grep -v loop_jmp2mid >> %s) "
         "| egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
         "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%

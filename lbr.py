@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: Nov. 2021
+# edited: March 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
@@ -34,6 +34,45 @@ def line_timing(line):
   cycles = int(x.group(2))
   return cycles, ipc
 
+def tripcount(ip, loop_ipc, state):
+  if state == 'new' and loop_ipc in loops:
+    state = 'invalid' if is_in_loop(ip, loop_ipc) else 'valid'
+  elif type(state) == int:
+    if ip == loop_ipc: state += 1
+    elif not is_in_loop(ip, loop_ipc):
+      if not 'tripcount' in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
+      inc(loops[loop_ipc]['tripcount'], state)
+      state = 'done'
+  elif state == 'valid':
+    if ip == loop_ipc:
+      state = 1
+  return state
+
+def loop_stats(line, loop_ipc, tc_state):
+  loop_atts, loop_id = None, None
+  # loop-body stats
+  if 0:
+    if 1:
+      if (loop_id or is_loop(line)):
+        if is_loop(line):
+          loop_id = line_ip(line)
+          if not loop_atts: loop_atts = set()
+        if not is_in_loop(line_ip(line), loop_id):
+          if len(loop_atts):
+            print(loop_atts, line, end='')
+            assert loop_id in loops, 'unexpected!'
+            print(loops[loop_id])
+            loops[loop_id]['attributes'].update(loop_atts)
+            print(loops[loop_id])
+            print_loop(loop_id)
+            loop_atts = None
+          loop_id = None
+        else:
+          if re.findall(r"jmp\s%", line):
+            loop_atts.add('indirect')
+          if re.findall(r"p[sdh]\s+%ymm", line):
+            loop_atts.add('vec256')
+  return tripcount(line_ip(line), loop_ipc, tc_state)
 
 bwd_br_tgts = [] # better make it local to read_sample..
 def detect_loop(ip, lines, loop_ipc,
@@ -91,7 +130,7 @@ def detect_loop(ip, lines, loop_ipc,
           ins.add(hex(l))
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(hex(ip))
-      loops[ip] = {'back': xip, 'hotness': 1, 'size': None,
+      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'attributes': None,
         'entry-block': 0 if xip > ip else find_block_ip(),
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
@@ -103,7 +142,7 @@ def detect_loop(ip, lines, loop_ipc,
       not ('call' in lines[-1] or 'ret' in lines[-1]): #these require --xed with perf script
       bwd_br_tgts += [ip]
 
-event=None
+lbr_event=None
 loops = {}
 stat = {x: 0 for x in ('bad', 'bogus', 'total')}
 stat['IPs'] = {}
@@ -111,12 +150,13 @@ stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
 loop_cycles=0
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_ipc=0):
-  global event, size_sum, bwd_br_tgts
+  global lbr_event, size_sum, bwd_br_tgts
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
+    tc_state = 'new'
     stat['total'] += 1
     if stat['total'] % 1000 == 0: C.printf('.')
     while True:
@@ -133,11 +173,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
         C.printf(' .\n')
         return lines if len(lines) and not skip_bad else None
       # first sample here
-      if not event:
+      if not lbr_event:
         x = re.match(r"([^:]*):\s+(\d+)\s(\S*):\s+(\S*)", line)
         assert x, "expect <event> in:\n%s"%line
-        event = x.group(3)
-        x = 'event= %s'%event
+        lbr_event = x.group(3)
+        x = 'event= %s'%lbr_event
         if ip_filter: x += ' ip_filter= %s'%ip_filter
         C.printf(x+'\n')
       # a new sample started
@@ -182,9 +222,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
         valid = skip_sample(lines[0])
         stat['bogus'] += 1
         break
-      # an instruction following a taken
-      if len(lines) > 1 and not is_label(line):
-        detect_loop(line_ip(line), lines, loop_ipc)
+      if len(lines) and not is_label(line):
+        # a 2nd instruction
+        if len(lines) > 1: detect_loop(line_ip(line), lines, loop_ipc)
+        tc_state = loop_stats(line, loop_ipc, tc_state)
       lines += [ line.rstrip('\r\n') ]
   if size_stats_en:
     size = len(lines) - 1
@@ -198,7 +239,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
     size_sum += size
   return lines
 
-def is_header(line):  return event in line
+def is_header(line):  return lbr_event in line
 
 def is_jmp_next(br, # a hacky implementation for now
   JS=2,             # short direct Jump Size
@@ -208,11 +249,9 @@ def is_jmp_next(br, # a hacky implementation for now
          (br['to'] & mask) ==  ((br['from'] & mask) + CDLA))
 
 def is_label(line):   return line.strip().endswith(':')
-
 def is_loop(line):    return line_ip(line) in loops
-
 def is_taken(line):   return '#' in line
-
+def is_in_loop(ip, loop): return ip >= loop and ip <= loops[loop]['back']
 def get_loop(ip):     return loops[ip] if ip in loops else None
 
 def get_taken(sample, n):
@@ -229,16 +268,26 @@ def get_taken(sample, n):
     i -= 1
   return {'from': frm, 'to': to, 'taken': 1}
 
+def print_hist(loop_ipc, hist):
+  loop = loops[loop_ipc]
+  if not hist in loop: return 0
+  tot = sum(loop[hist].values())
+  if not tot: return 0
+  shist = sorted(loop[hist].items(), key=lambda x: x[1])
+  loop['%s-most'%hist] = str(shist[-1][0])
+  C.printc('%s histogram of loop %s:'%(hist, hex(loop_ipc)))
+  for k in sorted(loop[hist].keys()):
+    print('%4s: %6d%6.1f%%'%(k, loop[hist][k], 100.0*loop[hist][k]/tot))
+  return tot
+
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   print(stat)
   if loop_ipc:
-    if loop_ipc in loops and 'IPC' in loops[loop_ipc] and sum(loops[loop_ipc]['IPC'].values()):
-      C.printc('IPC histogram of loop %s:'%hex(loop_ipc))
-      tot = sum(loops[loop_ipc]['IPC'].values())
-      loops[loop_ipc]['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
-      for k in sorted(loops[loop_ipc]['IPC'].keys()):
-        print('%4s: %6d%6.1f%%'%(k, loops[loop_ipc]['IPC'][k], 100.0*loops[loop_ipc]['IPC'][k]/tot))
+    if loop_ipc in loops:
+      tot = print_hist(loop_ipc, 'IPC')
+      if tot: loops[loop_ipc]['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
+      print_hist(loop_ipc, 'tripcount')
     else:
       C.warn('Loop %s was not observed'%hex(loop_ipc))
   if len(loops):
@@ -272,7 +321,8 @@ def print_loop(ip):
     print('%s: %s, '%(x, hex(loop[x])), end='')
     del loop[x]
   for x in ('inn', 'out'): set2str(x + 'er-loops')
-  if 'IPC' in loop: del loop['IPC']
+  for x in ('IPC', 'tripcount'):
+    if x in loop: del loop[x]
   print(C.chop(str(loop), "'{}\"") + ']')
 
 def print_sample(sample, n=10):

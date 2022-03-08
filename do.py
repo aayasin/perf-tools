@@ -228,7 +228,7 @@ def profile(log=False, out='run'):
   r = do['run']
   if en(0) or log: log_setup()
   
-  if en(1): exe(perf_stat(flags='-r%d'%do['perf-stat-r']), 'per-app counting')
+  if en(1): exe(perf_stat(flags='-r%d'%do['perf-stat-r']), 'per-app counting %d runs'%do['perf-stat-r'])
   
   if en(2): exe(perf_stat('-a', a_events(), grep='| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
   

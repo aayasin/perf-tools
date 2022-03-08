@@ -1,2 +1,3 @@
 #!/bin/sh
-taskset 0x4 ./m0-n8192-u01.llv
+PIN=${PIN:-0x4}
+taskset $PIN ./m0-n8192-u01.llv

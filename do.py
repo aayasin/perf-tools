@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.98
+__version__= 0.99
 
 import argparse, os.path, sys
 import common as C
@@ -323,11 +323,13 @@ def profile(log=False, out='run'):
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
+    exe(perf + " report -i %s --stdio -F overhead,comm,dso | tee %s.modules.log | grep -A12 Overhead"%(data, data), "@ top-10 modules")
     exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     if pmu.goldencove() and 'DSB_MISS' in do['perf-pebs']:
       exe(perf + " script -i %s -F ip | %s 10 6 | %s | tee %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
     top = 0
-    if top == 1:
+    if args.sys_wide: pass
+    elif top == 1:
       top_ip = C.exe_one_line("tail -2 %s.ips.log | head -1"%data, 2)
       exe(perf + " script -i %s -F +brstackinsn --xed "
         "| tee >(%s %s | tee -a %s.ips.log) " # asserts in skip_sample() only if piped!!
@@ -398,14 +400,8 @@ def main():
   if args.verbose > 2: args.toplev_args += ' --perf'
   if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name
-  if args.sys_wide:
-    do['run'] = 'sleep %d'%args.sys_wide
-    for x in ('stat', 'record', 'lbr', 'pebs'): do['perf-'+x] += ' -a'
-    args.toplev_args += ' -a'
-    args.profile_mask &= 0xFFB # disable system-wide profile-step
   if args.print_only and args.verbose == 0: args.verbose = 1
   do['nodes'] += ("," + args.metrics)
-  
   if args.tune:
     for tlists in args.tune:
       for t in tlists:
@@ -414,6 +410,11 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
+  if args.sys_wide:
+    do['run'] = 'sleep %d'%args.sys_wide
+    for x in ('stat', 'record', 'lbr', 'pebs'): do['perf-'+x] += ' -a'
+    args.toplev_args += ' -a'
+    args.profile_mask &= 0xFFB # disable system-wide profile-step
   do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
   do['cmds_file'].write('# %s # version %.2f\n'%(C.argv2str(), __version__))
   

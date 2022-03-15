@@ -152,7 +152,8 @@ def smt(x='off'):
   if do['super']: exe(args.pmu_tools + '/cputop "thread == 1" %sline | sudo sh'%x)
 def atom(x='offline'):
   exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
-  exe("for x in {16..23}; do echo 0 | sudo tee /sys/devices/system/cpu/cpu$x/online; done")
+  exe("for x in {16..23}; do echo %d | sudo tee /sys/devices/system/cpu/cpu$x/online; done" %
+    (0 if x == 'offline' else 1))
 def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')):
   if x == 'on':
     for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_m*_freq'):

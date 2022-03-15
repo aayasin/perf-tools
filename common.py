@@ -208,7 +208,7 @@ def command_basename(comm, iterations=None):
   if len(name) == 1 and ('kernels' in comm or iterations): name.append(iterations)
   namestr = name.pop(0)
   for x in name: namestr += "%s%s"%('' if x.startswith('-') else '-', x)
-  return chop(namestr, './~<>')
+  return chop(namestr, './~<>=')
 
 # stats
 def ratio(x, histo, denom='total'):

@@ -1,3 +1,4 @@
+DO = ./do.py
 PM = 0x80
 SHOW = tee
 
@@ -16,12 +17,16 @@ run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
 test-mem-bw: run-mem-bw
 	sleep 2s
-	./do.py profile -s1 -pm $(PM) | $(SHOW)
+	$(DO) profile -s1 -pm $(PM) | $(SHOW)
 	kill -9 `pidof m0-n8192-u01.llv`
 clean:
 	rm tramp3d-v4{,.cpp} CLTRAMP3D
 
+lspmu:
+	@python -c 'import pmu; print(pmu.name())'
+	@lscpu | grep 'Model name'
+
 help: do-help.txt
-do-help.txt: do.py
+do-help.txt: $(DO)
 	./$^ -h > $@
 

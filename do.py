@@ -3,7 +3,7 @@
 # Author: Ahmad Yasin
 # edited: March 2022
 # TODO list:
-#   alderlake-hybrid suport
+#   alderlake-hybrid support
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   MSR 0x6d for servers (LLC prefetch)
 #   move profile code to a seperate module, arg for output dir
@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.99
+__version__= 0.991
 
 import argparse, os.path, sys
 import common as C
@@ -121,6 +121,8 @@ def tools_update(kernels=[]):
   if do['super']: exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs
 
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
+def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' %
+  (p, C.file2str(p), (' >> '+out if out else '')))
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): set_sysfile(p, str(v))
   TIME_MAX = '/proc/sys/kernel/perf_cpu_time_max_percent'
@@ -144,8 +146,7 @@ def setup_perf(actions=('set', 'log'), out=None):
     if (len(x) == 2) or superv:
       param, value = x[0], x[1]
       if 'set' in actions: set_it(param, value)
-      if 'log' in actions: exe_v0('printf "%s : %s \n"'%(param, C.file2str(param)) + 
-                                  (' >> %s'%out if out != None else ''))
+      if 'log' in actions: prn_sysfile(param, out)
 
 def smt(x='off'):
   set_sysfile('/sys/devices/system/cpu/smt/control', x)
@@ -170,6 +171,8 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log'):
   C.printc(do['pmu']) #OS
   exe('uname -a > ' + out, 'logging setup')
   exe("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME' >> " + out)
+  for f in ('/sys/kernel/mm/transparent_hugepage/enabled', '/proc/sys/vm/nr_hugepages', '/proc/sys/vm/nr_overcommit_hugepages'):
+    prn_sysfile(f, out)
   new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:

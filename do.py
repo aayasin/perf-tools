@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.991
+__version__= 0.992
 
 import argparse, os.path, sys
 import common as C
@@ -245,6 +245,9 @@ def profile(log=False, out='run'):
     data = '%s.perf.data'%record_name(do['perf-record'])
     exe(perf + ' record -c 1000003 -g -o %s '%data+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
     print_cmd("Try '%s -i %s' to browse time-consuming sources"%(perf_report, data))
+    #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
+    exe(perf_report + " --stdio -F sample,overhead,comm,dso,sym -n --no-call-graph -i %s > %s " %
+      (data, base+'-funcs.log'), '@report functions')
     exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A22 Overhead", '@report modules')
     base2 = base+'-code'

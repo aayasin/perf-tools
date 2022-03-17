@@ -35,6 +35,7 @@ do = {'run':        './run.sh',
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'gen-kernel':     1,
   'lbr-stats':      '- 0',
+  'lbr-stats-tk':   '- 0 20 1',
   'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
   'msr':            0,
   'msrs':           ('0x8b', '0x1a4'),
@@ -314,12 +315,14 @@ def profile(log=False, out='run'):
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
       exe_v0('printf "\n# Loop Statistics:\n#\n">> %s'%info)
+      print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
+        "| %s %s" % (data, comm, './lbr_stats', do['lbr-stats-tk']))
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s "
         "| tee >(%s %s | grep -v loop_jmp2mid >> %s) "
         "| egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
         "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
-        (data, comm, rp('lbr_stats'), do['lbr-stats'], info, hits, rp('ptage'), ips, sort2up, out, sort2up, out),
+        (data, comm, rp('lbr_stats'), do['lbr-stats-tk'], info, hits, rp('ptage'), ips, sort2up, out, sort2up, out),
           "@instruction-mix for '%s'"%comm, redir_out=None)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)

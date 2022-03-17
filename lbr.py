@@ -49,30 +49,28 @@ def tripcount(ip, loop_ipc, state):
   return state
 
 def loop_stats(line, loop_ipc, tc_state):
-  loop_atts, loop_id = None, None
-  # loop-body stats
-  if 0:
-    if 1:
-      if (loop_id or is_loop(line)):
-        if is_loop(line):
-          loop_id = line_ip(line)
-          if not loop_atts: loop_atts = set()
-        if not is_in_loop(line_ip(line), loop_id):
-          if len(loop_atts):
-            print(loop_atts, line, end='')
-            assert loop_id in loops, 'unexpected!'
-            print(loops[loop_id])
-            loops[loop_id]['attributes'].update(loop_atts)
-            print(loops[loop_id])
-            print_loop(loop_id)
-            loop_atts = None
-          loop_id = None
-        else:
-          if re.findall(r"jmp\s%", line):
-            loop_atts.add('indirect')
-          if re.findall(r"p[sdh]\s+%ymm", line):
-            loop_atts.add('vec256')
+  def mark(regex, tag):
+    if re.findall(regex, line):
+      if not loop_stats.atts or not tag in loop_stats.atts:
+        loop_stats.atts = ';'.join((loop_stats.atts, tag)) if loop_stats.atts else tag
+  # loop-body stats, FIXME: on the 1st encoutered loop in a new sample for now
+  if loop_stats_en and tc_state == 'new' and is_loop(line):
+    loop_stats.id = line_ip(line)
+  if loop_stats.id:
+    if not is_in_loop(line_ip(line), loop_stats.id): #just exited a loop
+      if len(loop_stats.atts) > len(loops[loop_stats.id]['attributes']):
+        loops[loop_stats.id]['attributes'] = loop_stats.atts
+      loop_stats.atts = ''
+      loop_stats.id = None
+    else:
+      mark(r"(jmp|call)\s%", 'indirect')
+      mark(r"p[sdh]\s+%xmm", 'vec128-fp')
+      mark(r"p[sdh]\s+%ymm", 'vec256-fp')
+      mark(r"p[sdh]\s+%zmm", 'vec512-fp')
   return tripcount(line_ip(line), loop_ipc, tc_state)
+loop_stats.id = None
+loop_stats.atts = ''
+loop_stats_en = False
 
 bwd_br_tgts = [] # better make it local to read_sample..
 def detect_loop(ip, lines, loop_ipc,
@@ -130,7 +128,7 @@ def detect_loop(ip, lines, loop_ipc,
           ins.add(hex(l))
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(hex(ip))
-      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'attributes': None,
+      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'attributes': '',
         'entry-block': 0 if xip > ip else find_block_ip(),
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
@@ -149,10 +147,11 @@ stat['IPs'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
 loop_cycles=0
-def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_ipc=0):
-  global lbr_event, size_sum, bwd_br_tgts
+def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_ipc=0, lp_stats_en=False):
+  global lbr_event, size_sum, bwd_br_tgts, loop_stats_en
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
+  loop_stats_en = lp_stats_en
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
@@ -316,6 +315,9 @@ def print_loop(ip):
       new.add('.. %d more'%n)
     loop[s] = C.chop(str(sorted(new, reverse=True)), (")", 'set('))
   print('[ip: %s, hotness: %6d, size: %s, '%(hex(ip), loop['hotness'], '%d'%loop['size'] if loop['size'] else '-'), end='')
+  if not loop_stats_en: del loop['attributes']
+  elif not len(loop['attributes']): loop['attributes'] = '-'
+  elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   for x in ('hotness', 'size'): del loop[x]
   for x in ('back', 'entry-block'):
     print('%s: %s, '%(x, hex(loop[x])), end='')

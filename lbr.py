@@ -56,6 +56,7 @@ def loop_stats(line, loop_ipc, tc_state):
   # loop-body stats, FIXME: on the 1st encoutered loop in a new sample for now
   if loop_stats_en and tc_state == 'new' and is_loop(line):
     loop_stats.id = line_ip(line)
+    loop_stats.atts = ''
   if loop_stats.id:
     if not is_in_loop(line_ip(line), loop_stats.id): #just exited a loop
       if len(loop_stats.atts) > len(loops[loop_stats.id]['attributes']):

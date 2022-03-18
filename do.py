@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.992
+__version__= 0.993
 
 import argparse, os.path, sys
 import common as C
@@ -49,11 +49,11 @@ do = {'run':        './run.sh',
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat':      '',#'--topdown' if pmu.perfmetrics() else '',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
-  'perf-stat-r':    3,
   'pin':            'taskset 0x4',
   'pmu':            pmu.name(),
   'python':         sys.executable,
   'profile':        1,
+  'repeat':         3,
   'sample':         1,
   'super':          0,
   'tee':            1,
@@ -233,7 +233,7 @@ def profile(log=False, out='run'):
   r = do['run']
   if en(0) or log: log_setup()
   
-  if en(1): exe(perf_stat(flags='-r%d'%do['perf-stat-r']), 'per-app counting %d runs'%do['perf-stat-r'])
+  if en(1): exe(perf_stat(flags='-r%d' % do['repeat']), 'per-app counting %d runs' % do['repeat'])
   
   if en(2): exe(perf_stat('-a', a_events(), grep='| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
   
@@ -274,8 +274,9 @@ def profile(log=False, out='run'):
   cmd, log = toplev_V(do['toplev-full'])
   if en(4): exe(cmd + ' | tee %s | %s'%(log, grep_bk), 'topdown full')
   
-  cmd, log = toplev_V('-vl%d'%do['toplev-levels'])
-  if en(5): exe(cmd + ' | tee %s | %s'%(log, grep_nz), 'topdown %d-levels'%do['toplev-levels'])
+  cmd, log = toplev_V('-vl%d'%do['toplev-levels'], tlargs=args.toplev_args+' -r%d' % do['repeat'])
+  if en(5): exe(cmd + ' | tee %s | %s' % (log, grep_nz),
+              'topdown %d-levels %d runs' % (do['toplev-levels'], do['repeat']))
   
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',

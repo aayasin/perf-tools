@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.993
+__version__= 0.994
 
 import argparse, os.path, sys
 import common as C
@@ -241,21 +241,21 @@ def profile(log=False, out='run'):
     base = out+'.perf'
     if do['perf-record'] and len(do['perf-record']):
       do['perf-record'] += ' '
-      base += C.chop(do['perf-record'], ' :')
+      base += C.chop(do['perf-record'], ' :/,=')
     data = '%s.perf.data'%record_name(do['perf-record'])
     exe(perf + ' record -c 1000003 -g -o %s '%data+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
     print_cmd("Try '%s -i %s' to browse time-consuming sources"%(perf_report, data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
-    exe(perf_report + " --stdio -F sample,overhead,comm,dso,sym -n --no-call-graph -i %s > %s " %
-      (data, base+'-funcs.log'), '@report functions')
+    exe(perf_report + " --stdio -F sample,overhead,comm,dso,sym -n --no-call-graph -i %s " \
+      " | tee %s-funcs.log | grep -A7 Overhead | egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//'" %
+      (data, base), '@report functions')
     exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A22 Overhead", '@report modules')
-    base2 = base+'-code'
-    exe(perf + " annotate --stdio -i %s | c++filt | tee "%data + base2 + ".log " \
-      "| egrep -v -E ' 0\.[0-9][0-9] :|^\s+:($|\s+(Disassembly of section .text:|//|#include))' " \
-      "| tee " + base2 + "_nonzero.log > /dev/null " \
-      "&& egrep -n -1 ' ([1-9].| [1-9])\... :|\-\-\-' " + base2 + ".log | grep '^[1-9]' " \
-      "| head -20", '@annotate code', redir_out='2>/dev/null')
+    exe(perf + " annotate --stdio -n -i %s | c++filt | tee %s-code.log " \
+      "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" %
+      (data, base, base), '@annotate code', redir_out='2>/dev/null')
+    hottest = C.exe_one_line("sort -n %s-code.log | tail -1" % base, 0)
+    exe("egrep -w -5 '%s :' %s-code.log" % (hottest, base), '@hottest ASM block')
     if do['xed']: exe(perf + " script -i %s -F insn --xed | %s " \
       "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
   

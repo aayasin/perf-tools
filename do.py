@@ -255,7 +255,7 @@ def profile(log=False, out='run'):
       "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" %
       (data, base, base), '@annotate code', redir_out='2>/dev/null')
     hottest = C.exe_one_line("sort -n %s-code.log | tail -1" % base, 0)
-    exe("egrep -w -5 '%s :' %s-code.log" % (hottest, base), '@hottest ASM block')
+    exe("egrep -w -5 '%s :' %s-code.log" % (hottest, base), '@hottest block')
     if do['xed']: exe(perf + " script -i %s -F insn --xed | %s " \
       "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
   

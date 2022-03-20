@@ -1,6 +1,6 @@
 #!/bin/sh
 # Author: Ahmad Yasin
-# Sep. 2021
+# March 2022
 #
 CC=${CC:-gcc -g -O2}
 GEN=${GEN:-1}
@@ -21,6 +21,7 @@ $PY ./gen-kernel.py -i "addps %xmm1,%xmm2" "vsubps %ymm1,%ymm2,%ymm3" -n10 > sse
 $PY ./gen-kernel.py -i NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak4wide.c
 $PY ./gen-kernel.py -i NOP NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak5wide.c
 $PY ./gen-kernel.py -i NOP#3 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak6wide.c
+$PY ./gen-kernel.py jumpy-seq -i NOP JMP -a3 -n30 > dsb-jmp.c
 $PY ./gen-kernel.py jumpy-seq -i JG -a 6 -n 20000  > jcc20k.c
 $PY ./gen-kernel.py jumpy-random -a 6 -i JMP -n 1024 > rfetch64k.c
 $PY ./gen-kernel.py jumpy-random -a 5 -i NOP5#30 JMP -n 19661 > rfetch3m.c

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, debug, strings, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Jan. 2022
+# edited: March 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -23,8 +23,14 @@ class color:
   END = '\033[0m'
 
 #colored printing
-def printc(msg, col=color.DARKCYAN):
-  print(col + msg + color.END)
+def printc(msg, col=color.DARKCYAN, log_only=False):
+  msg = col + msg + color.END
+  if not log_only: print(msg)
+  if log_stdout:
+    file1 = open(log_stdout, "a")
+    file1.write(msg+'\n')
+    file1.close()
+log_stdout=None
 
 def warn(msg, bold=False, col=color.CYAN):
   if bold: col += color.BOLD
@@ -72,6 +78,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True):
     printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
+  if log_stdout: x = x + ' | tee -a ' + log_stdout
   ret = os.system(x) if run else 0
   if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))
 

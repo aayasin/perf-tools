@@ -16,17 +16,19 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.994
+__version__= 0.995
 
 import argparse, os.path, sys
 import common as C
 import pmu
+from datetime import datetime
 from platform import python_version
 
+RUN_DEF = './run.sh'
 TOPLEV_DEF='--metric-group +Summary' #FIXME: argparse should tell whether user specified an options
 Find_perf = 'sudo find / -name perf -executable -type f'
 cpu = 'cpu_core' if 'hybrid' in pmu.name() else 'cpu'
-do = {'run':        './run.sh',
+do = {'run':        RUN_DEF,
   'asm-dump':       30,
   'cmds_file':      None,
   'compiler':       'gcc -O2', #~/tools/llvm-6.0.0/bin/clang',
@@ -401,7 +403,6 @@ def parse_args():
 def main():
   global args
   args = parse_args()
-  if args.verbose > 3: print(args)
   #args sanity checks
   if (args.gen_args or 'build' in args.command) and not args.app_name:
     C.error('must specify --app-name with any of: --gen-args, build')
@@ -427,7 +428,11 @@ def main():
     args.toplev_args += ' -a'
     args.profile_mask &= 0xFFB # disable system-wide profile-step
   do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
-  do['cmds_file'].write('# %s # version %.2f\n'%(C.argv2str(), __version__))
+  do_cmd = '%s # version %.3f' % (C.argv2str(), __version__)
+  do['cmds_file'].write('# %s\n' % do_cmd)
+  C.log_stdout = '%s-out.txt' % ('run-default' if do['run'] == RUN_DEF else uniq_name())
+  C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
+  if args.verbose > 3: C.printc(str(args))
   
   for c in args.command:
     if   c == 'forgive-me':   pass

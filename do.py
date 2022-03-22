@@ -115,12 +115,12 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
   if do['xed']: exe('./build-xed.sh', 'installing xed')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
 
-def tools_update(kernels=[]):
+def tools_update(kernels=[], level=3):
   ks = [''] + C.exe2list("git status | grep 'modified.*kernels' | cut -d/ -f2") + kernels
-  exe('git pull')
   exe('git checkout HEAD run.sh' + ' kernels/'.join(ks))
-  exe('git submodule update --remote')
-  exe(args.pmu_tools + "/event_download.py ")
+  if level > 0: exe('git pull')
+  if level > 1: exe('git submodule update --remote')
+  if level > 2: exe(args.pmu_tools + "/event_download.py ")
   if do['super']: exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs
 
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
@@ -444,6 +444,7 @@ def main():
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()
+    elif c.startswith('tools-update:'): tools_update(level=int(c.split(':')[1]))
     elif c == 'disable-smt':  smt()
     elif c == 'enable-smt':   smt('on')
     elif c == 'disable-atom': atom()

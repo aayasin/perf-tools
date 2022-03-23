@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.995
+__version__= 0.996
 
 import argparse, os.path, sys
 import common as C
@@ -35,6 +35,7 @@ do = {'run':        RUN_DEF,
   'cpuid':          1,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
+  'forgive':        0,
   'gen-kernel':     1,
   'lbr-stats':      '- 0',
   'lbr-stats-tk':   '- 0 20 1',
@@ -253,7 +254,7 @@ def profile(log=False, out='run'):
       (data, base), '@report functions')
     exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A22 Overhead", '@report modules')
-    exe(perf + " annotate --stdio -n -i %s | c++filt | tee %s-code.log " \
+    exe(perf + " annotate --stdio -n -l -i %s | c++filt | tee %s-code.log " \
       "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" %
       (data, base, base), '@annotate code', redir_out='2>/dev/null')
     hottest = C.exe_one_line("sort -n %s-code.log | tail -1" % base, 0)
@@ -301,9 +302,9 @@ def profile(log=False, out='run'):
   
   data, comm = None, None
   def perf_record(tag, comm, watch_ipc='-- perf stat -e instructions,cycles '):
-    assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag], 'No unfiltered LBRs! tag=%s'%tag
+    assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag] or do['forgive'], 'No unfiltered LBRs! tag=%s'%tag
     perf_data = '%s.perf.data'%record_name(do['perf-%s'%tag])
-    exe(perf + ' record %s -o %s %s-- %s'%(
+    if do['profile'] > 0: exe(perf + ' record %s -o %s %s-- %s'%(
       do['perf-%s'%tag], perf_data, watch_ipc, r), 'sampling w/ '+tag.upper())
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if not comm:
@@ -320,7 +321,7 @@ def profile(log=False, out='run'):
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
-      exe_v0('printf "\n# Loop Statistics:\n#\n">> %s'%info)
+      exe_v0('printf "\n# LBR-based Statistics:\n#\n">> %s'%info)
       print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
         "| %s %s" % (data, comm, './lbr_stats', do['lbr-stats-tk']))
       exe(perf + " script -i %s -F +brstackinsn --xed -c %s "
@@ -338,10 +339,12 @@ def profile(log=False, out='run'):
     data, comm = perf_record('pebs', comm)
     exe(perf + " report -i %s --stdio -F overhead,comm,dso | tee %s.modules.log | grep -A12 Overhead"%(data, data), "@ top-10 modules")
     exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
+    is_dsb = 0
     if pmu.goldencove() and 'DSB_MISS' in do['perf-pebs']:
+      is_dsb = 1
       exe(perf + " script -i %s -F ip | %s 10 6 | %s | tee %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
     top = 0
-    if args.sys_wide: pass
+    if args.sys_wide or not is_dsb: pass
     elif top == 1:
       top_ip = C.exe_one_line("tail -2 %s.ips.log | head -1"%data, 2)
       exe(perf + " script -i %s -F +brstackinsn --xed "
@@ -427,11 +430,14 @@ def main():
     for x in ('stat', 'record', 'lbr', 'pebs'): do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
     args.profile_mask &= 0xFFB # disable system-wide profile-step
-  do['cmds_file'] = open('.%s.cmd'%uniq_name(), 'w')
   do_cmd = '%s # version %.3f' % (C.argv2str(), __version__)
-  do['cmds_file'].write('# %s\n' % do_cmd)
   C.log_stdout = '%s-out.txt' % ('run-default' if do['run'] == RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
+  cmds_file = '.%s.cmd' % uniq_name()
+  if os.path.isfile(cmds_file):
+    exe_v0('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()))
+  do['cmds_file'] = open(cmds_file, 'w')
+  do['cmds_file'].write('# %s\n' % do_cmd)
   if args.verbose > 3: C.printc(str(args))
   
   for c in args.command:

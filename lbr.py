@@ -148,6 +148,8 @@ stat['IPs'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
 loop_cycles=0
+dsb_heatmap = {}
+
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_ipc=0, lp_stats_en=False):
   global lbr_event, size_sum, bwd_br_tgts, loop_stats_en
   valid, lines, bwd_br_tgts = 0, [], []
@@ -224,7 +226,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
         break
       if len(lines) and not is_label(line):
         # a 2nd instruction
-        if len(lines) > 1: detect_loop(line_ip(line), lines, loop_ipc)
+        if len(lines) > 1:
+          ip = line_ip(line)
+          detect_loop(ip, lines, loop_ipc)
+          if is_taken(lines[-1]) or is_line_start(ip, line_ip(lines[-1])):
+            inc(dsb_heatmap, (ip & 0x7ff >> 6))
         tc_state = loop_stats(line, loop_ipc, tc_state)
       lines += [ line.rstrip('\r\n') ]
   if size_stats_en:
@@ -248,6 +254,7 @@ def is_jmp_next(br, # a hacky implementation for now
   return (br['to'] == (br['from'] + JS)) or (
          (br['to'] & mask) ==  ((br['from'] & mask) + CDLA))
 
+def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6)
 def is_label(line):   return line.strip().endswith(':')
 def is_loop(line):    return line_ip(line) in loops
 def is_taken(line):   return '#' in line
@@ -268,26 +275,32 @@ def get_taken(sample, n):
     i -= 1
   return {'from': frm, 'to': to, 'taken': 1}
 
-def print_hist(loop_ipc, hist):
+def get_hist(loop_ipc, name):
   loop = loops[loop_ipc]
-  if not hist in loop: return 0
-  tot = sum(loop[hist].values())
+  return (loop[name], name, loop, loop_ipc) if name in loop else (None, ) * 4
+
+def print_hist(hist_t):
+  if not hist_t[0]: return 0
+  hist, name, loop, loop_ipc = hist_t[0], hist_t[1], hist_t[2], hist_t[3]
+  tot = sum(hist.values())
   if not tot: return 0
-  shist = sorted(loop[hist].items(), key=lambda x: x[1])
-  loop['%s-most'%hist] = str(shist[-1][0])
-  C.printc('%s histogram of loop %s:'%(hist, hex(loop_ipc)))
-  for k in sorted(loop[hist].keys()):
-    print('%4s: %6d%6.1f%%'%(k, loop[hist][k], 100.0*loop[hist][k]/tot))
+  shist = sorted(hist.items(), key=lambda x: x[1])
+  if loop: loop['%s-most' % name] = str(shist[-1][0])
+  C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
+  for k in sorted(hist.keys()):
+    print('%4s: %6d%6.1f%%'%(k, hist[k], 100.0*hist[k]/tot))
+  print('')
   return tot
 
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   print(stat)
+  print_hist((dsb_heatmap, 'DSB-Heatmap', None, None))
   if loop_ipc:
     if loop_ipc in loops:
-      tot = print_hist(loop_ipc, 'IPC')
+      tot = print_hist(get_hist(loop_ipc, 'IPC'))
       if tot: loops[loop_ipc]['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
-      print_hist(loop_ipc, 'tripcount')
+      print_hist(get_hist(loop_ipc, 'tripcount'))
     else:
       C.warn('Loop %s was not observed'%hex(loop_ipc))
   if len(loops):

@@ -8,6 +8,7 @@ __author__ = 'ayasin'
 debug = 0
 
 import common as C
+import pmu
 import re, sys
 
 def hex(ip): return '0x%x'%ip if ip else '-'
@@ -141,23 +142,28 @@ def detect_loop(ip, lines, loop_ipc,
       not ('call' in lines[-1] or 'ret' in lines[-1]): #these require --xed with perf script
       bwd_br_tgts += [ip]
 
-lbr_event=None
+LBR_Event = pmu.lbr_event()
+lbr_events = []
 loops = {}
 stat = {x: 0 for x in ('bad', 'bogus', 'total')}
 stat['IPs'] = {}
+stat['events'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
 loop_cycles=0
 dsb_heatmap = {}
+footprint = set()
 
-def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_ipc=0, lp_stats_en=False):
-  global lbr_event, size_sum, bwd_br_tgts, loop_stats_en
+def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
+                loop_ipc=0, lp_stats_en=False, event = LBR_Event):
+  global lbr_events, size_sum, bwd_br_tgts, loop_stats_en
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
   loop_stats_en = lp_stats_en
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
+    header, xip = True, None
     tc_state = 'new'
     stat['total'] += 1
     if stat['total'] % 1000 == 0: C.printf('.')
@@ -174,25 +180,31 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
           C.error('No LBR data in profile')
         C.printf(' .\n')
         return lines if len(lines) and not skip_bad else None
-      # first sample here
-      if not lbr_event:
-        x = re.match(r"([^:]*):\s+(\d+)\s(\S*):\s+(\S*)", line)
+      if header:
+        # first sample here (of a given event)
+        x = is_header(line)
         assert x, "expect <event> in:\n%s"%line
-        lbr_event = x.group(3)
-        x = 'event= %s'%lbr_event
-        if ip_filter: x += ' ip_filter= %s'%ip_filter
-        C.printf(x+'\n')
+        ev = x.group(3)[:-1]
+        if not ev in lbr_events:
+          lbr_events += [ev]
+          x = 'events= %s @ %s' % (str(lbr_events), x.group(1).split(' ')[-1])
+          if len(lbr_events) == 1: x += ' primary= %s' % event
+          if ip_filter: x += ' ip_filter= %s'%ip_filter
+          C.printf(x+'\n')
+        inc(stat['events'], ev)
       # a new sample started
       # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
-      if ip_filter and len(lines) == 0:
-        if not ip_filter in line:
-          valid = skip_sample(line)
-          break
-        inc(stat['IPs'], ip_filter)
+        if ip_filter:
+          if not ip_filter in line:
+            valid = skip_sample(line)
+            break
+          inc(stat['IPs'], ip_filter)
       # a sample ended
       if re.match(r"^$", line):
-        len_m1 = len(lines)-1
-        ip = int(C.str2list(lines[0])[5], 16)
+        len_m1 = 0
+        if len(lines):
+          len_m1 = len(lines)-1
+          ip = int(C.str2list(lines[0])[5], 16)
         if len_m1 == 0 or\
            min_lines and (len_m1 < min_lines) or\
            ip != line_ip(lines[len_m1]):
@@ -224,15 +236,20 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
         valid = skip_sample(lines[0])
         stat['bogus'] += 1
         break
+      ip = None if header or is_label(line) else line_ip(line)
+      new_line = is_line_start(ip, xip)
+      if new_line: footprint.add(ip >> 6)
       if len(lines) and not is_label(line):
         # a 2nd instruction
         if len(lines) > 1:
-          ip = line_ip(line)
           detect_loop(ip, lines, loop_ipc)
-          if is_taken(lines[-1]) or is_line_start(ip, line_ip(lines[-1])):
+          if is_taken(lines[-1]) or new_line:
             inc(dsb_heatmap, (ip & 0x7ff >> 6))
         tc_state = loop_stats(line, loop_ipc, tc_state)
-      lines += [ line.rstrip('\r\n') ]
+      if len(lines) or event in line:
+        lines += [ line.rstrip('\r\n') ]
+      xip = ip
+      header = False
   if size_stats_en:
     size = len(lines) - 1
     if size_sum == 0: stat['size']['min'] = stat['size']['max'] = size
@@ -245,7 +262,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, loop_i
     size_sum += size
   return lines
 
-def is_header(line):  return lbr_event in line
+def is_header(line): return re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line)
 
 def is_jmp_next(br, # a hacky implementation for now
   JS=2,             # short direct Jump Size
@@ -254,7 +271,7 @@ def is_jmp_next(br, # a hacky implementation for now
   return (br['to'] == (br['from'] + JS)) or (
          (br['to'] & mask) ==  ((br['from'] & mask) + CDLA))
 
-def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6)
+def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else False
 def is_label(line):   return line.strip().endswith(':')
 def is_loop(line):    return line_ip(line) in loops
 def is_taken(line):   return '#' in line
@@ -294,7 +311,8 @@ def print_hist(hist_t):
 
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
-  print(stat)
+  print('LBR samples:', stat)
+  print('code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
   print_hist((dsb_heatmap, 'DSB-Heatmap', None, None))
   if loop_ipc:
     if loop_ipc in loops:

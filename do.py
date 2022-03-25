@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.996
+__version__= 0.997
 
 import argparse, os.path, sys
 import common as C
@@ -37,7 +37,7 @@ do = {'run':        RUN_DEF,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'forgive':        0,
   'gen-kernel':     1,
-  'lbr-stats':      '- 0',
+  'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
   'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
   'msr':            0,
@@ -67,21 +67,24 @@ do = {'run':        RUN_DEF,
 }
 args = argparse.Namespace() #vars(args)
 
-def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True):
+def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, background=False):
+  X=x.split()
   if redir_out: redir_out=' %s'%redir_out
   if not do['tee'] and redir_out: x = x.split('|')[0]
   if 'tee >(' in x: x = 'bash -c "%s"'%x.replace('"', '\\"')
   x = x.replace('  ', ' ')
+  if timeit: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
   if len(vars(args)):
     run = not args.print_only
     if not do['profile']:
       if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
         x = '# ' + x
         run = False
+    if background: x = x + ' &'
     do['cmds_file'].write(x + '\n')
     do['cmds_file'].flush()
     verbose = args.verbose > 0
-  return C.exe_cmd(x, msg, redir_out, verbose, run)
+  return C.exe_cmd(x, msg, redir_out, verbose, run, background)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) #don't append to cmds_file
 
@@ -208,6 +211,7 @@ def perf_format(es, result=''):
 
 def profile(log=False, out='run'):
   out = uniq_name()
+  perf = args.perf
   def en(n): return args.profile_mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
@@ -225,11 +229,12 @@ def profile(log=False, out='run'):
       grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, flags.strip(), grep)
+  def perf_script(x, msg):
+    return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1))
   def record_name(flags):
     return '%s%s'%(out, C.chop(flags, (' :/,=', 'cpu_core', 'cpu')))
   
   perf_stat_log = "%s.perf_stat.log"%out
-  perf = args.perf
   perf_report = ' '.join((perf, 'report', '--objdump %s'%do['objdump'] if os.path.isfile(do['objdump']) else ''))
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | %s'%rp('ptage')
@@ -259,7 +264,7 @@ def profile(log=False, out='run'):
       (data, base, base), '@annotate code', redir_out='2>/dev/null')
     hottest = C.exe_one_line("sort -n %s-code.log | tail -1" % base, 0)
     exe("egrep -w -5 '%s :' %s-code.log" % (hottest, base), '@hottest block')
-    if do['xed']: exe(perf + " script -i %s -F insn --xed | %s " \
+    if do['xed']: perf_script("-i %s -F insn --xed | %s " \
       "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
   
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
@@ -324,40 +329,40 @@ def profile(log=False, out='run'):
       exe_v0('printf "\n# LBR-based Statistics:\n#\n">> %s'%info)
       print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
         "| %s %s" % (data, comm, './lbr_stats', do['lbr-stats-tk']))
-      exe(perf + " script -i %s -F +brstackinsn --xed -c %s "
+      perf_script("-i %s -F +brstackinsn --xed -c %s "
         "| tee >(%s %s | grep -v loop_jmp2mid >> %s) "
         "| egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
         "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
         (data, comm, rp('lbr_stats'), do['lbr-stats-tk'], info, hits, rp('ptage'), ips, sort2up, out, sort2up, out),
-          "@instruction-mix for '%s'"%comm, redir_out=None)
+          "@instruction-mix for '%s'"%comm)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
-      exe("tail -12 %s"%info, "@hottest loops")
+      exe("egrep 'code footprint' %s && tail -10 %s" % (info, info), "@hottest loops & more stats in " + info)
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
     exe(perf + " report -i %s --stdio -F overhead,comm,dso | tee %s.modules.log | grep -A12 Overhead"%(data, data), "@ top-10 modules")
-    exe(perf + " script -i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
+    perf_script("-i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     is_dsb = 0
     if pmu.goldencove() and 'DSB_MISS' in do['perf-pebs']:
       is_dsb = 1
-      exe(perf + " script -i %s -F ip | %s 10 6 | %s | tee %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
+      perf_script("-i %s -F ip | %s 10 6 | %s | tee %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
     top = 0
     if args.sys_wide or not is_dsb: pass
     elif top == 1:
       top_ip = C.exe_one_line("tail -2 %s.ips.log | head -1"%data, 2)
-      exe(perf + " script -i %s -F +brstackinsn --xed "
+      perf_script("-i %s -F +brstackinsn --xed "
         "| tee >(%s %s | tee -a %s.ips.log) " # asserts in skip_sample() only if piped!!
         "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data,
             rp('lbr_stats'), do['lbr-stats'], data), "@ stats on PEBS event")
     else:
-      exe(perf + " script -i %s -F +brstackinsn --xed "
+      perf_script("-i %s -F +brstackinsn --xed "
         "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), do['lbr-stats'], data), "@ stats on PEBS event")
     if top > 1:
       while top > 0:
         top_ip = C.exe_one_line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1"%(data, top+1), 2)
-        exe(perf + " script -i %s -F +brstackinsn --xed "
+        perf_script("-i %s -F +brstackinsn --xed "
           "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
         top -= 1
 

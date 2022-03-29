@@ -32,6 +32,7 @@ do = {'run':        RUN_DEF,
   'asm-dump':       30,
   'cmds_file':      None,
   'compiler':       'gcc -O2', #~/tools/llvm-6.0.0/bin/clang',
+  'core':           1,
   'cpuid':          1,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
@@ -219,7 +220,7 @@ def profile(log=False, out='run'):
   def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
     def append(x, y): return x if y == '' else ','+x
     perf_args = ' '.join((flags, do['perf-stat']))
-    if pmu.perfmetrics():
+    if pmu.perfmetrics() and do['core']:
       prefix = ',topdown-'
       events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
       events += (prefix.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}']) if pmu.goldencove() else '}')
@@ -269,7 +270,7 @@ def profile(log=False, out='run'):
   
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc')
-  if pmu.alderlake(): toplev+= ' --cputype=core'
+  if pmu.alderlake() and do['core']: toplev+= ' --cputype=core'
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)|##placeholder##' "
   grep_nz= grep_NZ
@@ -338,7 +339,7 @@ def profile(log=False, out='run'):
           "@instruction-mix for '%s'"%comm)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
-      exe("egrep 'code footprint' %s && tail -10 %s" % (info, info), "@hottest loops & more stats in " + info)
+      exe("egrep 'code footprint' %s && tail %s" % (info, info), "@hottest loops & more stats in " + info)
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)

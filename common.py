@@ -6,6 +6,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 
 import sys, os, re, pickle
+from subprocess import check_output, Popen
 
 # logging
 #
@@ -70,7 +71,8 @@ def annotate(stuff, label=''):
 # @debug: print the command before its execution
 # @redir_out:  redirect output of the (first non-piped) command as specified
 # @run:   do run the specified command
-def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True):
+# @background: run the specified command in background (do not block)
+def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
   if msg:
     if '@' in msg: msg='\t'+msg.replace('@', '')
@@ -79,10 +81,10 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True):
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
   if log_stdout: x = x + ' | tee -a ' + log_stdout
+  if background: return Popen(x.split())
   ret = os.system(x) if run else 0
   if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))
 
-from subprocess import check_output
 def exe_output(x, sep=";"):
   out = check_output(x, shell=True)
   if isinstance(out, (bytes, bytearray)):
@@ -189,7 +191,7 @@ def arg(num, default=None):
 def argv2str(start=0):
   res = []
   for a in sys.argv[start:]:
-    res.append("\"%s\""%a if "'" in a else "'%s'"%a if ' ' in a else a)
+    res.append("\"%s\""%a if "'" in a else "'%s'"%a if (' ' in a or a == '') else a)
   return ' '.join(res)
 
 def args_parse(d, args):

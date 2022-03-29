@@ -160,6 +160,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
   loop_stats_en = lp_stats_en
+  edge_en = event == LBR_Event and not ip_filter # config good for edge-profile
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
@@ -238,12 +239,12 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         break
       ip = None if header or is_label(line) else line_ip(line)
       new_line = is_line_start(ip, xip)
-      if new_line: footprint.add(ip >> 6)
+      if edge_en and new_line: footprint.add(ip >> 6)
       if len(lines) and not is_label(line):
         # a 2nd instruction
         if len(lines) > 1:
           detect_loop(ip, lines, loop_ipc)
-          if is_taken(lines[-1]) or new_line:
+          if edge_en and (is_taken(lines[-1]) or new_line):
             inc(dsb_heatmap, (ip & 0x7ff >> 6))
         tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
@@ -312,8 +313,8 @@ def print_hist(hist_t):
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   print('LBR samples:', stat)
-  print('code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
-  print_hist((dsb_heatmap, 'DSB-Heatmap', None, None))
+  if len(footprint): print('code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
+  if len(dsb_heatmap): print_hist((dsb_heatmap, 'DSB-Heatmap', None, None))
   if loop_ipc:
     if loop_ipc in loops:
       tot = print_hist(get_hist(loop_ipc, 'IPC'))

@@ -339,7 +339,7 @@ def profile(log=False, out='run'):
           "@instruction-mix for '%s'"%comm)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
-      exe("egrep 'code footprint' %s && tail %s" % (info, info), "@hottest loops & more stats in " + info)
+      exe("(egrep 'code footprint' %s || true) && tail %s" % (info, info), "@hottest loops & more stats in " + info)
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)

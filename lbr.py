@@ -22,6 +22,10 @@ def skip_sample(s):
     assert line, 'was input truncated? sample:\n%s'%s
   return 0
 
+def header_ip(line):
+  assert is_header(line), "Not a head of sample: " + line
+  return int(C.str2list(line)[6 if '[' in line else 5], 16)
+
 def line_ip(line):
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
   assert x, 'expect <address> at left of %s'%line
@@ -203,12 +207,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       # a sample ended
       if re.match(r"^$", line):
         len_m1 = 0
-        if len(lines):
-          len_m1 = len(lines)-1
-          ip = int(C.str2list(lines[0])[5], 16)
+        if len(lines): len_m1 = len(lines)-1
         if len_m1 == 0 or\
            min_lines and (len_m1 < min_lines) or\
-           ip != line_ip(lines[len_m1]):
+           header_ip(lines[0]) != line_ip(lines[len_m1]):
           valid = 0
           stat['bogus'] += 1
         break

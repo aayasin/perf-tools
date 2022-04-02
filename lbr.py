@@ -23,8 +23,9 @@ def skip_sample(s):
   return 0
 
 def header_ip(line):
-  assert is_header(line), "Not a head of sample: " + line
-  return int(C.str2list(line)[6 if '[' in line else 5], 16)
+  x = is_header(line)
+  assert x, "Not a head of sample: " + line
+  return int(C.str2list(line)[6 if '[' in x.group(1) else 5], 16)
 
 def line_ip(line):
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
@@ -247,7 +248,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         if len(lines) > 1:
           detect_loop(ip, lines, loop_ipc)
           if edge_en and (is_taken(lines[-1]) or new_line):
-            inc(dsb_heatmap, (ip & 0x7ff >> 6))
+            inc(dsb_heatmap, ((ip & 0x7ff) >> 6))
         tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
         lines += [ line.rstrip('\r\n') ]
@@ -365,4 +366,5 @@ def print_loop(ip):
 def print_sample(sample, n=10):
   print('sample#%d'%stat['total'], sample[0], sep='\n')
   print('\n'.join(sample[-n:] if n else sample))
+  sys.stdout.flush()
 

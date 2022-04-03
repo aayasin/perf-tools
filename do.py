@@ -457,10 +457,13 @@ def main():
     elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(level=int(c.split(':')[1]))
+    # TODO: generalize disable/enable features that follow
     elif c == 'disable-smt':  smt()
     elif c == 'enable-smt':   smt('on')
     elif c == 'disable-atom': atom()
     elif c == 'enable-atom':  atom('online')
+    elif c == 'disable-hugepages': exe('echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
+    elif c == 'enable-hugepages':  exe('echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
     elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0xf && sudo rdmsr 0x1a4')
     elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0 && sudo rdmsr 0x1a4')
     elif c == 'enable-fix-freq':    fix_frequency()

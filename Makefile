@@ -21,6 +21,8 @@ test-mem-bw: run-mem-bw
 	kill -9 `pidof m0-n8192-u01.llv`
 clean:
 	rm tramp3d-v4{,.cpp} CLTRAMP3D
+list:
+	@grep '^[^#[:space:]].*:' Makefile | cut -d: -f1 | sort #| tr '\n' ' '
 
 lspmu:
 	@python -c 'import pmu; print(pmu.name())'

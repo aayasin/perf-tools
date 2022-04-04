@@ -35,7 +35,7 @@ def perfmetrics():
 
 #events
 def lbr_event():
-  return 'cpu_core/event=0xc4,umask=0x20/pp' if alderlake() else 'r20c4:pp'
+  return ('cpu_core/event=0xc4,umask=0x20/' if alderlake() else 'r20c4:') + 'ppp'
 
 #
 # CPU, cpu_ prefix

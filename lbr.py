@@ -147,7 +147,7 @@ def detect_loop(ip, lines, loop_ipc,
       not ('call' in lines[-1] or 'ret' in lines[-1]): #these require --xed with perf script
       bwd_br_tgts += [ip]
 
-LBR_Event = pmu.lbr_event()
+LBR_Event = pmu.lbr_event()[:-4]
 lbr_events = []
 loops = {}
 stat = {x: 0 for x in ('bad', 'bogus', 'total')}
@@ -165,7 +165,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
   loop_stats_en = lp_stats_en
-  edge_en = event == LBR_Event and not ip_filter # config good for edge-profile
+  edge_en = event.startswith(LBR_Event) and not ip_filter # config good for edge-profile
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
@@ -214,6 +214,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
            header_ip(lines[0]) != line_ip(lines[len_m1]):
           valid = 0
           stat['bogus'] += 1
+          if debug:
+            C.annotate((line.strip(), len(lines)), 'a sample ended')
+            print_sample(lines)
         break
       elif is_header(line) and len(lines): # sample had no LBR data; new one started
         # exchange2_r_0.j 57729 3736595.069891:    1000003 r20c4:pp:            41f47a brute_force_mp_brute_+0x43aa (/home/admin1/ayasin/perf-tools/exchange2_r_0.jmpi4)
@@ -364,6 +367,7 @@ def print_loop(ip):
   print(C.chop(str(loop), "'{}\"") + ']')
 
 def print_sample(sample, n=10):
+  if not len(sample): return
   print('sample#%d'%stat['total'], sample[0], sep='\n')
   print('\n'.join(sample[-n:] if n else sample))
   sys.stdout.flush()

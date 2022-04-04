@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.997
+__version__= 0.998
 
 import argparse, os.path, sys
 import common as C
@@ -42,14 +42,14 @@ do = {'run':        RUN_DEF,
   'lbr-stats-tk':   '- 0 20 1',
   'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
   'msr':            0,
-  'msrs':           ('0x8b', '0x1a4'),
+  'msrs':           ('0x48', '0x8b', '0x1a4'),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX",
   'numactl':        1,
   'objdump':        './binutils-gdb/binutils/objdump',
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
-  'perf-lbr':       '-j any,save_type -e r20c4:pp -c 1000003',
-  'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/upp -c 1000003'%cpu,
+  'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
+  'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003'%cpu,
   'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-stat':      '',#'--topdown' if pmu.perfmetrics() else '',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G

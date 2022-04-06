@@ -346,11 +346,12 @@ def profile(log=False, out='run'):
     exe(perf + " report -i %s --stdio -F overhead,comm,dso | tee %s.modules.log | grep -A12 Overhead"%(data, data), "@ top-10 modules")
     perf_script("-i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     is_dsb = 0
-    if pmu.goldencove() and 'DSB_MISS' in do['perf-pebs']:
+    if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
       if pmu.cpu('smt-on'): C.warn('Disable SMT for DSB robust analysis')
       else:
         is_dsb = 1
-        perf_script("-i %s -F ip | %s 10 6 | %s | tee %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
+        perf_script("-i %s -F ip | %s %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
+                    (data, rp('addrbits'), pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets")
     top = 0
     if args.sys_wide or not is_dsb: pass
     elif top == 1:

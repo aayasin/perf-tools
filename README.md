@@ -40,12 +40,12 @@ First, edit `run.sh` to invoke your application or use the `-a '<your app and it
   * **advanced sampling** steps: do more profiling using advanced capabilities of the PMU, and output certain reports 
     at the assembly level (of hottest command).
     Example reports include instruction-mixes, hitcounts (basic-block execution counts), paths to precise
-    events and related-stats. Note these steps are disabled by default; enable with `-pm 300`
+    events and related-stats. Note some of these steps are disabled by default.
 
   A filtered output will be dumped on screen while all logs are saved to the current directory.  
   Use `--profile-mask 42`, as an example, to invoke subset of all steps,
     or `-N` to disable the step with re-runs.  
-  For topdowng profiling and advanced sampling, see [system requirements](#head3sys).
+  For topdown profiling and advanced sampling, see [system requirements](#head3sys).
 * `./do.py log` will only log hardware and software setup.
 * `./do.py setup-perf profile` will do the setup and default profiling steps at once.
 * `./do.py tar` will archive all logs into a shareable tar file.

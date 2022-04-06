@@ -16,22 +16,17 @@ def name():
   f += '/caps/pmu_name'
   return C.file2str(f) or 'Unknown PMU'
 
-#Icelake onward PMU, e.g. Intel PerfMon Version 5+
-def v5p(): return perfmetrics()
-
 #per CPU PMUs
-def icelake():
-  return name() in ['icelake']
-def alderlake():
-  return name() in ['alderlake_hybrid']
-def sapphire():
-  return name() in ['sapphire_rapids']
+def skylake():    return name() == 'skylake'
+def icelake():    return name() == 'icelake'
+def alderlake():  return name() == 'alderlake_hybrid'
+def sapphire():   return name() == 'sapphire_rapids'
 
 #aggregations
-def goldencove():
-  return alderlake() or sapphire()
-def perfmetrics():
-  return icelake() or goldencove()
+def goldencove():   return alderlake() or sapphire()
+def perfmetrics():  return icelake() or goldencove()
+#Icelake onward PMU, e.g. Intel PerfMon Version 5+
+def v5p(): return perfmetrics()
 
 #events
 def lbr_event():
@@ -44,15 +39,6 @@ def cpu_has_feature(feature):
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags
 
-def cpu_pipeline_width():
-  width = 4
-  if icelake(): width = 5
-  elif goldencove(): width = 6
-  return width
-
-def cpu_peak_kernels(widths=range(4,7)):
-  return ['peak%dwide'%x for x in widths]
-
 def cpu(what):
   if 1: #not cpu.state:
     sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools')
@@ -61,3 +47,24 @@ def cpu(what):
   return {'smt-on': cpu_state.ht}[what]
 #cpu.state = None
 
+def cpu_peak_kernels(widths=range(4,7)):
+  return ['peak%dwide'%x for x in widths]
+
+def cpu_pipeline_width():
+  width = 4
+  if icelake(): width = 5
+  elif goldencove(): width = 6
+  return width
+
+# deeper uarch stuff
+
+# returns MSB bit of DSB's set-index, if uarch is supported
+def dsb_msb():
+  return 10 if goldencove() else (9 if skylake() or icelake() else None)
+
+def dsb_set_index(ip):
+  left = dsb_msb()
+  if left:
+    mask = 2**(left+1)-1
+    return ((ip & mask) >> 6)
+  return None

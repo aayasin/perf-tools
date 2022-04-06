@@ -155,18 +155,19 @@ stat['events'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
 loop_cycles=0
-dsb_heatmap = {}
-dsb_heat_en = False
+dsb = {}
 footprint = set()
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
                 loop_ipc=0, lp_stats_en=False, event = LBR_Event):
-  global lbr_events, size_sum, bwd_br_tgts, loop_stats_en, dsb_heat_en
+  global lbr_events, size_sum, bwd_br_tgts, loop_stats_en
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
   loop_stats_en = lp_stats_en
   edge_en = event.startswith(LBR_Event) and not ip_filter # config good for edge-profile
-  if stat['total']==0: dsb_heat_en = edge_en and pmu.goldencove() and not pmu.cpu('smt-on')
+  if stat['total']==0 and edge_en and pmu.dsb_msb() and not pmu.cpu('smt-on'):
+    #dsb_heat_en = 1; len(dsb) == dsb_heat_en
+    dsb['heatmap'] = {}
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
@@ -251,8 +252,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         # a 2nd instruction
         if len(lines) > 1:
           detect_loop(ip, lines, loop_ipc)
-          if dsb_heat_en and (is_taken(lines[-1]) or new_line):
-            inc(dsb_heatmap, ((ip & 0x7ff) >> 6))
+          if len(dsb) and (is_taken(lines[-1]) or new_line):
+            inc(dsb['heatmap'], pmu.dsb_set_index(ip))
         tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
         lines += [ line.rstrip('\r\n') ]
@@ -321,7 +322,7 @@ def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   print('LBR samples:', stat)
   if len(footprint): print('code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
-  if len(dsb_heatmap): print_hist((dsb_heatmap, 'DSB-Heatmap', None, None))
+  if len(dsb): print_hist((dsb['heatmap'], 'DSB-Heatmap', None, None))
   if loop_ipc:
     if loop_ipc in loops:
       tot = print_hist(get_hist(loop_ipc, 'IPC'))

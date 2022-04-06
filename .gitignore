@@ -1,0 +1,7 @@
+# Python files which are generated from in-tree execution.
+*.pyc
+__pycache__
+
+# perf-tools's stuff
+.*.cmd
+.*.log

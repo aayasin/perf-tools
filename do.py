@@ -16,7 +16,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.998
+__version__= 0.999
 
 import argparse, os.path, sys
 import common as C
@@ -347,8 +347,10 @@ def profile(log=False, out='run'):
     perf_script("-i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     is_dsb = 0
     if pmu.goldencove() and 'DSB_MISS' in do['perf-pebs']:
-      is_dsb = 1
-      perf_script("-i %s -F ip | %s 10 6 | %s | tee %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
+      if pmu.cpu('smt-on'): C.warn('Disable SMT for DSB robust analysis')
+      else:
+        is_dsb = 1
+        perf_script("-i %s -F ip | %s 10 6 | %s | tee %s.dsb-sets.log | tail -11"%(data, rp('addrbits'), sort2up, data), "@ DSB-miss sets")
     top = 0
     if args.sys_wide or not is_dsb: pass
     elif top == 1:

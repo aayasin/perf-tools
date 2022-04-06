@@ -53,3 +53,11 @@ def cpu_pipeline_width():
 def cpu_peak_kernels(widths=range(4,7)):
   return ['peak%dwide'%x for x in widths]
 
+def cpu(what):
+  if 1: #not cpu.state:
+    sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools')
+    import tl_cpu
+    cpu_state = tl_cpu.CPU((), False, tl_cpu.Env())
+  return {'smt-on': cpu_state.ht}[what]
+#cpu.state = None
+

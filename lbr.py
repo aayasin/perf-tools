@@ -15,6 +15,13 @@ def hex(ip): return '0x%x'%ip if ip else '-'
 def inc(d, b): d[b] = d.get(b, 0) + 1
 def read_line(): return sys.stdin.readline()
 
+def str2int(ip, plist):
+  try:
+    return int(ip, 16)
+  except ValueError:
+    print_sample(plist[2])
+    assert 0, "expect address in '%s' of '%s'" % (ip, plist[0])
+
 def skip_sample(s):
   line = read_line()
   while not re.match(r"^$", line):
@@ -25,13 +32,13 @@ def skip_sample(s):
 def header_ip(line):
   x = is_header(line)
   assert x, "Not a head of sample: " + line
-  return int(C.str2list(line)[6 if '[' in x.group(1) else 5], 16)
+  return str2int(C.str2list(line)[6 if '[' in x.group(1) else 5], (line, None))
 
-def line_ip(line):
+def line_ip(line, sample=None):
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
   assert x, 'expect <address> at left of %s'%line
   ip = x.group(1).lstrip("0")
-  return int(ip, 16)
+  return str2int(ip, (line, sample))
 
 def line_timing(line):
   x = re.match(r"[^#]+# (\S+) (\d+) cycles \[\d+\] ([0-9\.]+) IPC", line)
@@ -171,7 +178,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
-    header, xip = True, None
+    xip = None
     tc_state = 'new'
     stat['total'] += 1
     if stat['total'] % 1000 == 0: C.printf('.')
@@ -188,14 +195,13 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           C.error('No LBR data in profile')
         C.printf(' .\n')
         return lines if len(lines) and not skip_bad else None
+      header = is_header(line)
       if header:
         # first sample here (of a given event)
-        x = is_header(line)
-        assert x, "expect <event> in:\n%s"%line
-        ev = x.group(3)[:-1]
+        ev = header.group(3)[:-1]
         if not ev in lbr_events:
           lbr_events += [ev]
-          x = 'events= %s @ %s' % (str(lbr_events), x.group(1).split(' ')[-1])
+          x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
           if len(lbr_events) == 1: x += ' primary= %s' % event
           if ip_filter: x += ' ip_filter= %s'%ip_filter
           C.printf(x+'\n')
@@ -220,7 +226,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
             C.annotate((line.strip(), len(lines)), 'a sample ended')
             print_sample(lines)
         break
-      elif is_header(line) and len(lines): # sample had no LBR data; new one started
+      elif header and len(lines): # sample had no LBR data; new one started
         # exchange2_r_0.j 57729 3736595.069891:    1000003 r20c4:pp:            41f47a brute_force_mp_brute_+0x43aa (/home/admin1/ayasin/perf-tools/exchange2_r_0.jmpi4)
         # exchange2_r_0.j 57729 3736595.069892:    1000003 r20c4:pp:            41fad4 brute_force_mp_brute_+0x4a04 (/home/admin1/ayasin/perf-tools/exchange2_r_0.jmpi4)
         lines = []
@@ -245,7 +251,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         valid = skip_sample(lines[0])
         stat['bogus'] += 1
         break
-      ip = None if header or is_label(line) else line_ip(line)
+      ip = None if header or is_label(line) else line_ip(line, lines)
       new_line = is_line_start(ip, xip)
       if edge_en and new_line: footprint.add(ip >> 6)
       if len(lines) and not is_label(line):
@@ -258,7 +264,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       if len(lines) or event in line:
         lines += [ line.rstrip('\r\n') ]
       xip = ip
-      header = False
   if size_stats_en:
     size = len(lines) - 1
     if size_sum == 0: stat['size']['min'] = stat['size']['max'] = size

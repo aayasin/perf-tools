@@ -12,7 +12,7 @@ import common as C
 dump_only = 0
 c = {x: 0 for x in ('loop_head', 'loop_seq', 'loop_jmp2mid', 'loop_jmp2head', 'sequential', 'total')}
 
-# usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL] [ip-of-loop=0] [num-loops=10] [enable-loop-stats=0] [event=r20c4:pp]
+# usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL] [ip-of-loop=0] [num-loops=10] [enable-loop-stats=0] [event=LBR_Event]
 ip = C.arg(1, 'ALL')
 filter = None
 if ip not in ('ALL', '-'):
@@ -50,7 +50,7 @@ while True:
       exit(0)
 
 if not dump_only:
-  print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
+  if not ev.startswith(LBR_Event): print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
     C.ratio('loop_jmp2mid', c, 'loop_head'), C.ratio('loop_jmp2head', c, 'loop_head'), sep=', ')
   if filter:
     print_loop(loop)

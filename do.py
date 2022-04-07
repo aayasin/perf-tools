@@ -3,7 +3,6 @@
 # Author: Ahmad Yasin
 # edited: March 2022
 # TODO list:
-#   alderlake-hybrid support
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   MSR 0x6d for servers (LLC prefetch)
 #   move profile code to a seperate module, arg for output dir
@@ -16,7 +15,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.999
+__version__= 1.0
 
 import argparse, os.path, sys
 import common as C
@@ -58,13 +57,13 @@ do = {'run':        RUN_DEF,
   'python':         sys.executable,
   'profile':        1,
   'repeat':         3,
-  'sample':         1,
+  'sample':         2,
   'super':          0,
   'tee':            1,
   'toplev':         TOPLEV_DEF,
   'toplev-levels':  2,
   'toplev-full':    '-vl6',
-  'xed':            0,
+  'xed':            1,
 }
 args = argparse.Namespace() #vars(args)
 
@@ -319,6 +318,7 @@ def profile(log=False, out='run'):
     return perf_data, comm
   
   if en(8) and do['sample'] > 1:
+    assert pmu.lbr_event()[:-1] in do['perf-lbr'], 'Incorrect event for LBR in: '+do['perf-lbr']
     data, comm = perf_record('lbr', comm)
     info = '%s.info.log'%data
     exe(perf +" report -i %s | grep -A11 'Branch Statistics:' | tee %s"%(data, info), "@stats")
@@ -331,8 +331,7 @@ def profile(log=False, out='run'):
       print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
         "| %s %s" % (data, comm, './lbr_stats', do['lbr-stats-tk']))
       perf_script("-i %s -F +brstackinsn --xed -c %s "
-        "| tee >(%s %s | grep -v loop_jmp2mid >> %s) "
-        "| egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
+        "| tee >(%s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
         "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
         (data, comm, rp('lbr_stats'), do['lbr-stats-tk'], info, hits, rp('ptage'), ips, sort2up, out, sort2up, out),
@@ -403,7 +402,7 @@ def parse_args():
   ap.add_argument('-s', '--sys-wide', type=int, default=0, help='profile system-wide for x seconds. disabled by default')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
-  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='FF', help='mask to control stages in the profile command')
+  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='17F', help='mask to control stages in the profile command')
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
     help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, ' \

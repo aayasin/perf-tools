@@ -352,7 +352,7 @@ def profile(log=False, out='run'):
         perf_script("-i %s -F ip | %s %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
                     (data, rp('addrbits'), pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets")
     top = 0
-    if args.sys_wide or not is_dsb: pass
+    if not is_dsb: pass
     elif top == 1:
       top_ip = C.exe_one_line("tail -2 %s.ips.log | head -1"%data, 2)
       perf_script("-i %s -F +brstackinsn --xed "

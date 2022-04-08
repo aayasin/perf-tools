@@ -1,19 +1,26 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: March 2022
+# edited: April 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-debug = 0
 
 import common as C
 import pmu
-import re, sys
+import os, re, sys
+
+debug = os.getenv('DBG')
 
 def hex(ip): return '0x%x'%ip if ip else '-'
 def inc(d, b): d[b] = d.get(b, 0) + 1
 def read_line(): return sys.stdin.readline()
+
+def exit(x, sample, label):
+  C.annotate(x, label)
+  print_sample(sample, 0)
+  C.printf(debug+'\n')
+  sys.exit()
 
 def str2int(ip, plist):
   try:
@@ -127,7 +134,7 @@ def detect_loop(ip, lines, loop_ipc,
   xip = line_ip(lines[-1])
   # only simple loops that are entirely observed in a single sample are supported
   if is_taken(lines[-1]):
-    if ip in bwd_br_tgts:
+    if ip in bwd_br_tgts and xip > ip:
       inner, outer = 0, 0
       ins, outs = set(), set()
       for l in loops:
@@ -135,7 +142,6 @@ def detect_loop(ip, lines, loop_ipc,
           inner += 1
           outs.add(hex(l))
           loops[l]['outer'] = 1
-          loops[l]['size'] = None #no support yet
           loops[l]['inner-loops'].add(hex(ip))
         if ip < l and xip > loops[l]['back']:
           outer = 1
@@ -175,10 +181,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   if stat['total']==0 and edge_en and pmu.dsb_msb() and not pmu.cpu('smt-on'):
     #dsb_heat_en = 1; len(dsb) == dsb_heat_en
     dsb['heatmap'] = {}
+    if debug: C.printf('DBG=%s\n' % debug)
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
-    xip = None
+    xip, timestamp = None, None
     tc_state = 'new'
     stat['total'] += 1
     if stat['total'] % 1000 == 0: C.printf('.')
@@ -206,6 +213,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           if ip_filter: x += ' ip_filter= %s'%ip_filter
           C.printf(x+'\n')
         inc(stat['events'], ev)
+        if debug: timestamp = header.group(1).split()[-1]
       # a new sample started
       # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
         if ip_filter:
@@ -222,9 +230,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
            header_ip(lines[0]) != line_ip(lines[len_m1]):
           valid = 0
           stat['bogus'] += 1
-          if debug:
-            C.annotate((line.strip(), len(lines)), 'a sample ended')
-            print_sample(lines)
+          if debug and debug == timestamp:
+            exit((line.strip(), len(lines)), lines, 'a bogus sample ended')
+        if debug and debug == timestamp:
+          exit((line.strip(), len(lines)), lines, 'sample-of-interest ended')
         break
       elif header and len(lines): # sample had no LBR data; new one started
         # exchange2_r_0.j 57729 3736595.069891:    1000003 r20c4:pp:            41f47a brute_force_mp_brute_+0x43aa (/home/admin1/ayasin/perf-tools/exchange2_r_0.jmpi4)
@@ -243,11 +252,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         continue
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
       if skip_bad and len(lines) and not line.strip().startswith('0'):
-        if debug:
-          x='DBG: %s %s\n\n\n'%(line, lines[0])
-          C.printf(x)
-          print(stat)
-          print_sample(lines)
+        if debug and debug == timestamp:
+          exit(line, lines, "bad line")
         valid = skip_sample(lines[0])
         stat['bogus'] += 1
         break
@@ -268,9 +274,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
     size = len(lines) - 1
     if size_sum == 0: stat['size']['min'] = stat['size']['max'] = size
     else:
-      if debug and size < 64:
-        print(stat['total'])
-        print_sample(lines)
       if stat['size']['min'] > size: stat['size']['min'] = size
       if stat['size']['max'] < size: stat['size']['max'] = size
     size_sum += size
@@ -338,18 +341,31 @@ def print_all(nloops=10, loop_ipc=0):
   if len(loops):
     C.printc('top %d loops:'%nloops)
     sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])#, reverse=True)
-    for l in sloops[-nloops:] if len(loops) > nloops else sloops:
-      print_loop(l[0])
+    if os.getenv("LBR_LOOPS_LOG"):
+      log = open(os.getenv("LBR_LOOPS_LOG"), 'w')
+      num = len(loops)
+      for l in sloops:
+        print_loop(l[0], num, log)
+        num -= 1
+      log.close()
+    ploops = sloops
+    if len(loops) > nloops:
+      ploops = sloops[-nloops:]
+    else: nloops = len(ploops)
+    for l in ploops:
+      print_loop(l[0], nloops)
+      nloops -=  1
 
 def print_br(br):
   print('[from: 0x%x, to: 0x%x, taken: %d]'%(br['from'], br['to'], br['taken']))
 
-def print_loop(ip):
+def print_loop(ip, num=0, print_to=sys.stdout):
   if not isinstance(ip, int): ip = int(ip, 16) #should use (int, long) but fails on python3
+  def printl(s, end='\n'): return print(s, file=print_to, end=end)
   if not ip in loops:
-    print('No loop was detected at %s!'%hex(ip))
+    printl('No loop was detected at %s!'%hex(ip))
     return
-  loop = loops[ip]
+  loop = loops[ip].copy()
   def set2str(s, top=3):
     new = loop[s]
     if len(new) > top:
@@ -360,22 +376,23 @@ def print_loop(ip):
         top -= 1
       new.add('.. %d more'%n)
     loop[s] = C.chop(str(sorted(new, reverse=True)), (")", 'set('))
-  print('[ip: %s, hotness: %6d, size: %s, '%(hex(ip), loop['hotness'], '%d'%loop['size'] if loop['size'] else '-'), end='')
+  printl('Loop#%d: [ip: %s, hotness: %6d, size: %s, ' %
+    (num, hex(ip), loop['hotness'], '%d'%loop['size'] if loop['size'] else '-'), '')
   if not loop_stats_en: del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   for x in ('hotness', 'size'): del loop[x]
   for x in ('back', 'entry-block'):
-    print('%s: %s, '%(x, hex(loop[x])), end='')
+    printl('%s: %s, '%(x, hex(loop[x])), '')
     del loop[x]
   for x in ('inn', 'out'): set2str(x + 'er-loops')
   for x in ('IPC', 'tripcount'):
     if x in loop: del loop[x]
-  print(C.chop(str(loop), "'{}\"") + ']')
+  printl(C.chop(str(loop), "'{}\"") + ']')
 
 def print_sample(sample, n=10):
   if not len(sample): return
-  print('sample#%d'%stat['total'], sample[0], sep='\n')
-  print('\n'.join(sample[-n:] if n else sample))
+  C.printf('\n'.join(('sample#%d'%stat['total'], sample[0], '\n')))
+  print('\n'.join(sample[-n:] if n else sample) + '\n')
   sys.stdout.flush()
 

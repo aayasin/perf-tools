@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: March 2022
+# edited: April 2022
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   MSR 0x6d for servers (LLC prefetch)
@@ -331,14 +331,15 @@ def profile(log=False, out='run'):
       print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
         "| %s %s" % (data, comm, './lbr_stats', do['lbr-stats-tk']))
       perf_script("-i %s -F +brstackinsn --xed -c %s "
-        "| tee >(%s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
+        "| tee >(LBR_LOOPS_LOG=%s.loops.log %s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
         "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
-        "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail"%
-        (data, comm, rp('lbr_stats'), do['lbr-stats-tk'], info, hits, rp('ptage'), ips, sort2up, out, sort2up, out),
-          "@instruction-mix for '%s'"%comm)
+        "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail" %
+        (data, comm, data, rp('lbr_stats'), do['lbr-stats-tk'], info, hits, rp('ptage'), ips,
+        sort2up, out, sort2up, out), "@instruction-mix for '%s'"%comm)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
-      exe("(egrep 'code footprint' %s || true) && tail %s" % (info, info), "@hottest loops & more stats in " + info)
+      exe("(egrep 'code footprint' %s || true) && tail %s" % (info, info),
+          "@hottest loops & more stats in " + info)
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)

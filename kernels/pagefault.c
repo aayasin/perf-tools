@@ -12,8 +12,11 @@
 #define MSG 0
 #define DBG 0
 #define KB  1024
-#define Page  (4*KB)
+#define MB  (KB*KB)
 #define U64	uint64_t
+
+#define Page  (4*KB)
+#define ALLOC(B) {B = malloc(s); assert(B);}
 
 int main(int argc, const char* argv[])
 {
@@ -28,25 +31,25 @@ int main(int argc, const char* argv[])
     n= atol(argv[1]);
     m= (argc>2) ? atol(argv[2]) : 1000;
     x= (argc>3) ? atol(argv[3]) : 7;
+    y= (argc>4) ? atol(argv[4]) : 0;
     s= m*Page;
     if (DBG) printf("%ld %ld %ld %ld\n", n, m, x, s);
     assert(x<m);
+    if (!y) ALLOC(B)
     asm("	PAUSE");
     tsc1 = _rdtsc();
     for (i=0; i<n; i++) {
-        B = malloc(s);
-        assert(B);
+        if (y) ALLOC(B)
         for (j=0; j<m; j++) {
             B[j*Page]=x;
-            //asm("	PAUSE");
         }
-        //y += B[(j-x)*Page];
-        free(B); 
+        if (y) free(B);
     }
     asm(".align 512; Lbl_end:");
     tsc2 = _rdtsc();
-    printf("%s: average TSC of %.1f ticks/page for %ld x 4KB buffer. y=%ld\n",
-       argv[0], (tsc2-tsc1)/(double)n/m, m, y);
+    if (!y) free(B);
+    printf("%s: average TSC of %.1f ticks/page for %.2f MB buffer. re-alloc=%ld\n",
+       argv[0], (tsc2-tsc1)/(double)n/m, (double)s/MB, y);
 
     return 0;
 }

@@ -10,6 +10,7 @@ A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
   * **peakXwide.c** -- sample kernels for a X-wide superscalar machine, e.g. 4 for Skylake
   * **sse2avx.c** -- another auto-generated kernel for SSE <-> AVX ISA transition penalty
   * **memcpy.c** -- a custom kernel for strings of libc demonstrating how to timestamp a region-of-interest
+  * **pagefault.c** -- a custom kernel for page faults on memory data accesses
   * **fp-arith-mix.c** -- demonstrates utilization of extra counters in Icelake's PMU
   * **rfetch3m** -- a random fetcher across 3MB code footprint (auto-generated)
   * There are more kernels produced by **build.sh** though not uploaded to git

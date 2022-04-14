@@ -116,7 +116,9 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
     if do[x]: packages += [pkg_name[x] if x in pkg_name else x]
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
-  if do['xed']: exe('./build-xed.sh', 'installing xed')
+  if do['xed']:
+    if os.path.isfile('/usr/local/bin/xed'): exe_v0(msg='xed is already installed')
+    else: exe('./build-xed.sh', 'installing xed')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
 
 def tools_update(kernels=[], level=3):

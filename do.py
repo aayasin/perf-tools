@@ -126,8 +126,11 @@ def tools_update(kernels=[], level=3):
   exe('git checkout HEAD run.sh' + ' kernels/'.join(ks))
   if level > 0: exe('git pull')
   if level > 1: exe('git submodule update --remote')
-  if level > 2: exe(args.pmu_tools + "/event_download.py ")
-  if do['super']: exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs
+  if level > 2:
+    exe(args.pmu_tools + "/event_download.py ")
+    if do['super']:
+      if level > 3: exe('mv ~/.cache/pmu-events /tmp')
+      exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs
 
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
 def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' %

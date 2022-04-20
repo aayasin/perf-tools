@@ -5,9 +5,12 @@ NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}
 
 all: tramp3d-v4
 	@echo done
-install:
+install: link-python
 	sudo apt -y -q install curl clang
 	make -s -C workloads/mmm install
+link-python:
+	sudo ln -f -s $(find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort | tail -1) /usr/bin/python
+
 intel:
 	git clone https://gitlab.devtools.intel.com/micros/dtlb
 	cd dtlb; ./build.sh
@@ -27,6 +30,7 @@ test-mt: install run-mt
 	sleep 2s
 	$(DO) profile -s1 -pm $(PM) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
+
 clean:
 	rm tramp3d-v4{,.cpp} CLTRAMP3D
 list:

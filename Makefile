@@ -9,7 +9,7 @@ install: link-python
 	sudo apt -y -q install curl clang
 	make -s -C workloads/mmm install
 link-python:
-	sudo ln -f -s $(find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort | tail -1) /usr/bin/python
+	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
 
 intel:
 	git clone https://gitlab.devtools.intel.com/micros/dtlb

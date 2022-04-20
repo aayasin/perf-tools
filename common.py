@@ -209,7 +209,8 @@ def commands_list():
 def command_basename(comm, iterations=None):
   if comm is None: return 'run%d'%os.getpid()
   name = comm.strip().split(' ')
-  if 'taskset' in name[0]: name = name[2:]
+  for x in ('taskset', 'bash'):
+    if x in name[0]: name = name[2:]
   if 'omp-bin' in name[0]: name = name[1:]
   if '/' in name[0]:
     if not os.access(name[0], os.X_OK): error("user-app '%s' is not executable"%name[0])
@@ -217,7 +218,7 @@ def command_basename(comm, iterations=None):
   if len(name) == 1 and ('kernels' in comm or iterations): name.append(iterations)
   namestr = name.pop(0)
   for x in name: namestr += "%s%s"%('' if x.startswith('-') else '-', x)
-  return chop(namestr, './~<>=\'{};')
+  return chop(namestr, './~<>=\'{};|')
 
 # stats
 def ratio(x, histo, denom='total'):

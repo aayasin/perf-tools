@@ -15,7 +15,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.0
+__version__= 1.01
 
 import argparse, os.path, sys
 import common as C
@@ -278,7 +278,7 @@ def profile(log=False, out='run'):
   grep_bk= "egrep '<==|MUX|Info.Bott'"
   grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)|##placeholder##' "
   grep_nz= grep_NZ
-  if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < \[|<$')
+  if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
   def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
@@ -376,7 +376,7 @@ def profile(log=False, out='run'):
         top -= 1
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['','log','csv'] + ext
+  log_files = ['', 'csv', 'log', 'txt'] + ext
   res = '%sresults.tar.gz'%tag if cmd == 'tar' else None
   if cmd == 'tar': exe('tar -czvf %s run.sh '%res + ' *.'.join(log_files) + ' .*.cmd')
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')

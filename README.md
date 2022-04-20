@@ -19,6 +19,8 @@ A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools
   * **toplev** -- profiler featuring the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method on Intel processors
   * **ocperf** -- perf wrapper that converts Intel event names to perf-events syntax
+* **workloads/** -- an evolving collection of "micro-workloads"
+  * **mmm/** -- the matrix-matrix mutiply (mmm) HPC kernel - multiple optimizations as demonstrated in [Tuning Performance via Metrics with Expectations](https://ieeexplore.ieee.org/document/8714063)
 ### Checkout with: 
 `git clone --recurse-submodules https://github.com/aayasin/perf-tools`
 
@@ -76,6 +78,7 @@ Shortcuts to set-up certain tools
     use the installer of your Linux distribution (Ubuntu is the default).
 * **build-xed.sh** -- downloads & builds Intel's xed. Note xed usage is disabled by default;
     invoke with `./do.py setup-all --tune :xed:1`.
+* **omp-bin.sh** -- a wrapper for OpenMP apps with #threads and affinity controls
 
 ## More information
 ### <a name="head3sys">System requirements</a>
@@ -85,5 +88,6 @@ Intel product | Kernel version
 Ice Lake | 5.10
 Rocket Lake | 5.11
 Alder Lake | 5.13
+Raptor Lake | 5.18
 
 Besides, perf tool version 5.14 or newer is required. See `do.py --install-perf` for more.

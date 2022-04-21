@@ -33,6 +33,10 @@ test-mt: install run-mt
 
 clean:
 	rm tramp3d-v4{,.cpp} CLTRAMP3D
+lint: *.py kernels/*.py
+	grep flake8 .github/workflows/pylint.yml | tail -1 > /tmp/1.sh
+	. /tmp/1.sh | cut -d: -f1 | sort | uniq -c | sort -nr | ./ptage
+
 list:
 	@grep '^[^#[:space:]].*:' Makefile | cut -d: -f1 | sort #| tr '\n' ' '
 

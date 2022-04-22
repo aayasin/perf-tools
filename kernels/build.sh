@@ -30,10 +30,11 @@ for x in add mul; do
   $PY ./gen-kernel.py -i "v${x}pd %ymm@,%ymm@,%ymm@" -r16 -n1 --reference MGM > fp-$x-bw.c
   $PY ./gen-kernel.py -i "v${x}pd %ymm@-1,%ymm@,%ymm@" -r16 -n10 --reference MGM > fp-$x-lat.c
 done
+$PY ./gen-kernel.py -i "vdivps %ymm@,%ymm@,%ymm@" -r3 -n1 > fp-divps.c
 $PY ./gen-kernel.py -i 'vfmadd132pd %ymm10,%ymm11,%ymm11' 'vfmadd132ps %ymm12,%ymm13,%ymm13' 'vaddpd %xmm0,%xmm0,%xmm0' 'vaddps %xmm1,%xmm1,%xmm1' 'vsubsd %xmm2,%xmm2,%xmm2' 'vsubss %xmm3,%xmm3,%xmm3' -n1 --reference 'ICL-PMU' > fp-arith-mix.c
 fi
 
-ks="fp-{{add,mul}-{bw,lat},arith-mix},dsb-jmp,jcc20k,jumpy*,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx"
+ks="fp-{{add,mul}-{bw,lat},arith-mix,divps},dsb-jmp,jcc20k,jumpy*,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

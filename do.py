@@ -86,11 +86,13 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, ba
     verbose = args.verbose > 0
   return C.exe_cmd(x, msg, redir_out, verbose, run, background)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
-def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) #don't append to cmds_file
+def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) # don't append to cmds_file
 
 def print_cmd(x, show=True):
   if show: C.printc(x)
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
+
+def grep(x, f=''): return "(egrep '%s' %s || true)" % (x, f) # grep with 0 exit status
 
 def rp(x): return os.path.realpath(__file__).replace('do.py', '') + x
 
@@ -177,7 +179,7 @@ def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpu
       for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_%s_freq'%m):
         set_sysfile(f, freq)
 
-def log_setup(out='setup-system.log', c='setup-cpuid.log'):
+def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   def new_line(): exe_v0('echo >> %s'%out)
   def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s'%(args.pmu_tools, m))
   C.printc(do['pmu']) #OS
@@ -190,8 +192,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log'):
   if do['msr']:
     for m in do['msrs']: exe('echo "MSR %5s:\t%16s" >> '%(m, read_msr(m)) + out)
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
-  exe("dmesg -T | tee setup-dmesg.log | egrep 'Performance E|micro' >> %s" \
-      " && grep 'BIOS ' setup-dmesg.log | tail -1 >> %s"%(out, out))
+  exe("dmesg -T | tee %s | %s >> %s && %s | tail -1 >> %s" % (d, grep('Performance E|micro'), out, grep('BIOS ', d), out))
   new_line()          #PMU
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
   exe('%s --version >> '%args.perf + out)
@@ -343,8 +344,7 @@ def profile(log=False, out='run'):
         sort2up, out, sort2up, out), "@instruction-mix for '%s'"%comm)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
-      exe("(egrep 'code footprint' %s || true) && tail %s" % (info, info),
-          "@hottest loops & more stats in " + info)
+      exe("%s && tail %s" % (grep('code footprint', info), info), "@hottest loops & more stats in " + info)
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)

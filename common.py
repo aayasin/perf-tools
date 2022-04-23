@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, debug, strings, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: March 2022
+# edited: April 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -23,7 +23,7 @@ class color:
   UNDERLINE = '\033[4m'
   END = '\033[0m'
 
-#colored printing
+# colored printing
 def printc(msg, col=color.DARKCYAN, log_only=False):
   msg = col + msg + color.END
   if not log_only: print(msg)
@@ -32,6 +32,10 @@ def printc(msg, col=color.DARKCYAN, log_only=False):
     file1.write(msg+'\n')
     file1.close()
 log_stdout=None
+
+def info(msg, bold=False, col=color.GREY):
+  if bold: col += color.BOLD
+  printc('INFO: %s .'%msg, col)
 
 def warn(msg, bold=False, col=color.CYAN):
   if bold: col += color.BOLD
@@ -186,7 +190,8 @@ def str2list(s):
 
 def arg(num, default=None):
   if len(sys.argv) <= num and not default: error("must provide %d parameters"%num)
-  return sys.argv[num] if len(sys.argv) > num else default
+  a = sys.argv[num] if len(sys.argv) > num else default
+  return a.replace('./', '') if num == 0 else a
 
 def argv2str(start=0):
   res = []

@@ -15,7 +15,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.01
+__version__= 1.02
 
 import argparse, os.path, sys
 import common as C
@@ -30,7 +30,7 @@ cpu = 'cpu_core' if 'hybrid' in pmu.name() else 'cpu'
 do = {'run':        RUN_DEF,
   'asm-dump':       30,
   'cmds_file':      None,
-  'compiler':       'gcc -O2', #~/tools/llvm-6.0.0/bin/clang',
+  'compiler':       'gcc -O2', # ~/tools/llvm-6.0.0/bin/clang',
   'core':           1,
   'cpuid':          1,
   'dmidecode':      0,
@@ -49,9 +49,10 @@ do = {'run':        RUN_DEF,
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003'%cpu,
-  'perf-record':    '', #'-e BR_INST_RETIRED.NEAR_CALL:pp ',
-  'perf-stat':      '',#'--topdown' if pmu.perfmetrics() else '',
-  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', #,cycles:G
+  'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
+  'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
+  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', # ,cycles:G
+  'perf-stat-ipc':  '-- perf stat -e instructions,cycles',
   'pin':            'taskset 0x4',
   'pmu':            pmu.name(),
   'python':         sys.executable,
@@ -65,7 +66,7 @@ do = {'run':        RUN_DEF,
   'toplev-full':    '-vl6',
   'xed':            1,
 }
-args = argparse.Namespace() #vars(args)
+args = argparse.Namespace()
 
 def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, background=False):
   X=x.split()
@@ -94,7 +95,7 @@ def print_cmd(x, show=True):
 
 def grep(x, f=''): return "(egrep '%s' %s || true)" % (x, f) # grep with 0 exit status
 
-def rp(x): return os.path.realpath(__file__).replace('do.py', '') + x
+def rp(x): return os.path.join(os.path.dirname(__file__), x)
 
 def uniq_name():
   return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
@@ -312,11 +313,11 @@ def profile(log=False, out='run'):
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
   
   data, comm = None, None
-  def perf_record(tag, comm, watch_ipc='-- perf stat -e instructions,cycles '):
+  def perf_record(tag, comm):
     assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag] or do['forgive'], 'No unfiltered LBRs! tag=%s'%tag
     perf_data = '%s.perf.data'%record_name(do['perf-%s'%tag])
-    if do['profile'] > 0: exe(perf + ' record %s -o %s %s-- %s'%(
-      do['perf-%s'%tag], perf_data, watch_ipc, r), 'sampling w/ '+tag.upper())
+    if do['profile'] > 0: exe(perf + ' record %s -o %s %s -- %s'%(
+      do['perf-%s'%tag], perf_data, do['perf-stat-ipc'], r), 'sampling w/ '+tag.upper())
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
@@ -440,8 +441,9 @@ def main():
         if args.verbose > 3: print(t)
         exec(t)
   if args.sys_wide:
+    C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide
-    for x in ('stat', 'record', 'lbr', 'pebs'): do['perf-'+x] += ' -a'
+    for x in ('stat', 'record', 'lbr', 'pebs', 'stat-ipc'): do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
     args.profile_mask &= 0xFFB # disable system-wide profile-step
   do_cmd = '%s # version %.3f' % (C.argv2str(), __version__)

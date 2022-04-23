@@ -104,8 +104,7 @@ int main(int argc, const char* argv[])
         exit(-1);
     }
     if (MSG) printf("%%s\\n", MSG ? MSG : "");
-    n= atol(argv[1]);"""%(__author__, sys.argv[0].replace('./',''), str(__version__),
-  str(args).replace('Namespace', ''),
+    n= atol(argv[1]);"""%(__author__, C.arg(0), str(__version__), str(args).replace('Namespace', ''),
   '/* %s\n */'%references.Comments[args.reference].replace('\n', '\n * ') if args.reference else '', paper))
 for x in vars(args).keys():
   if 'instructions' in x:

@@ -277,7 +277,7 @@ def profile(log=False, out='run'):
   toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc')
   if pmu.alderlake() and do['core']: toplev+= ' --cputype=core'
-  grep_bk= "egrep '<==|MUX|Info.Bott'"
+  grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
   grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)|##placeholder##' "
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
@@ -377,7 +377,7 @@ def profile(log=False, out='run'):
         top -= 1
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', 'csv', 'log', 'txt'] + ext
+  log_files = ['', '.cmd', 'csv', 'log', 'txt'] + ext
   res = '%sresults.tar.gz'%tag if cmd == 'tar' else None
   if cmd == 'tar': exe('tar -czvf %s run.sh '%res + ' *.'.join(log_files) + ' .*.cmd')
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')

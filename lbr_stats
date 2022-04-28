@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # stats re path to precise events
 # Author: Ahmad Yasin
-# edited: March 2022
+# edited: April 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
@@ -50,6 +50,7 @@ while True:
       exit(0)
 
 if not dump_only:
+  print_header()
   if not ev.startswith(LBR_Event): print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
     C.ratio('loop_jmp2mid', c, 'loop_head'), C.ratio('loop_jmp2head', c, 'loop_head'), sep=', ')
   if filter:

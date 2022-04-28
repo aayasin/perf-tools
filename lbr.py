@@ -5,12 +5,14 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
+__version__= 0.50
 
 import common as C
 import pmu
 import os, re, sys
 
 debug = os.getenv('DBG')
+verbose = os.getenv('VER')
 
 def hex(ip): return '0x%x'%ip if ip else '-'
 def inc(d, b): d[b] = d.get(b, 0) + 1
@@ -56,12 +58,12 @@ def line_timing(line):
 
 def tripcount(ip, loop_ipc, state):
   if state == 'new' and loop_ipc in loops:
-    state = 'invalid' if is_in_loop(ip, loop_ipc) else 'valid'
+    if not 'tripcount' in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
+    state = 'valid'
   elif type(state) == int:
     if ip == loop_ipc: state += 1
     elif not is_in_loop(ip, loop_ipc):
-      if not 'tripcount' in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
-      inc(loops[loop_ipc]['tripcount'], state)
+      inc(loops[loop_ipc]['tripcount'], str(state))
       state = 'done'
   elif state == 'valid':
     if ip == loop_ipc:
@@ -232,6 +234,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           stat['bogus'] += 1
           if debug and debug == timestamp:
             exit((line.strip(), len(lines)), lines, 'a bogus sample ended')
+        elif len_m1 and type(tc_state) == int and is_in_loop(line_ip(lines[-1]), loop_ipc):
+          if tc_state == 31 or verbose:
+            inc(loops[loop_ipc]['tripcount'], '%d+' % (tc_state + 1))
+          # else: note a truncated tripcount, i.e. unknown in 1..31, is not accounted for by default.
         if debug and debug == timestamp:
           exit((line.strip(), len(lines)), lines, 'sample-of-interest ended')
         break
@@ -309,33 +315,38 @@ def get_taken(sample, n):
     i -= 1
   return {'from': frm, 'to': to, 'taken': 1}
 
-def get_hist(loop_ipc, name):
+def get_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   loop = loops[loop_ipc]
-  return (loop[name], name, loop, loop_ipc) if name in loop else (None, ) * 4
+  assert name in loop
+  return (loop[name], name, loop, loop_ipc, sortfunc, weighted)
 
 def print_hist(hist_t):
-  if not hist_t[0]: return 0
-  hist, name, loop, loop_ipc = hist_t[0], hist_t[1], hist_t[2], hist_t[3]
+  if not hist_t[0]: return -1
+  hist, name = hist_t[0], hist_t[1]
+  loop, loop_ipc, sorter, weighted = (None, ) * 4
+  if len(hist_t) > 2: (loop, loop_ipc, sorter, weighted) = hist_t[2:]
   tot = sum(hist.values())
   if not tot: return 0
-  shist = sorted(hist.items(), key=lambda x: x[1])
-  if loop: loop['%s-most' % name] = str(shist[-1][0])
-  C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
-  for k in sorted(hist.keys()):
-    print('%4s: %6d%6.1f%%'%(k, hist[k], 100.0*hist[k]/tot))
+  if loop:
+    shist = sorted(hist.items(), key=lambda x: x[1])
+    loop['%s-most' % name] = str(shist[-1][0])
+    C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
+  for k in sorted(hist.keys(), key=sorter): print('%4s: %6d%6.1f%%' % (k, hist[k], 100.0 * hist[k] / tot))
   print('')
-  return tot
+  return sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
 
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   print('LBR samples:', stat)
   if len(footprint): print('code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
-  if len(dsb): print_hist((dsb['heatmap'], 'DSB-Heatmap', None, None))
+  if len(dsb): print_hist((dsb['heatmap'], 'DSB-Heatmap'))
   if loop_ipc:
     if loop_ipc in loops:
-      tot = print_hist(get_hist(loop_ipc, 'IPC'))
-      if tot: loops[loop_ipc]['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
-      print_hist(get_hist(loop_ipc, 'tripcount'))
+      lp = loops[loop_ipc]
+      tot = print_hist(get_loop_hist(loop_ipc, 'IPC'))
+      if tot: lp['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
+      tot = print_hist(get_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0])))
+      if tot: lp['tripcount-coverage'] = '%.1f%%' % (100.0 * tot/lp['hotness'])
     else:
       C.warn('Loop %s was not observed'%hex(loop_ipc))
   if len(loops):
@@ -396,3 +407,5 @@ def print_sample(sample, n=10):
   print('\n'.join(sample[-n:] if n else sample) + '\n')
   sys.stdout.flush()
 
+def print_header():
+  print("perf-tools' lbr.py module version %.2f" % __version__)

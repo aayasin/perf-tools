@@ -15,7 +15,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.02
+__version__= 1.1
 
 import argparse, os.path, sys
 import common as C
@@ -37,6 +37,7 @@ do = {'run':        RUN_DEF,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'forgive':        0,
   'gen-kernel':     1,
+  'loops':          3,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
   'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
@@ -88,6 +89,7 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, ba
   return C.exe_cmd(x, msg, redir_out, verbose, run, background)
 def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) # don't append to cmds_file
+def prn_line(f): exe_v0('echo >> %s' % f)
 
 def print_cmd(x, show=True):
   if show: C.printc(x)
@@ -181,7 +183,7 @@ def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpu
         set_sysfile(f, freq)
 
 def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
-  def new_line(): exe_v0('echo >> %s'%out)
+  def new_line(): return prn_line(out)
   def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s'%(args.pmu_tools, m))
   C.printc(do['pmu']) #OS
   exe('uname -a > ' + out, 'logging setup')
@@ -346,10 +348,20 @@ def profile(log=False, out='run'):
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
       exe("%s && tail %s" % (grep('code footprint', info), info), "@hottest loops & more stats in " + info)
+      if do['loops']:
+        prn_line(info)
+        cmd, top = '', do['loops']
+        while top > 1:
+          cmd += ' | tee >(%s %s >> %s) ' % (rp('loop_stats'),
+            C.exe_one_line('tail -%d %s.loops.log | head -1' % (top, data), 2)[:-1], info)
+          top -= 1
+        cmd += ' | %s %s >> %s' % (rp('loop_stats'), C.exe_one_line('tail -1 %s.loops.log' % data, 2)[:-1], info)
+        perf_script("-i %s -F +brstackinsn --xed -c %s %s" % (data, comm, cmd), "@stats for top %d loops" % do['loops'])
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
-    exe(perf + " report -i %s --stdio -F overhead,comm,dso | tee %s.modules.log | grep -A12 Overhead"%(data, data), "@ top-10 modules")
+    exe(perf + " report -i %s --stdio -F overhead,comm,dso | tee %s.modules.log | grep -A12 Overhead" %
+      (data, data), "@ top-10 modules")
     perf_script("-i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:

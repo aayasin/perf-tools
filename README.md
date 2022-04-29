@@ -70,6 +70,7 @@ First, edit `run.sh` to invoke your application or use the `-a '<your app and it
 A set of command-line tools to facilitate profiling
 * **addrbits** -- extracts certain bit-range of hexa input
 * **lbr_stats** -- calculates stats on LBR-based profile
+* **loop_stats** -- calculates stats for a particular loop in an LBR-based profile
 * **ptage** -- computes percentages & sum of number-prefixed input
 
 ### wrappers

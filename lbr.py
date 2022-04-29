@@ -179,7 +179,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
   loop_stats_en = lp_stats_en
-  edge_en = event.startswith(LBR_Event) and not ip_filter # config good for edge-profile
+  edge_en = event.startswith(LBR_Event) and not ip_filter and not loop_ipc # config good for edge-profile
   if stat['total']==0 and edge_en and pmu.dsb_msb() and not pmu.cpu('smt-on'):
     #dsb_heat_en = 1; len(dsb) == dsb_heat_en
     dsb['heatmap'] = {}
@@ -212,7 +212,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           lbr_events += [ev]
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
           if len(lbr_events) == 1: x += ' primary= %s' % event
-          if ip_filter: x += ' ip_filter= %s'%ip_filter
+          if ip_filter: x += ' ip_filter= %s' % ip_filter
+          if loop_ipc: x += ' loop= %s' % hex(loop_ipc)
           C.printf(x+'\n')
         inc(stat['events'], ev)
         if debug: timestamp = header.group(1).split()[-1]
@@ -330,15 +331,15 @@ def print_hist(hist_t):
   if loop:
     shist = sorted(hist.items(), key=lambda x: x[1])
     loop['%s-most' % name] = str(shist[-1][0])
-    C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
+  C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
   for k in sorted(hist.keys(), key=sorter): print('%4s: %6d%6.1f%%' % (k, hist[k], 100.0 * hist[k] / tot))
   print('')
   return sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
 
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
-  print('LBR samples:', stat)
-  if len(footprint): print('code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
+  if not loop_ipc: print('LBR samples:', stat)
+  if len(footprint): print('code footprint estimate: %.2f KB\n' % (len(footprint) / 16.0))
   if len(dsb): print_hist((dsb['heatmap'], 'DSB-Heatmap'))
   if loop_ipc:
     if loop_ipc in loops:
@@ -349,7 +350,7 @@ def print_all(nloops=10, loop_ipc=0):
       if tot: lp['tripcount-coverage'] = '%.1f%%' % (100.0 * tot/lp['hotness'])
     else:
       C.warn('Loop %s was not observed'%hex(loop_ipc))
-  if len(loops):
+  if nloops and len(loops):
     C.printc('top %d loops:'%nloops)
     sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])#, reverse=True)
     if os.getenv("LBR_LOOPS_LOG"):
@@ -408,4 +409,5 @@ def print_sample(sample, n=10):
   sys.stdout.flush()
 
 def print_header():
+  C.printc('Global stats:')
   print("perf-tools' lbr.py module version %.2f" % __version__)

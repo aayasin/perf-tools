@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.50
+__version__= 0.51
 
 import common as C
 import pmu
@@ -16,6 +16,7 @@ verbose = os.getenv('VER')
 
 def hex(ip): return '0x%x'%ip if ip else '-'
 def inc(d, b): d[b] = d.get(b, 0) + 1
+def ratio(a, b): return '%.2f%%' % (100.0 * a / b)
 def read_line(): return sys.stdin.readline()
 
 def exit(x, sample, label):
@@ -51,7 +52,8 @@ def line_ip(line, sample=None):
 
 def line_timing(line):
   x = re.match(r"[^#]+# (\S+) (\d+) cycles \[\d+\] ([0-9\.]+) IPC", line)
-  assert x, 'Could not match IPC in:\n%s'%line
+  # note: this ignores timing of 1st LBR entry (has cycles but not IPC)
+  assert x, 'Could not match IPC in:\n%s' % line
   ipc = round(float(x.group(3)), 1)
   cycles = int(x.group(2))
   return cycles, ipc
@@ -113,7 +115,7 @@ def detect_loop(ip, lines, loop_ipc,
     if ip == loop_ipc and is_taken(lines[-1]):
       if not 'IPC' in loop: loop['IPC'] = {}
       begin = find_block_ip()
-      if begin == ip and 'IPC' in lines[-1]:
+      if begin == ip and has_timing(lines[-1]):
         cycles, ipc = line_timing(lines[-1])
         inc(loop['IPC'], ipc)
         loop_cycles += cycles
@@ -164,7 +166,7 @@ def detect_loop(ip, lines, loop_ipc,
 LBR_Event = pmu.lbr_event()[:-4]
 lbr_events = []
 loops = {}
-stat = {x: 0 for x in ('bad', 'bogus', 'total')}
+stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
 stat['IPs'] = {}
 stat['events'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
@@ -202,7 +204,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         if stat['total'] == stat['bogus']:
           print_all()
           C.error('No LBR data in profile')
-        C.printf(' .\n')
+        if not loop_ipc: C.printf(' .\n')
         return lines if len(lines) and not skip_bad else None
       header = is_header(line)
       if header:
@@ -275,7 +277,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
             inc(dsb['heatmap'], pmu.dsb_set_index(ip))
         tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
-        lines += [ line.rstrip('\r\n') ]
+        line = line.rstrip('\r\n')
+        if has_timing(line):
+          cycles = line_timing(line)[0]
+          stat['total_cycles'] += cycles
+        lines += [ line ]
       xip = ip
   if size_stats_en:
     size = len(lines) - 1
@@ -295,6 +301,7 @@ def is_jmp_next(br, # a hacky implementation for now
   return (br['to'] == (br['from'] + JS)) or (
          (br['to'] & mask) ==  ((br['from'] & mask) + CDLA))
 
+def has_timing(line): return line.endswith('IPC')
 def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else False
 def is_label(line):   return line.strip().endswith(':')
 def is_loop(line):    return line_ip(line) in loops
@@ -341,18 +348,20 @@ def print_all(nloops=10, loop_ipc=0):
   if not loop_ipc: print('LBR samples:', stat)
   if len(footprint): print('code footprint estimate: %.2f KB\n' % (len(footprint) / 16.0))
   if len(dsb): print_hist((dsb['heatmap'], 'DSB-Heatmap'))
+  sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:
     if loop_ipc in loops:
       lp = loops[loop_ipc]
       tot = print_hist(get_loop_hist(loop_ipc, 'IPC'))
-      if tot: lp['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
+      if tot:
+        lp['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
+        lp['full-loop_cycles%'] = ratio(loop_cycles, stat['total_cycles'])
       tot = print_hist(get_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0])))
-      if tot: lp['tripcount-coverage'] = '%.1f%%' % (100.0 * tot/lp['hotness'])
+      if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
+      find_print_loop(loop_ipc, sloops)
     else:
       C.warn('Loop %s was not observed'%hex(loop_ipc))
   if nloops and len(loops):
-    C.printc('top %d loops:'%nloops)
-    sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])#, reverse=True)
     if os.getenv("LBR_LOOPS_LOG"):
       log = open(os.getenv("LBR_LOOPS_LOG"), 'w')
       num = len(loops)
@@ -361,9 +370,9 @@ def print_all(nloops=10, loop_ipc=0):
         num -= 1
       log.close()
     ploops = sloops
-    if len(loops) > nloops:
-      ploops = sloops[-nloops:]
+    if len(loops) > nloops: ploops = sloops[-nloops:]
     else: nloops = len(ploops)
+    C.printc('top %d loops:' % nloops)
     for l in ploops:
       print_loop(l[0], nloops)
       nloops -=  1
@@ -371,16 +380,25 @@ def print_all(nloops=10, loop_ipc=0):
 def print_br(br):
   print('[from: 0x%x, to: 0x%x, taken: %d]'%(br['from'], br['to'], br['taken']))
 
-def print_loop(ip, num=0, print_to=sys.stdout):
+def find_print_loop(ip, sloops):
+  num = 1
+  for l in reversed(sloops):
+    if l[0] == ip:
+      print_loop(l[0], num, detailed=True)
+      print('\n'*2)
+      return
+    num += 1
+
+def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   if not isinstance(ip, int): ip = int(ip, 16) #should use (int, long) but fails on python3
   def printl(s, end='\n'): return print(s, file=print_to, end=end)
   if not ip in loops:
     printl('No loop was detected at %s!'%hex(ip))
     return
   loop = loops[ip].copy()
-  def set2str(s, top=3):
+  def set2str(s, top=0 if detailed else 3):
     new = loop[s]
-    if len(new) > top:
+    if top and len(new) > top:
       n = len(new) - top
       new = set()
       while top > 0:

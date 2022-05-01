@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: April 2022
+# edited: May 2022
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   MSR 0x6d for servers (LLC prefetch)
@@ -15,7 +15,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.1
+__version__= 1.2
 
 import argparse, os.path, sys
 import common as C
@@ -317,9 +317,9 @@ def profile(log=False, out='run'):
   data, comm = None, None
   def perf_record(tag, comm):
     assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag] or do['forgive'], 'No unfiltered LBRs! tag=%s'%tag
-    perf_data = '%s.perf.data'%record_name(do['perf-%s'%tag])
-    if do['profile'] > 0: exe(perf + ' record %s -o %s %s -- %s'%(
-      do['perf-%s'%tag], perf_data, do['perf-stat-ipc'], r), 'sampling w/ '+tag.upper())
+    perf_data = '%s.perf.data' % record_name(do['perf-%s'%tag])
+    exe(perf + ' record %s -o %s %s -- %s' % (do['perf-%s'%tag], perf_data, do['perf-stat-ipc'], r), 'sampling w/ '+tag.upper())
+    if not os.path.isfile(perf_data): C.warn('file does not exist: %s' % perf_data)
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
@@ -336,26 +336,29 @@ def profile(log=False, out='run'):
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
+      loops = '%s.loops.log' % data
       exe_v0('printf "\n# LBR-based Statistics:\n#\n">> %s'%info)
       print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
         "| %s %s" % (data, comm, './lbr_stats', do['lbr-stats-tk']))
       perf_script("-i %s -F +brstackinsn --xed -c %s "
-        "| tee >(LBR_LOOPS_LOG=%s.loops.log %s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
+        "| tee >(LBR_LOOPS_LOG=%s %s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
         "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
         "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail" %
-        (data, comm, data, rp('lbr_stats'), do['lbr-stats-tk'], info, hits, rp('ptage'), ips,
+        (data, comm, loops, rp('lbr_stats'), do['lbr-stats-tk'], info, hits, rp('ptage'), ips,
         sort2up, out, sort2up, out), "@instruction-mix for '%s'"%comm)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
       exe("%s && tail %s" % (grep('code footprint', info), info), "@hottest loops & more stats in " + info)
       if do['loops']:
+        if not os.path.isfile(loops): C.warn('file does not exist: %s' % loops)
         prn_line(info)
-        cmd, top = '', do['loops']
+        cmd, top = '', min(do['loops'], int(C.exe_one_line('wc -l %s' % loops, 0)))
+        do['loops'] = top
         while top > 1:
           cmd += ' | tee >(%s %s >> %s) ' % (rp('loop_stats'),
-            C.exe_one_line('tail -%d %s.loops.log | head -1' % (top, data), 2)[:-1], info)
+            C.exe_one_line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
           top -= 1
-        cmd += ' | %s %s >> %s' % (rp('loop_stats'), C.exe_one_line('tail -1 %s.loops.log' % data, 2)[:-1], info)
+        cmd += ' | %s %s >> %s && echo' % (rp('loop_stats'), C.exe_one_line('tail -1 %s' % loops, 2)[:-1], info)
         perf_script("-i %s -F +brstackinsn --xed -c %s %s" % (data, comm, cmd), "@stats for top %d loops" % do['loops'])
   
   if en(9) and do['sample'] > 2:
@@ -452,6 +455,7 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
+  if not do['profile']: C.info('not profiling (using existent perf.data)')
   if args.sys_wide:
     C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide
@@ -467,6 +471,7 @@ def main():
   do['cmds_file'] = open(cmds_file, 'w')
   do['cmds_file'].write('# %s\n' % do_cmd)
   if args.verbose > 3: C.printc(str(args))
+  if args.verbose > 4: C.printc(str(do))
   
   for c in args.command:
     if   c == 'forgive-me':   pass

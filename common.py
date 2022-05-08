@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, debug, strings, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: April 2022
+# edited: May 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -117,6 +117,9 @@ def os_installer():
   if 'CentOS' in name: installer='dnf'
   return installer
 
+def check_executable(x):
+  if not os.access(x, os.X_OK): error("'%s' is not executable" % x)
+
 # files
 #
 def file2lines(filename, fail=False):
@@ -218,7 +221,7 @@ def command_basename(comm, iterations=None):
     if x in name[0]: name = name[2:]
   if 'omp-bin' in name[0]: name = name[1:]
   if '/' in name[0]:
-    if not os.access(name[0], os.X_OK): error("user-app '%s' is not executable"%name[0])
+    check_executable(name[0])
     name[0] = name[0].split('/')[-1].replace('.sh', '')
   if len(name) == 1 and ('kernels' in comm or iterations): name.append(iterations)
   namestr = name.pop(0)

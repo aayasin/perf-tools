@@ -221,6 +221,10 @@ def perf_format(es, result=''):
 def profile(log=False, out='run'):
   out = uniq_name()
   perf = args.perf
+  toplev = ''
+  if perf != 'perf':
+    C.check_executable(perf)
+    toplev = 'PERF=%s ' % perf
   def en(n): return args.profile_mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
@@ -276,7 +280,6 @@ def profile(log=False, out='run'):
     if do['xed']: perf_script("-i %s -F insn --xed | %s " \
       "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
   
-  toplev = '' if perf == 'perf' else 'PERF=%s '%perf
   toplev+= (args.pmu_tools + '/toplev.py --no-desc')
   if pmu.alderlake() and do['core']: toplev+= ' --cputype=core'
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"

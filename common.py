@@ -16,6 +16,7 @@ class color:
   DARKCYAN  = '\033[36m'
   GREY      = '\033[90m'
   GREEN     = '\033[92m'
+  ORANGE    = '\033[33m'
   PURPLE    = '\033[95m'
   RED       = '\033[91m'
   YELLOW    = '\033[93m'
@@ -37,7 +38,7 @@ def info(msg, bold=False, col=color.GREY):
   if bold: col += color.BOLD
   printc('INFO: %s .'%msg, col)
 
-def warn(msg, bold=False, col=color.CYAN):
+def warn(msg, bold=False, col=color.ORANGE):
   if bold: col += color.BOLD
   printc('WARNING: %s !'%msg, col)
 

@@ -396,9 +396,10 @@ def profile(log=False, out='run'):
         top -= 1
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', '.cmd', 'csv', 'log', 'txt'] + ext
+  log_files = ['', 'csv', 'log', 'txt'] + ext
   res = '%sresults.tar.gz'%tag if cmd == 'tar' else None
-  if cmd == 'tar': exe('tar -czvf %s run.sh '%res + ' *.'.join(log_files) + ' .*.cmd')
+  s = (uniq_name() if args.app_name else '') + '*'
+  if cmd == 'tar': exe('tar -czvf %s run.sh '%res + (' %s.'%s).join(log_files) + ' .%s.cmd'%s)
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')
   return res
 
@@ -443,7 +444,7 @@ def main():
   #args sanity checks
   if (args.gen_args or 'build' in args.command) and not args.app_name:
     C.error('must specify --app-name with any of: --gen-args, build')
-  assert not (args.print_only and (args.profile_mask & 0x300)), 'No print-only + lbr/pebs profile-steps'
+  assert not (args.print_only and (args.profile_mask & 0x300) and 'profile' in args.command), 'No print-only + lbr/pebs profile-steps'
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'

@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.6
+__version__= 0.62
 
 import common as C
 import pmu
@@ -78,6 +78,8 @@ def loop_stats(line, loop_ipc, tc_state):
     if re.findall(regex, line):
       if not loop_stats.atts or not tag in loop_stats.atts:
         loop_stats.atts = ';'.join((loop_stats.atts, tag)) if loop_stats.atts else tag
+  def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
+  def vec_len(i): return 'vec%d' % (128 * (i + 1))
   # loop-body stats, FIXME: on the 1st encoutered loop in a new sample for now
   if loop_stats_en and tc_state == 'new' and is_loop(line):
     loop_stats.id = line_ip(line)
@@ -90,13 +92,14 @@ def loop_stats(line, loop_ipc, tc_state):
       loop_stats.id = None
     else:
       mark(r"(jmp|call)\s%", 'indirect')
-      mark(r"p[sdh]\s+%xmm", 'vec128-fp')
-      mark(r"p[sdh]\s+%ymm", 'vec256-fp')
-      mark(r"p[sdh]\s+%zmm", 'vec512-fp')
+      for i in range(loop_stats_vec):
+        mark(r"[^k]p[sdh]\s+" + vec_reg(i), vec_len(i) + '-fp')
+        mark(r"\s%sp.*%s" % ('(v)' if i==0 else 'v', vec_reg(i)), vec_len(i) + '-int')
   return tripcount(line_ip(line), loop_ipc, tc_state)
 loop_stats.id = None
 loop_stats.atts = ''
 loop_stats_en = False
+loop_stats_vec = 3 if pmu.cpu_has_feature('avx512vl') else 2
 
 bwd_br_tgts = [] # better make it local to read_sample..
 loop_cands = []

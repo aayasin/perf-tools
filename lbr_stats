@@ -31,13 +31,14 @@ while True:
   assert len(sample) > 2, 'invalid sample: ' + str(sample)
   if dump_only:
     C.printf(' dump-only=%s ' % dump_only)
+    slen = int(dump_only) if dump_only.isdigit() else 0
     if dump_only == 'call':
       dat = ';'.join(sample)
       if 'call' in dat:
-        print_sample(sample, 0)
+        print_sample(sample, slen)
         sys.exit(0)
     else:
-      print_sample(sample, 0)
+      print_sample(sample, slen)
     continue
   c['total'] += 1
   if stop and c['total'] >= 1000*int(stop): break

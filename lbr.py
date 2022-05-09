@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: April 2022
+# edited: May 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.51
+__version__= 0.6
 
 import common as C
 import pmu
@@ -13,6 +13,7 @@ import os, re, sys
 
 debug = os.getenv('DBG')
 verbose = os.getenv('VER')
+use_cands = os.getenv('USE_CANDS')
 
 def hex(ip): return '0x%x'%ip if ip else '-'
 def inc(d, b): d[b] = d.get(b, 0) + 1
@@ -98,9 +99,10 @@ loop_stats.atts = ''
 loop_stats_en = False
 
 bwd_br_tgts = [] # better make it local to read_sample..
+loop_cands = []
 def detect_loop(ip, lines, loop_ipc,
   MOLD=4e4): #Max Outer Loop Distance
-  global loop_cycles, bwd_br_tgts #unlike nonlocal, global works in python2 too!
+  global loop_cycles, bwd_br_tgts, loop_cands # unlike nonlocal, global works in python2 too!
   def find_block_ip():
     x = len(lines)-2
     while x>=0:
@@ -108,6 +110,12 @@ def detect_loop(ip, lines, loop_ipc,
         return line_ip(lines[x+1])
       x -= 1
     return 0
+  def has_ip(at):
+    while at > 0:
+      if is_callret(lines[at]): return False
+      if line_ip(lines[at]) == ip: return True
+      at -= 1
+    return False
   
   if ip in loops:
     loop = loops[ip]
@@ -135,10 +143,17 @@ def detect_loop(ip, lines, loop_ipc,
     if not loop['entry-block'] and not is_taken(lines[-1]):
       loop['entry-block'] = find_block_ip()
     return
-  xip = line_ip(lines[-1])
-  # only simple loops that are entirely observed in a single sample are supported
+  
+  # only simple loops, of these attributes, are supported:
+  # * are entirely observed in a single sample (e.g. tripcount < 32)
+  # * a tripcount > 1 is observed
+  # * no function calls
   if is_taken(lines[-1]):
-    if ip in bwd_br_tgts and xip > ip:
+    xip = line_ip(lines[-1])
+    if xip <= ip: pass # not a backward jump
+    elif (use_cands and ip in loop_cands) or (not use_cands and ip in bwd_br_tgts):
+      if use_cands: loop_cands.remove(ip)
+      else: bwd_br_tgts.remove(ip)
       inner, outer = 0, 0
       ins, outs = set(), set()
       for l in loops:
@@ -156,11 +171,14 @@ def detect_loop(ip, lines, loop_ipc,
         'entry-block': 0 if xip > ip else find_block_ip(),
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
-      bwd_br_tgts.remove(ip)
       return
-    if ip < xip and\
-      ((xip - ip) < MOLD) and\
-      not ('call' in lines[-1] or 'ret' in lines[-1]): #these require --xed with perf script
+    elif use_cands and len(lines) > 2 and ip in bwd_br_tgts and has_ip(len(lines)-2):
+      bwd_br_tgts.remove(ip)
+      loop_cands += [ip]
+    elif (((xip - ip) < MOLD) and
+        not is_callret(lines[-1]) and # requires --xed
+        not ip in bwd_br_tgts and
+        (use_cands or has_ip(len(lines)-2))):
       bwd_br_tgts += [ip]
 
 LBR_Event = pmu.lbr_event()[:-4]
@@ -192,7 +210,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
     xip, timestamp = None, None
     tc_state = 'new'
     stat['total'] += 1
-    if stat['total'] % 1000 == 0: C.printf('.')
+    if stat['total'] % (1e4 if loop_ipc else 1000) == 0: C.printf('.')
     while True:
       line = read_line()
       # input ended
@@ -292,6 +310,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
     size_sum += size
   return lines
 
+def is_callret(l):    return re.findall(r"(call|ret)", l)
+
 def is_header(line): return re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line)
 
 def is_jmp_next(br, # a hacky implementation for now
@@ -338,6 +358,7 @@ def print_hist(hist_t):
   if loop:
     shist = sorted(hist.items(), key=lambda x: x[1])
     loop['%s-most' % name] = str(shist[-1][0])
+    loop['%s-num-buckets' % name] = len(hist)
   C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
   for k in sorted(hist.keys(), key=sorter): print('%4s: %6d%6.1f%%' % (k, hist[k], 100.0 * hist[k] / tot))
   print('')

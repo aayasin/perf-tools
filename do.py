@@ -15,7 +15,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.2
+__version__= 1.21
 
 import argparse, os.path, sys
 import common as C
@@ -352,8 +352,7 @@ def profile(log=False, out='run'):
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
       exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
       exe("%s && tail %s" % (grep('code footprint', info), info), "@hottest loops & more stats in " + info)
-      if do['loops']:
-        if not os.path.isfile(loops): C.warn('file does not exist: %s' % loops)
+      if do['loops'] and os.path.isfile(loops):
         prn_line(info)
         cmd, top = '', min(do['loops'], int(C.exe_one_line('wc -l %s' % loops, 0)))
         do['loops'] = top
@@ -363,6 +362,7 @@ def profile(log=False, out='run'):
           top -= 1
         cmd += ' | %s %s >> %s && echo' % (rp('loop_stats'), C.exe_one_line('tail -1 %s' % loops, 2)[:-1], info)
         perf_script("-i %s -F +brstackinsn --xed -c %s %s" % (data, comm, cmd), "@stats for top %d loops" % do['loops'])
+      elif not os.path.isfile(loops): C.warn('file does not exist: %s' % loops)
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)

@@ -8,8 +8,10 @@ __author__ = 'ayasin'
 
 from lbr import *
 import common as C
+import os
 
-dump_only = 0
+dump_only = os.getenv('DUMP')
+stop = os.getenv('STOP')
 c = {x: 0 for x in ('loop_head', 'loop_seq', 'loop_jmp2mid', 'loop_jmp2head', 'sequential', 'total')}
 
 # usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL] [ip-of-loop=0] [num-loops=10] [enable-loop-stats=0] [event=LBR_Event]
@@ -28,10 +30,17 @@ while True:
   if not sample: break
   assert len(sample) > 2, 'invalid sample: ' + str(sample)
   if dump_only:
-    print_sample(sample, 0)
-    sys.stdout.flush()
+    C.printf(' dump-only=%s ' % dump_only)
+    if dump_only == 'call':
+      dat = ';'.join(sample)
+      if 'call' in dat:
+        print_sample(sample, 0)
+        sys.exit(0)
+    else:
+      print_sample(sample, 0)
     continue
   c['total'] += 1
+  if stop and c['total'] >= 1000*int(stop): break
   if not is_taken(sample[-2]): c['sequential'] += 1
   if is_loop(sample[-1]):
     c['loop_head'] += 1

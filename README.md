@@ -1,5 +1,4 @@
 ![perf-tools](https://raw.githubusercontent.com/aayasin/perf-tools/master/perf-tools-logo.png)
-# perf-tools
 A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
 
 ## Overview

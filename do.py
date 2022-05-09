@@ -15,7 +15,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.21
+__version__= 1.22
 
 import argparse, os.path, sys
 import common as C
@@ -361,7 +361,8 @@ def profile(log=False, out='run'):
             C.exe_one_line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
           top -= 1
         cmd += ' | %s %s >> %s && echo' % (rp('loop_stats'), C.exe_one_line('tail -1 %s' % loops, 2)[:-1], info)
-        perf_script("-i %s -F +brstackinsn --xed -c %s %s" % (data, comm, cmd), "@stats for top %d loops" % do['loops'])
+        perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, grep('IPC-most', info)),
+          "@stats for top %d loops" % do['loops'])
       elif not os.path.isfile(loops): C.warn('file does not exist: %s' % loops)
   
   if en(9) and do['sample'] > 2:

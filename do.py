@@ -15,7 +15,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.22
+__version__= 0.99
 
 import argparse, os.path, sys
 import common as C
@@ -57,7 +57,6 @@ do = {'run':        RUN_DEF,
   'pin':            'taskset 0x4',
   'pmu':            pmu.name(),
   'python':         sys.executable,
-  'profile':        1,
   'repeat':         3,
   'sample':         2,
   'super':          0,
@@ -78,10 +77,11 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, ba
   if timeit: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
   if len(vars(args)):
     run = not args.print_only
-    if not do['profile']:
-      if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
-        x = '# ' + x
-        run = False
+    if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
+      if args.mode == 'process':
+        x, run = '# ' + x, False
+    elif args.mode == 'profile':
+        x, run = '# ' + x, False
     if background: x = x + ' &'
     do['cmds_file'].write(x + '\n')
     do['cmds_file'].flush()
@@ -94,6 +94,9 @@ def prn_line(f): exe_v0('echo >> %s' % f)
 def print_cmd(x, show=True):
   if show: C.printc(x)
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
+
+def exe_1line(x, field=None):
+  return "-1" if args.mode == 'profile' else C.exe_one_line(x, field)
 
 def grep(x, f=''): return "(egrep '%s' %s || true)" % (x, f) # grep with 0 exit status
 
@@ -275,8 +278,7 @@ def profile(log=False, out='run'):
     exe(perf + " annotate --stdio -n -l -i %s | c++filt | tee %s-code.log " \
       "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" %
       (data, base, base), '@annotate code', redir_out='2>/dev/null')
-    hottest = C.exe_one_line("sort -n %s-code.log | tail -1" % base, 0)
-    exe("egrep -w -5 '%s :' %s-code.log" % (hottest, base), '@hottest block')
+    exe("egrep -w -5 '%s :' %s-code.log" % (exe_1line("sort -n %s-code.log | tail -1" % base, 0), base), '@hottest block')
     if do['xed']: perf_script("-i %s -F insn --xed | %s " \
       "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
   
@@ -326,7 +328,7 @@ def profile(log=False, out='run'):
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
-      comm = C.exe_one_line(perf + " script -i %s -F comm | %s | tail -1"%(perf_data, sort2u), 1)
+      comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (perf_data, sort2u), 1)
     return perf_data, comm
   
   if en(8) and do['sample'] > 1:
@@ -350,17 +352,16 @@ def profile(log=False, out='run'):
         (data, comm, loops, rp('lbr_stats'), do['lbr-stats-tk'], info, hits, rp('ptage'), ips,
         sort2up, out, sort2up, out), "@instruction-mix for '%s'"%comm)
       exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
-      exe("tail -4 "+ips, "@top-3 hitcounts of basic-blocks to examine in "+hits)
+      if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
       exe("%s && tail %s" % (grep('code footprint', info), info), "@hottest loops & more stats in " + info)
       if do['loops'] and os.path.isfile(loops):
         prn_line(info)
-        cmd, top = '', min(do['loops'], int(C.exe_one_line('wc -l %s' % loops, 0)))
+        cmd, top = '', min(do['loops'], int(exe_1line('wc -l %s' % loops, 0)))
         do['loops'] = top
         while top > 1:
-          cmd += ' | tee >(%s %s >> %s) ' % (rp('loop_stats'),
-            C.exe_one_line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
+          cmd += ' | tee >(%s %s >> %s) ' % (rp('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
           top -= 1
-        cmd += ' | %s %s >> %s && echo' % (rp('loop_stats'), C.exe_one_line('tail -1 %s' % loops, 2)[:-1], info)
+        cmd += ' | %s %s >> %s && echo' % (rp('loop_stats'), exe_1line('tail -1 %s' % loops, 2)[:-1], info)
         perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, grep('IPC-most', info)),
           "@stats for top %d loops" % do['loops'])
       elif not os.path.isfile(loops): C.warn('file does not exist: %s' % loops)
@@ -380,7 +381,7 @@ def profile(log=False, out='run'):
     top = 0
     if not is_dsb: pass
     elif top == 1:
-      top_ip = C.exe_one_line("tail -2 %s.ips.log | head -1"%data, 2)
+      top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
       perf_script("-i %s -F +brstackinsn --xed "
         "| tee >(%s %s | tee -a %s.ips.log) " # asserts in skip_sample() only if piped!!
         "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data,
@@ -390,7 +391,7 @@ def profile(log=False, out='run'):
         "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), do['lbr-stats'], data), "@ stats on PEBS event")
     if top > 1:
       while top > 0:
-        top_ip = C.exe_one_line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1"%(data, top+1), 2)
+        top_ip = exe_1line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
         perf_script("-i %s -F +brstackinsn --xed "
           "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
         top -= 1
@@ -414,9 +415,11 @@ def build_kernel(dir='./kernels/'):
   if args.verbose > 2: exe(fixup("objdump -dw ./%s | grep -A%d pause | egrep '[ 0-9a-f]+:'"%(app, do['asm-dump'])), '@kernel ASM')
 
 def parse_args():
+  modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   ap = argparse.ArgumentParser(usage='do.py command [command ..] [options]', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '\
                   '\nsupported options: ' + C.commands_list())
+  ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('--pmu-tools', default='%s ./pmu-tools'%do['python'], help='use a custom pmu-tools')
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
@@ -460,14 +463,14 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
-  if not do['profile']: C.info('not profiling (using existent perf.data)')
+  if args.mode == 'process': C.info('post-processing only (not profiling)')
   if args.sys_wide:
     C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'record', 'lbr', 'pebs', 'stat-ipc'): do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
     args.profile_mask &= 0xFFB # disable system-wide profile-step
-  do_cmd = '%s # version %.3f' % (C.argv2str(), __version__)
+  do_cmd = '%s # version %.2f' % (C.argv2str(), __version__)
   C.log_stdout = '%s-out.txt' % ('run-default' if do['run'] == RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   cmds_file = '.%s.cmd' % uniq_name()

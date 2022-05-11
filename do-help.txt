@@ -10,6 +10,9 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
+  --mode [{profile,process,both}]
+                        analysis mode options: profile-only, (post)process-
+                        only or both (default: both)
   --perf PERF           use a custom perf tool (default: perf)
   --pmu-tools PMU_TOOLS
                         use a custom pmu-tools (default: /usr/bin/python

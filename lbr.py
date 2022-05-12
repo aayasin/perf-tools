@@ -5,12 +5,13 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.62
+__version__= 0.63
 
 import common as C
 import pmu
 import os, re, sys
 
+hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('DBG')
 verbose = os.getenv('VER')
 use_cands = os.getenv('USE_CANDS')
@@ -130,8 +131,7 @@ def detect_loop(ip, lines, loop_ipc,
         cycles, ipc = line_timing(lines[-1])
         inc(loop['IPC'], ipc)
         loop_cycles += cycles
-    if not loop['size'] and not loop['outer'] and len(lines)>2 and\
-      line_ip(lines[-1]) == loop['back']:
+    if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size = 0
       x = len(lines)-1
       while x >= 1:
@@ -378,10 +378,13 @@ def print_all(nloops=10, loop_ipc=0):
       lp = loops[loop_ipc]
       tot = print_hist(get_loop_hist(loop_ipc, 'IPC'))
       if tot:
-        lp['cyc/iter'] = '%.2f'%(loop_cycles/float(tot))
+        lp['cyc/iter'] = '%.2f' % (loop_cycles/float(tot))
         lp['full-loop_cycles%'] = ratio(loop_cycles, stat['total_cycles'])
       tot = print_hist(get_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0])))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
+      if hitcounts and lp['size']:
+        C.exe_cmd('egrep -B1 -A%d 0%x %s' % (lp['size'], loop_ipc, hitcounts),
+          'Hitcounts & ASM of loop %s' % hex(loop_ipc))
       find_print_loop(loop_ipc, sloops)
     else:
       C.warn('Loop %s was not observed'%hex(loop_ipc))

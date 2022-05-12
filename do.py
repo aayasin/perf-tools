@@ -68,13 +68,14 @@ do = {'run':        RUN_DEF,
 }
 args = argparse.Namespace()
 
-def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, background=False):
-  X=x.split()
-  if redir_out: redir_out=' %s'%redir_out
+def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, background=False, export=None):
+  X = x.split()
+  if redir_out: redir_out=' %s' % redir_out
   if not do['tee'] and redir_out: x = x.split('|')[0]
   if 'tee >(' in x: x = 'bash -c "%s"'%x.replace('"', '\\"')
   x = x.replace('  ', ' ')
   if timeit: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
+  if export: x = '%s %s' % (export, x)
   if len(vars(args)):
     run = not args.print_only
     if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
@@ -95,8 +96,7 @@ def print_cmd(x, show=True):
   if show: C.printc(x)
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
 
-def exe_1line(x, field=None):
-  return "-1" if args.mode == 'profile' else C.exe_one_line(x, field)
+def exe_1line(x, f=None): return "-1" if args.mode == 'profile' else C.exe_one_line(x, f)
 
 def grep(x, f=''): return "(egrep '%s' %s || true)" % (x, f) # grep with 0 exit status
 
@@ -245,8 +245,8 @@ def profile(log=False, out='run'):
       grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, flags.strip(), grep)
-  def perf_script(x, msg):
-    return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1))
+  def perf_script(x, msg, export=None):
+    return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1), export=export)
   def record_name(flags):
     return '%s%s'%(out, C.chop(flags, (' :/,=', 'cpu_core', 'cpu')))
   
@@ -363,7 +363,7 @@ def profile(log=False, out='run'):
           top -= 1
         cmd += ' | %s %s >> %s && echo' % (rp('loop_stats'), exe_1line('tail -1 %s' % loops, 2)[:-1], info)
         perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, grep('IPC-most', info)),
-          "@stats for top %d loops" % do['loops'])
+          "@stats for top %d loops" % do['loops'], export='PTOOLS_HITS=%s' % hits)
       elif not os.path.isfile(loops): C.warn('file does not exist: %s' % loops)
   
   if en(9) and do['sample'] > 2:

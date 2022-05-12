@@ -82,7 +82,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, background=False
   if msg:
     if '@' in msg: msg='\t'+msg.replace('@', '')
     else: msg = msg + ' ..'
-    printc(msg, color.BOLD)
+    if run: printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
   if log_stdout: x = x + ' | tee -a ' + log_stdout
@@ -106,7 +106,7 @@ def exe_one_line(x, field=None):
 import glob as python_glob
 def glob(regex):
   fs = python_glob.glob(regex)
-  if len(fs) == 0: error("could not find files: %s"%regex)
+  if len(fs) == 0: error("could not find files: %s" % regex)
   return sorted(fs)
 
 # OS
@@ -120,6 +120,10 @@ def os_installer():
 
 def check_executable(x):
   if not os.access(x, os.X_OK): error("'%s' is not executable" % x)
+
+def envfile(x):
+  x = os.getenv(x)
+  return x if x and os.path.isfile(x) else None
 
 # files
 #
@@ -193,22 +197,22 @@ def str2list(s):
   return ' '.join(s.split()).split(' ')
 
 def arg(num, default=None):
-  if len(sys.argv) <= num and not default: error("must provide %d parameters"%num)
+  if len(sys.argv) <= num and not default: error("must provide %d parameters" % num)
   a = sys.argv[num] if len(sys.argv) > num else default
   return a.replace('./', '') if num == 0 else a
 
 def argv2str(start=0):
   res = []
   for a in sys.argv[start:]:
-    res.append("\"%s\""%a if "'" in a else "'%s'"%a if (' ' in a or a == '') else a)
+    res.append("\"%s\"" % a if "'" in a else "'%s'" % a if (' ' in a or a == '') else a)
   return ' '.join(res)
 
 def args_parse(d, args):
   for x in args.split(','):
     if len(x):
-      assert '=' in x, "expect '=' as deliminer in '%s'"%args
+      assert '=' in x, "expect '=' as deliminer in '%s'" % args
       arg, val = x.split('=')
-      assert arg in d, "unknown option '%s' in '%s'!"%(arg, args)
+      assert arg in d, "unknown option '%s' in '%s'!" % (arg, args)
       d[arg] = int(val) if val.isdigit() else val
   return d
 
@@ -226,7 +230,7 @@ def command_basename(comm, iterations=None):
     name[0] = name[0].split('/')[-1].replace('.sh', '')
   if len(name) == 1 and ('kernels' in comm or iterations): name.append(iterations)
   namestr = name.pop(0)
-  for x in name: namestr += "%s%s"%('' if x.startswith('-') else '-', x)
+  for x in name: namestr += "%s%s" % ('' if x.startswith('-') else '-', x)
   return chop(namestr, './~<>=\'{};|')
 
 # stats

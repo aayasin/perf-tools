@@ -1,4 +1,5 @@
 ![perf-tools](https://raw.githubusercontent.com/aayasin/perf-tools/master/perf-tools-logo.png)
+
 A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
 
 ## Overview
@@ -89,5 +90,6 @@ Ice Lake | 5.10
 Rocket Lake | 5.11
 Alder Lake | 5.13
 Raptor Lake | 5.18
+Sapphire Rapids | 5.18
 
 Besides, perf tool version 5.14 or newer is required. See `do.py --install-perf` for more.

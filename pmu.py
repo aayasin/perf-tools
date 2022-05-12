@@ -50,7 +50,7 @@ def cpu(what):
 
 def cpu_msrs():
   msrs = ['0x48', '0x8b', '0x1a4']
-  if server(): msrs += ['0x6d']
+  if server() and v5p(): msrs += ['0x6d']
   return msrs
 
 def cpu_peak_kernels(widths=range(4, 7)):

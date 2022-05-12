@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Abstraction of Intel Architecture and its Performance Monitoring Unit (PMU)
 # Author: Ahmad Yasin
-# edited: March 2022
+# edited: May 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -27,6 +27,7 @@ def goldencove():   return alderlake() or sapphire()
 def perfmetrics():  return icelake() or goldencove()
 # Icelake onward PMU, e.g. Intel PerfMon Version 5+
 def v5p(): return perfmetrics()
+def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 
 # events
 def lbr_event():
@@ -46,6 +47,11 @@ def cpu(what):
     cpu_state = tl_cpu.CPU((), False, tl_cpu.Env())
   return {'smt-on': cpu_state.ht}[what]
 # cpu.state = None
+
+def cpu_msrs():
+  msrs = ['0x48', '0x8b', '0x1a4']
+  if server(): msrs += ['0x6d']
+  return msrs
 
 def cpu_peak_kernels(widths=range(4, 7)):
   return ['peak%dwide' % x for x in widths]

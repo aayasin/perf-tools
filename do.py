@@ -4,7 +4,6 @@
 # edited: May 2022
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
-#   MSR 0x6d for servers (LLC prefetch)
 #   move profile code to a seperate module, arg for output dir
 #   toplevl 3-levels default Icelake onwards
 #   quiet mode
@@ -42,7 +41,7 @@ do = {'run':        RUN_DEF,
   'lbr-stats-tk':   '- 0 20 1',
   'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
   'msr':            0,
-  'msrs':           ('0x48', '0x8b', '0x1a4'),
+  'msrs':           pmu.cpu_msrs(),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX",
   'numactl':        1,
   'objdump':        './binutils-gdb/binutils/objdump',

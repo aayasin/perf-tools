@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # stats re path to precise events
 # Author: Ahmad Yasin
-# edited: April 2022
+# edited: May 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
@@ -10,8 +10,8 @@ from lbr import *
 import common as C
 import os
 
-dump_only = os.getenv('DUMP')
-stop = os.getenv('STOP')
+dump_only = os.getenv('LBR_DUMP')
+stop = os.getenv('LBR_STOP')
 c = {x: 0 for x in ('loop_head', 'loop_seq', 'loop_jmp2mid', 'loop_jmp2head', 'sequential', 'total')}
 
 # usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL] [ip-of-loop=0] [num-loops=10] [enable-loop-stats=0] [event=LBR_Event]

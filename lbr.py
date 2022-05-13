@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.63
+__version__= 0.64
 
 import common as C
 import pmu
@@ -14,7 +14,7 @@ import os, re, sys
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('DBG')
 verbose = os.getenv('VER')
-use_cands = os.getenv('USE_CANDS')
+use_cands = os.getenv('LBR_USE_CANDS')
 
 def hex(ip): return '0x%x'%ip if ip else '-'
 def inc(d, b): d[b] = d.get(b, 0) + 1
@@ -86,9 +86,10 @@ def loop_stats(line, loop_ipc, tc_state):
     loop_stats.id = line_ip(line)
     loop_stats.atts = ''
   if loop_stats.id:
-    if not is_in_loop(line_ip(line), loop_stats.id): #just exited a loop
+    if not is_in_loop(line_ip(line), loop_stats.id): # just exited a loop
       if len(loop_stats.atts) > len(loops[loop_stats.id]['attributes']):
         loops[loop_stats.id]['attributes'] = loop_stats.atts
+        if debug and int(debug, 16) == loop_stats.id: print(loop_stats.atts, stat['total'])
       loop_stats.atts = ''
       loop_stats.id = None
     else:
@@ -106,45 +107,59 @@ bwd_br_tgts = [] # better make it local to read_sample..
 loop_cands = []
 def detect_loop(ip, lines, loop_ipc,
   MOLD=4e4): #Max Outer Loop Distance
-  global loop_cycles, bwd_br_tgts, loop_cands # unlike nonlocal, global works in python2 too!
-  def find_block_ip():
-    x = len(lines)-2
+  global bwd_br_tgts, loop_cands # unlike nonlocal, global works in python2 too!
+  def find_block_ip(x = len(lines)-2):
     while x>=0:
       if is_taken(lines[x]):
-        return line_ip(lines[x+1])
+        return line_ip(lines[x+1]), x
       x -= 1
-    return 0
+    return 0, -1
   def has_ip(at):
     while at > 0:
       if is_callret(lines[at]): return False
       if line_ip(lines[at]) == ip: return True
       at -= 1
     return False
+  def iter_update():
+    #inc(loop['BK'], hex(line_ip(lines[-1])))
+    if ip != loop_ipc: return
+    if not 'IPC' in loop: loop['IPC'] = {}
+    if not has_timing(lines[-1]): return
+    cycles = 0
+    begin, at = find_block_ip()
+    while begin:
+      if begin == ip:
+        if cycles == 0: inc(loop['IPC'], ipc) # IPC is supported for loops w/o takens
+        cycles += line_timing(lines[-1])[0]
+        glob['loop_cycles'] += cycles
+        break
+      else:
+        if has_timing(lines[at]):
+          cycles += line_timing(lines[at])[0]
+          begin, at = find_block_ip(at-1)
+        else: break
   
   if ip in loops:
     loop = loops[ip]
     loop['hotness'] += 1
-    if ip == loop_ipc and is_taken(lines[-1]):
-      if not 'IPC' in loop: loop['IPC'] = {}
-      begin = find_block_ip()
-      if begin == ip and has_timing(lines[-1]):
-        cycles, ipc = line_timing(lines[-1])
-        inc(loop['IPC'], ipc)
-        loop_cycles += cycles
+    if is_taken(lines[-1]): iter_update()
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
-      size = 0
-      x = len(lines)-1
+      size, takens, ntakens = 1, 0, 0
+      x = len(lines)-2
       while x >= 1:
         size += 1
+        if is_taken(lines[x]):  takens += 1
+        elif '\sj' in lines[x]: ntakens += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
-          loop['size'] = size
+          loop['size'], loop['TKs'], loop['NTs'] = size, takens, ntakens
+          if debug and int(debug, 16) == ip: print(size, stat['total'])
           break
         elif inst_ip < ip or inst_ip > loop['back']:
           break
         x -= 1
     if not loop['entry-block'] and not is_taken(lines[-1]):
-      loop['entry-block'] = find_block_ip()
+      loop['entry-block'] = find_block_ip()[0]
     return
   
   # only simple loops, of these attributes, are supported:
@@ -171,7 +186,7 @@ def detect_loop(ip, lines, loop_ipc,
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(hex(ip))
       loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'attributes': '',
-        'entry-block': 0 if xip > ip else find_block_ip(),
+        'entry-block': 0 if xip > ip else find_block_ip()[0], #'BK': {hex(xip): 1, },
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
       return
@@ -192,7 +207,7 @@ stat['IPs'] = {}
 stat['events'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
-loop_cycles=0
+glob = {'loop_cycles': 0}
 dsb = {}
 footprint = set()
 
@@ -207,13 +222,15 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
     #dsb_heat_en = 1; len(dsb) == dsb_heat_en
     dsb['heatmap'] = {}
     if debug: C.printf('DBG=%s\n' % debug)
+  tick = int(os.getenv('LBR_TICK')) if os.getenv('LBR_TICK') else 1000
+  if loop_ipc: tick *= 10
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
     xip, timestamp = None, None
     tc_state = 'new'
     stat['total'] += 1
-    if stat['total'] % (1e4 if loop_ipc else 1000) == 0: C.printf('.')
+    if stat['total'] % tick == 0: C.printf('.')
     while True:
       line = read_line()
       # input ended
@@ -378,12 +395,12 @@ def print_all(nloops=10, loop_ipc=0):
       lp = loops[loop_ipc]
       tot = print_hist(get_loop_hist(loop_ipc, 'IPC'))
       if tot:
-        lp['cyc/iter'] = '%.2f' % (loop_cycles/float(tot))
-        lp['full-loop_cycles%'] = ratio(loop_cycles, stat['total_cycles'])
+        lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / float(tot))
+        lp['full-loop_cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
       tot = print_hist(get_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0])))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
-      if hitcounts and lp['size']:
-        C.exe_cmd('egrep -B1 -A%d 0%x %s' % (lp['size'], loop_ipc, hitcounts),
+      if hitcounts and lp['size'] and lp['TKs'] == 0:
+        C.exe_cmd(C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
           'Hitcounts & ASM of loop %s' % hex(loop_ipc))
       find_print_loop(loop_ipc, sloops)
     else:

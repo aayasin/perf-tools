@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.65
+__version__= 0.66
 
 import common as C
 import pmu
@@ -133,6 +133,7 @@ def detect_loop(ip, lines, loop_ipc,
         if cycles == 0: inc(loop['IPC'], line_timing(lines[-1])[1]) # IPC is supported for loops w/o takens
         cycles += line_timing(lines[-1])[0]
         glob['loop_cycles'] += cycles
+        glob['loop_iters'] += 1
         break
       else:
         if has_timing(lines[at]):
@@ -150,7 +151,7 @@ def detect_loop(ip, lines, loop_ipc,
       while x >= 1:
         size += 1
         if is_taken(lines[x]):  takens += 1
-        elif '\sj' in lines[x]: ntakens += 1
+        elif get_inst(lines[x]).startswith('j'): ntakens += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
           loop['size'], loop['TKs'], loop['NTs'] = size, takens, ntakens
@@ -208,7 +209,7 @@ stat['IPs'] = {}
 stat['events'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
-glob = {'loop_cycles': 0}
+glob = {x: 0 for x in ('loop_cycles', 'loop_iters')}
 dsb = {}
 footprint = set()
 
@@ -348,6 +349,7 @@ def is_label(line):   return line.strip().endswith(':')
 def is_loop(line):    return line_ip(line) in loops
 def is_taken(line):   return '#' in line
 def is_in_loop(ip, loop): return ip >= loop and ip <= loops[loop]['back']
+def get_inst(l):      return C.str2list(l)[1]
 def get_loop(ip):     return loops[ip] if ip in loops else None
 
 def get_taken(sample, n):
@@ -395,9 +397,8 @@ def print_all(nloops=10, loop_ipc=0):
     if loop_ipc in loops:
       lp = loops[loop_ipc]
       tot = print_hist(get_loop_hist(loop_ipc, 'IPC'))
-      if tot:
-        lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / float(tot))
-        lp['full-loop_cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
+      lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / glob['loop_iters'])
+      lp['full-loop_cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
       tot = print_hist(get_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0])))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
       if hitcounts and lp['size'] and lp['TKs'] == 0:
@@ -456,12 +457,12 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   if not loop_stats_en: del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
-  for x in ('hotness', 'size'): del loop[x]
-  for x in ('back', 'entry-block'):
-    printl('%s: %s, '%(x, hex(loop[x])), '')
-    del loop[x]
-  for x in ('inn', 'out'): set2str(x + 'er-loops')
-  for x in ('IPC', 'tripcount'):
+  dell = ['hotness', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
+  for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex(loop[x])), '')
+  for x, y in (('inn', 'out'), ('out', 'inn')):
+    if loop[x + 'er'] > 0: set2str(y + 'er-loops')
+    else: dell += [y + 'er-loops']
+  for x in dell:
     if x in loop: del loop[x]
   printl(C.chop(str(loop), "'{}\"") + ']')
 

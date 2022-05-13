@@ -125,6 +125,10 @@ def envfile(x):
   x = os.getenv(x)
   return x if x and os.path.isfile(x) else None
 
+def print_env(std=sys.stderr):
+  for k, v in sorted(os.environ.items()):
+    std.write('%s: %s\n' % (k, v))
+
 # files
 #
 def file2lines(filename, fail=False):
@@ -140,6 +144,10 @@ def file2lines(filename, fail=False):
 def file2str(f):
   out = file2lines(f)
   return out[0].replace('\n', '') if out[0] else None
+
+# grep with 0 exit status
+def grep(what, file='', flags=''):
+  return "(egrep %s '%s' %s || true)" % (flags, what, file)
 
 import csv
 def read_perf_toplev(filename):

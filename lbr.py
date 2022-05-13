@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.64
+__version__= 0.65
 
 import common as C
 import pmu
@@ -94,6 +94,7 @@ def loop_stats(line, loop_ipc, tc_state):
       loop_stats.id = None
     else:
       mark(r"(jmp|call)\s%", 'indirect')
+      mark(r"[^k]s[sdh]([a-z])\s[\sa-z0-9,\(\)%%]+mm", 'scalar-fp')
       for i in range(loop_stats_vec):
         mark(r"[^k]p[sdh]\s+" + vec_reg(i), vec_len(i) + '-fp')
         mark(r"\s%sp.*%s" % ('(v)' if i==0 else 'v', vec_reg(i)), vec_len(i) + '-int')
@@ -129,7 +130,7 @@ def detect_loop(ip, lines, loop_ipc,
     begin, at = find_block_ip()
     while begin:
       if begin == ip:
-        if cycles == 0: inc(loop['IPC'], ipc) # IPC is supported for loops w/o takens
+        if cycles == 0: inc(loop['IPC'], line_timing(lines[-1])[1]) # IPC is supported for loops w/o takens
         cycles += line_timing(lines[-1])[0]
         glob['loop_cycles'] += cycles
         break

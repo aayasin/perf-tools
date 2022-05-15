@@ -14,7 +14,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.99
+__version__= 1.00
 
 import argparse, os.path, sys
 import common as C
@@ -36,13 +36,13 @@ do = {'run':        RUN_DEF,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'forgive':        0,
   'gen-kernel':     1,
-  'loops':          3,
+  'loops':          5,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
   'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
-  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+CPU_Utilization,+Time,+MUX",
+  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,+MUX",
   'numactl':        1,
   'objdump':        './binutils-gdb/binutils/objdump',
   'package-mgr':    C.os_installer(),
@@ -50,6 +50,7 @@ do = {'run':        RUN_DEF,
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003'%cpu,
   'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
+  'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', # ,cycles:G
   'perf-stat-ipc':  '-- perf stat -e instructions,cycles',
@@ -57,11 +58,12 @@ do = {'run':        RUN_DEF,
   'pmu':            pmu.name(),
   'python':         sys.executable,
   'repeat':         3,
+  'reprocess':      0,
   'sample':         2,
   'super':          0,
   'tee':            1,
   'toplev':         TOPLEV_DEF,
-  'toplev-levels':  2,
+  'levels':         2,
   'toplev-full':    '-vl6',
   'xed':            1,
 }
@@ -71,10 +73,9 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, ba
   X = x.split()
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee'] and redir_out: x = x.split('|')[0]
-  if 'tee >(' in x: x = 'bash -c "%s"'%x.replace('"', '\\"')
-  x = x.replace('  ', ' ')
+  if 'tee >(' in x: x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
+  x = x.replace('  ', ' ').strip()
   if timeit: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
-  if export: x = '%s %s' % (export, x)
   if len(vars(args)):
     run = not args.print_only
     if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
@@ -98,6 +99,8 @@ def print_cmd(x, show=True):
 def exe_1line(x, f=None): return "-1" if args.mode == 'profile' else C.exe_one_line(x, f)
 
 def grep(x, f=''): return "(egrep '%s' %s || true)" % (x, f) # grep with 0 exit status
+def warn_file(x):
+  if not args.mode == 'profile' and not os.path.isfile(x): C.warn('file does not exist: %s' % x)
 
 def rp(x): return os.path.join(os.path.dirname(__file__), x)
 
@@ -192,12 +195,13 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   exe("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME' >> " + out)
   for f in ('/sys/kernel/mm/transparent_hugepage/enabled', '/proc/sys/vm/nr_hugepages', '/proc/sys/vm/nr_overcommit_hugepages'):
     prn_sysfile(f, out)
+  exe("env > setup-env.log")
   new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
     for m in do['msrs']: exe('echo "MSR %5s:\t%16s" >> '%(m, read_msr(m)) + out)
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
-  exe("dmesg -T | tee %s | %s >> %s && %s | tail -1 >> %s" % (d, grep('Performance E|micro'), out, grep('BIOS ', d), out))
+  exe("dmesg -T | tee %s | %s >> %s && %s | tail -1 >> %s" % (d, C.grep('Performance E|micro'), out, C.grep('BIOS ', d), out))
   new_line()          #PMU
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
   exe('%s --version >> '%args.perf + out)
@@ -244,7 +248,8 @@ def profile(log=False, out='run'):
       grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, flags.strip(), grep)
-  def perf_script(x, msg, export=None):
+  def perf_script(x, msg, export=''):
+    if do['perf-scr']: export += ' LBR_STOP=%d' % (1e4 * do['perf-scr'])
     return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1), export=export)
   def record_name(flags):
     return '%s%s'%(out, C.chop(flags, (' :/,=', 'cpu_core', 'cpu')))
@@ -282,7 +287,9 @@ def profile(log=False, out='run'):
       "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
   
   toplev+= (args.pmu_tools + '/toplev.py --no-desc')
-  if pmu.alderlake() and do['core']: toplev+= ' --cputype=core'
+  if do['core']:
+    ##if pmu.perfmetrics(): toplev += ' --pinned'
+    if pmu.alderlake():   toplev += ' --cputype=core'
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
   grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)|##placeholder##' "
   grep_nz= grep_NZ
@@ -295,9 +302,9 @@ def profile(log=False, out='run'):
   cmd, log = toplev_V(do['toplev-full'])
   if en(4): exe(cmd + ' | tee %s | %s'%(log, grep_bk), 'topdown full')
   
-  cmd, log = toplev_V('-vl%d'%do['toplev-levels'], tlargs=args.toplev_args+' -r%d' % do['repeat'])
+  cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, do['repeat']))
   if en(5): exe(cmd + ' | tee %s | %s' % (log, grep_nz),
-              'topdown %d-levels %d runs' % (do['toplev-levels'], do['repeat']))
+              'topdown %d-levels %d runs' % (do['levels'], do['repeat']))
   
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
@@ -323,7 +330,7 @@ def profile(log=False, out='run'):
     assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag] or do['forgive'], 'No unfiltered LBRs! tag=%s'%tag
     perf_data = '%s.perf.data' % record_name(do['perf-%s'%tag])
     exe(perf + ' record %s -o %s %s -- %s' % (do['perf-%s'%tag], perf_data, do['perf-stat-ipc'], r), 'sampling w/ '+tag.upper())
-    if not os.path.isfile(perf_data): C.warn('file does not exist: %s' % perf_data)
+    warn_file(perf_data)
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
@@ -334,26 +341,31 @@ def profile(log=False, out='run'):
     assert pmu.lbr_event()[:-1] in do['perf-lbr'], 'Incorrect event for LBR in: '+do['perf-lbr']
     data, comm = perf_record('lbr', comm)
     info = '%s.info.log'%data
-    exe(perf +" report -i %s | grep -A11 'Branch Statistics:' | tee %s"%(data, info), "@stats")
-    if os.path.isfile(perf_stat_log):
-      exe("egrep '  branches|instructions' %s >> %s"%(perf_stat_log, info))
+    if not os.path.isfile(info) or do['reprocess']:
+      exe(perf +" report -i %s | grep -A11 'Branch Statistics:' | tee %s" % (data, info), "@stats")
+      if os.path.isfile(perf_stat_log): exe("egrep '  branches|instructions' %s >> %s" % (perf_stat_log, info))
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
       loops = '%s.loops.log' % data
-      exe_v0('printf "\n# LBR-based Statistics:\n#\n">> %s'%info)
+      lbr_hdr = '# LBR-based Statistics:'
+      exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
         "| %s %s" % (data, comm, './lbr_stats', do['lbr-stats-tk']))
-      perf_script("-i %s -F +brstackinsn --xed -c %s "
-        "| tee >(LBR_LOOPS_LOG=%s %s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
-        "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
-        "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail" %
-        (data, comm, loops, rp('lbr_stats'), do['lbr-stats-tk'], info, hits, rp('ptage'), ips,
-        sort2up, out, sort2up, out), "@instruction-mix for '%s'"%comm)
-      exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'"%comm)
-      if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
-      exe("%s && tail %s" % (grep('code footprint', info), info), "@hottest loops & more stats in " + info)
+      if not os.path.isfile(hits) or do['reprocess']:
+        lbr_env = "LBR_LOOPS_LOG=%s PTOOLS_CYCLES=%s" % (loops, exe_1line('grep cycles %s | grep -v atom | tail -1' % C.log_stdout, 0).replace(',', ''))
+        perf_script("-i %s -F +brstackinsn --xed -c %s "
+          "| tee >(%s %s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
+          "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
+          "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail" %
+          (data, comm,  lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info,  hits, rp('ptage'), ips,
+          sort2up, out, sort2up, out), "@instruction-mix for '%s'" % comm)
+        exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'" % comm)
+        if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
+        exe("%s && tail %s" % (C.grep('code footprint', info), info), "@hottest loops & more stats in " + info)
+      else: exe('head -42 %s > .1.log && mv .1.log %s' % (info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and os.path.isfile(loops):
+        if do['perf-scr']: info = '%s%d0k.info.log' % (data, do['perf-scr'])
         prn_line(info)
         cmd, top = '', min(do['loops'], int(exe_1line('wc -l %s' % loops, 0)))
         do['loops'] = top
@@ -361,9 +373,11 @@ def profile(log=False, out='run'):
           cmd += ' | tee >(%s %s >> %s) ' % (rp('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
           top -= 1
         cmd += ' | %s %s >> %s && echo' % (rp('loop_stats'), exe_1line('tail -1 %s' % loops, 2)[:-1], info)
-        perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, grep('IPC-most', info)),
-          "@stats for top %d loops" % do['loops'], export='PTOOLS_HITS=%s' % hits)
-      elif not os.path.isfile(loops): C.warn('file does not exist: %s' % loops)
+        print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, rp('loop_stats'),
+          exe_1line('tail -1 %s' % loops, 2)[:-1], info))
+        perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, C.grep('cyc/iter', info)),
+          "@stats for top %d loops" % do['loops'], export='PTOOLS_HITS=%s' % (hits,))
+      else: warn_file(loops)
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm)
@@ -435,7 +449,7 @@ def parse_args():
   ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
     help='skip no-multiplexing reruns')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, ' \
-    '2:+verbose-on metrics|build, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, 5:+event-groups(ALL)')
+    '2:+verbose-on metrics|build, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, 5:+event-groups, .. 9:anything')
   ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS, action='append') # override global variables with python expression
   x = ap.parse_args()
   return x
@@ -450,7 +464,6 @@ def main():
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
-  if args.verbose > 1: args.toplev_args += ' -v'
   if args.app_name: do['run'] = args.app_name
   if args.print_only and args.verbose == 0: args.verbose = 1
   do['nodes'] += ("," + args.metrics)
@@ -477,8 +490,8 @@ def main():
     exe_v0('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()))
   do['cmds_file'] = open(cmds_file, 'w')
   do['cmds_file'].write('# %s\n' % do_cmd)
-  if args.verbose > 3: C.printc(str(args))
-  if args.verbose > 4: C.printc(str(do))
+  if args.verbose > 5: C.printc(str(args))
+  if args.verbose > 6: C.printc(str(do))
   
   for c in args.command:
     if   c == 'forgive-me':   pass

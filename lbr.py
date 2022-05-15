@@ -136,7 +136,7 @@ def detect_loop(ip, lines, loop_ipc,
     while begin:
       if begin == ip:
         if cycles == 0: inc(loop['IPC'], line_timing(lines[-1])[1]) # IPC is supported for loops execution w/ no takens
-        if 'Conds' in loop:
+        if 'Conds' in loop and 'Cond_polarity' in loop:
           for c in loop['Cond_polarity'].keys(): loop['Cond_polarity'][c]['tk' if cycles else 'nt'] += 1
         cycles += line_timing(lines[-1])[0]
         glob['loop_cycles'] += cycles
@@ -162,7 +162,7 @@ def detect_loop(ip, lines, loop_ipc,
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
           loop['size'], loop['TKs'], loop['Conds'] = size, takens, len(conds)
-          if conds:
+          if len(conds):
             loop['Cond_polarity'] = {}
             for c in conds: loop['Cond_polarity'][c] = {'tk': 0, 'nt': 0}
           if debug and int(debug, 16) == ip: print(size, stat['total'])

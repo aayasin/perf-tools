@@ -33,31 +33,33 @@ A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
 * to turn-off SMT (CPU hyper-threading), invoke `./do.py disable-smt`; don't forget to re-enable it once done, e.g. `./do.py enable-smt`
 * `./do.py disable-prefetches` to disable hardware prefetches. Ditto re-enable comment for this/next commands.
 * `./do.py enable-fix-freq` to use fixed-frequency (in paritcular disables Turbo).
-* `./do.py disable-atom` to disable efficient-cores in Hybrid processors.
+* `./do.py disable-atom` to disable E-cores in Hybrid processors.
 
 ### profiling
 First, edit `run.sh` to invoke your application or use the `-a '<your app and its args>'`, alternatively.
+System-wide profiling is supported as well. 
 * to profile, simply `./do.py profile` which includes multiple steps:
   * **logging** step: collects the system setup info
   * **basic counting & sampling** steps: collect key metrics like time or CPUs utilized,
-    via basic profiling and output top CPU-time consuming commands/modules/functions as well as
-    the source/disassembly for top function(s).
+    via basic profiling and output top CPU-time consuming commands/modules/functions, 
+    their call-stack as well as the disassembly of top hotspot. 
   * **topdown profiling** steps: collect reduced tree, auto drill-down and full-tree collections with multiple re-runs. 
-  * **advanced sampling** steps: do more profiling using advanced capabilities of the PMU, and output certain reports 
+  * **advanced sampling** steps: deeper profiling using advanced capabilities of the PMU, and output certain reports 
     at the assembly level (of hottest command).
-    Example reports include instruction-mixes, hitcounts (basic-block execution counts), paths to precise
-    events and related-stats. Note some of these steps are disabled by default.
+    Example reports include instruction-mixes, hitcounts (basic-block execution counts), loops,
+    as well as stats on hottest loops (identifying loops has some restrictions). 
+    Another precise event step is available but is disabled by default.
 
   A filtered output will be dumped on screen while all logs are saved to the current directory.  
-  Use `--profile-mask 42`, as an example, to invoke subset of all steps,
-    or `-N` to disable the step with re-runs.  
+  Use `--profile-mask 42`, as an example, to invoke subset of all steps.  
   For topdown profiling and advanced sampling, see [system requirements](#head3sys).
 * `./do.py log` will only log hardware and software setup.
-* `./do.py setup-perf profile` will do the setup and default profiling steps at once.
+* `./do.py setup-all` will setup all required tool (fetch and build those needed. Internet access required).
+* `./do.py setup-perf profile` will just setup perf and then do default profiling (multiple commands can be used at once).
 * `./do.py tar` will archive all logs into a shareable tar file.
 * `./do.py all` will setup perf before doing all above profiling steps.
-* `./do.py profile -pm 222 -v1` will do selected profile steps - *per-app counting, topdown 2-levels,
-  sampling w/ PEBS* - and print underlying commands as well.
+* `./do.py profile -pm 13a -v1` will do selected profile steps - *per-app counting, sampling, topdown 2-levels,
+  sampling w/ LBR* - and print underlying commands as well.
 
 ### kernels (microbenchmarks)
 * to build pre-defined ones, simply `cd kernels/ && ./build.sh`, or

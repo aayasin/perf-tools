@@ -1,5 +1,7 @@
 ![perf-tools](https://raw.githubusercontent.com/aayasin/perf-tools/master/perf-tools-logo.png)
 
+![Python linting](https://github.com/aayasin/perf-tools/workflows/Python%20linting/badge.svg)
+
 A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
 
 ## Overview

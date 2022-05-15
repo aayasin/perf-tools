@@ -121,6 +121,10 @@ def os_installer():
 def check_executable(x):
   if not os.access(x, os.X_OK): error("'%s' is not executable" % x)
 
+def env2str(x):
+  y = os.getenv(x)
+  return '%s=%s' % (x, y) if y else ''
+
 def envfile(x):
   x = os.getenv(x)
   return x if x and os.path.isfile(x) else None

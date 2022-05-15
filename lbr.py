@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.66
+__version__= 0.7
 
 import common as C
 import pmu
@@ -82,7 +82,13 @@ def loop_stats(line, loop_ipc, tc_state):
   def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
   def vec_len(i): return 'vec%d' % (128 * (i + 1))
   # loop-body stats, FIXME: on the 1st encoutered loop in a new sample for now
-  if loop_stats_en and tc_state == 'new' and is_loop(line):
+  # TODO: improve perf of loop_stats invocation
+  #if (glob['loop_stats_en'] == 'No' or
+  #  (glob['loop_stats_en'] == 'One' and line_ip(line) != loop_ipc and tc_state == 'new')):
+  #  #not (is_loop(line) or (type(tcstate) == int)))):
+  #  return tc_state
+  #elif tc_state == 'new' and is_loop(line):
+  if glob['loop_stats_en'] and tc_state == 'new' and is_loop(line):
     loop_stats.id = line_ip(line)
     loop_stats.atts = ''
   if loop_stats.id:
@@ -101,7 +107,6 @@ def loop_stats(line, loop_ipc, tc_state):
   return tripcount(line_ip(line), loop_ipc, tc_state)
 loop_stats.id = None
 loop_stats.atts = ''
-loop_stats_en = False
 loop_stats_vec = 3 if pmu.cpu_has_feature('avx512vl') else 2
 
 bwd_br_tgts = [] # better make it local to read_sample..
@@ -130,7 +135,9 @@ def detect_loop(ip, lines, loop_ipc,
     begin, at = find_block_ip()
     while begin:
       if begin == ip:
-        if cycles == 0: inc(loop['IPC'], line_timing(lines[-1])[1]) # IPC is supported for loops w/o takens
+        if cycles == 0: inc(loop['IPC'], line_timing(lines[-1])[1]) # IPC is supported for loops execution w/ no takens
+        if 'Conds' in loop:
+          for c in loop['Cond_polarity'].keys(): loop['Cond_polarity'][c]['tk' if cycles else 'nt'] += 1
         cycles += line_timing(lines[-1])[0]
         glob['loop_cycles'] += cycles
         glob['loop_iters'] += 1
@@ -146,15 +153,18 @@ def detect_loop(ip, lines, loop_ipc,
     loop['hotness'] += 1
     if is_taken(lines[-1]): iter_update()
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
-      size, takens, ntakens = 1, 0, 0
+      size, takens, conds = 1, 0, []
       x = len(lines)-2
       while x >= 1:
         size += 1
-        if is_taken(lines[x]):  takens += 1
-        elif get_inst(lines[x]).startswith('j'): ntakens += 1
+        if is_taken(lines[x]): takens += 1
+        if re.match(r"\s+\S+\s+j[^m]", lines[x]): conds += [line_ip(lines[x])]
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
-          loop['size'], loop['TKs'], loop['NTs'] = size, takens, ntakens
+          loop['size'], loop['TKs'], loop['Conds'] = size, takens, len(conds)
+          if conds:
+            loop['Cond_polarity'] = {}
+            for c in conds: loop['Cond_polarity'][c] = {'tk': 0, 'nt': 0}
           if debug and int(debug, 16) == ip: print(size, stat['total'])
           break
         elif inst_ip < ip or inst_ip > loop['back']:
@@ -215,15 +225,15 @@ footprint = set()
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
                 loop_ipc=0, lp_stats_en=False, event = LBR_Event):
-  global lbr_events, size_sum, bwd_br_tgts, loop_stats_en
+  global lbr_events, size_sum, bwd_br_tgts
   valid, lines, bwd_br_tgts = 0, [], []
   size_stats_en = skip_bad and not labels
-  loop_stats_en = lp_stats_en
+  glob['loop_stats_en'] = lp_stats_en
   edge_en = event.startswith(LBR_Event) and not ip_filter and not loop_ipc # config good for edge-profile
   if stat['total']==0 and edge_en and pmu.dsb_msb() and not pmu.cpu('smt-on'):
     #dsb_heat_en = 1; len(dsb) == dsb_heat_en
     dsb['heatmap'] = {}
-    if debug: C.printf('DBG=%s\n' % debug)
+  if stat['total']==0 and debug: C.printf('DBG=%s\n' % debug)
   tick = int(os.getenv('LBR_TICK')) if os.getenv('LBR_TICK') else 1000
   if loop_ipc: tick *= 10
   
@@ -253,7 +263,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         if not ev in lbr_events:
           lbr_events += [ev]
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
-          if len(lbr_events) == 1: x += ' primary= %s' % event
+          if len(lbr_events) == 1: x += ' primary= %s %s' % (event, C.env2str('LBR_STOP'))
           if ip_filter: x += ' ip_filter= %s' % ip_filter
           if loop_ipc: x += ' loop= %s' % hex(loop_ipc)
           C.printf(x+'\n')
@@ -390,6 +400,7 @@ def print_hist(hist_t):
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   if not loop_ipc: print('LBR samples:', stat)
+  if os.getenv('PTOOLS_CYCLES'): print('LBR cycles coverage (scaled by 1K): %s' % ratio(1e3 * stat['total_cycles'], int(os.getenv('PTOOLS_CYCLES'))))
   if len(footprint): print('code footprint estimate: %.2f KB\n' % (len(footprint) / 16.0))
   if len(dsb): print_hist((dsb['heatmap'], 'DSB-Heatmap'))
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
@@ -398,7 +409,10 @@ def print_all(nloops=10, loop_ipc=0):
       lp = loops[loop_ipc]
       tot = print_hist(get_loop_hist(loop_ipc, 'IPC'))
       lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / glob['loop_iters'])
-      lp['full-loop_cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
+      lp['FL-cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
+      if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1 and lp['TKs'] < 2:
+        for c in lp['Cond_polarity'].keys():
+          lp['%s_taken' % hex(c)] = ratio(lp['Cond_polarity'][c]['tk'], lp['Cond_polarity'][c]['tk'] + lp['Cond_polarity'][c]['nt'])
       tot = print_hist(get_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0])))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
       if hitcounts and lp['size'] and lp['TKs'] == 0:
@@ -437,9 +451,9 @@ def find_print_loop(ip, sloops):
 
 def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   if not isinstance(ip, int): ip = int(ip, 16) #should use (int, long) but fails on python3
-  def printl(s, end='\n'): return print(s, file=print_to, end=end)
+  def printl(s, end=''): return print(s, file=print_to, end=end)
   if not ip in loops:
-    printl('No loop was detected at %s!'%hex(ip))
+    printl('No loop was detected at %s!' % hex(ip), '\n')
     return
   loop = loops[ip].copy()
   def set2str(s, top=0 if detailed else 3):
@@ -452,19 +466,23 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
         top -= 1
       new.add('.. %d more'%n)
     loop[s] = C.chop(str(sorted(new, reverse=True)), (")", 'set('))
-  printl('Loop#%d: [ip: %s, hotness: %6d, size: %s, ' %
-    (num, hex(ip), loop['hotness'], '%d'%loop['size'] if loop['size'] else '-'), '')
-  if not loop_stats_en: del loop['attributes']
+  printl('Loop#%d: [ip: %s, hotness: %6d, ' % (num, hex(ip), loop['hotness']))
+  if loop['size']: loop['size'] = str(loop['size'])
+  else: del loop['size']
+  for x in ('FL-cycles%', 'size'): printl('%s: %s, ' % (x, loop[x] if x in loop else '-'))
+  if not glob['loop_stats_en']: del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
-  dell = ['hotness', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
-  for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex(loop[x])), '')
+  dell = ['hotness', 'FL-cycles%', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
+  if 'TKs' in loop and loop['TKs'] <= loop['Conds']: dell += ['TKs']
+  if not debug: dell += ['Cond_polarity']
+  for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex(loop[x])))
   for x, y in (('inn', 'out'), ('out', 'inn')):
     if loop[x + 'er'] > 0: set2str(y + 'er-loops')
     else: dell += [y + 'er-loops']
   for x in dell:
     if x in loop: del loop[x]
-  printl(C.chop(str(loop), "'{}\"") + ']')
+  printl(C.chop(str(loop), "'{}\"") + ']', '\n')
 
 def print_sample(sample, n=10):
   if not len(sample): return

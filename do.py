@@ -365,7 +365,7 @@ def profile(log=False, out='run'):
           sort2up, out, sort2up, out), "@instruction-mix for '%s'" % comm)
         exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'" % comm)
         if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
-        exe("%s && tail %s" % (C.grep('code footprint', info), info), "@hottest loops & more stats in " + info)
+        exe("%s && tail %s" % (C.grep('code footprint', info), info), "@top loops & more stats in " + info)
       else: exe('head -42 %s > .1.log && mv .1.log %s' % (info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and os.path.isfile(loops):
         if do['perf-scr']: info = '%s%d0k.info.log' % (data, do['perf-scr'])
@@ -378,8 +378,8 @@ def profile(log=False, out='run'):
         cmd += ' | ./loop_stats %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], info)
         print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, rp('loop_stats'),
           exe_1line('tail -1 %s' % loops, 2)[:-1], info))
-        perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, C.grep('FL-cycles', info)),
-          "@stats for top %d loops" % do['loops'], export='PTOOLS_HITS=%s' % (hits,))
+        perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, C.grep('FL-cycles...[1-9][0-9]?', info, color=1)),
+          "@detailed stats for hot loops", export='PTOOLS_HITS=%s' % (hits,))
       else: warn_file(loops)
   
   if en(9) and do['sample'] > 2:

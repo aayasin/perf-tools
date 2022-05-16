@@ -151,9 +151,11 @@ def file2str(f):
   out = file2lines(f)
   return out[0].replace('\n', '') if out[0] else None
 
-# grep with 0 exit status
-def grep(what, file='', flags=''):
-  return "(egrep %s '%s' %s || true)" % (flags, what, file)
+# (colored) grep with 0 exit status
+def grep(what, file='', flags='', color=False):
+  cmd = "egrep %s '%s' %s" % (flags, what, file)
+  if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('egrep', 'egrep --color')
+  return "(%s || true)" % cmd
 
 import csv
 def read_perf_toplev(filename):

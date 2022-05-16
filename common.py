@@ -80,9 +80,9 @@ def annotate(stuff, label=''):
 def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
   if msg:
-    if '@' in msg: msg='\t'+msg.replace('@', '')
+    if '@' in msg: msg='\t' + msg.replace('@', '')
     else: msg = msg + ' ..'
-    if run: printc(msg, color.BOLD)
+    if run or msg.endswith('..'): printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
   if log_stdout: x = x + ' | tee -a ' + log_stdout
@@ -120,6 +120,8 @@ def os_installer():
 
 def check_executable(x):
   if not os.access(x, os.X_OK): error("'%s' is not executable" % x)
+
+def dirname(): return os.path.dirname(__file__)
 
 def env2str(x):
   y = os.getenv(x)

@@ -9,7 +9,6 @@
 #   quiet mode
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
-#   replace rp() centrally inside exe()
 #   support disable nmi_watchdog in CentOS
 #   check sudo permissions
 from __future__ import print_function
@@ -42,7 +41,7 @@ do = {'run':        RUN_DEF,
   'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
-  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,+MUX",
+  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,-CPU_Utilization",
   'numactl':        1,
   'objdump':        './binutils-gdb/binutils/objdump',
   'package-mgr':    C.os_installer(),
@@ -73,6 +72,8 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, ba
   X = x.split()
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee'] and redir_out: x = x.split('|')[0]
+  x = x.replace('| ./', '| %s/' % C.dirname())
+  if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
   if 'tee >(' in x: x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
   x = x.replace('  ', ' ').strip()
   if timeit: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
@@ -102,7 +103,7 @@ def grep(x, f=''): return "(egrep '%s' %s || true)" % (x, f) # grep with 0 exit 
 def warn_file(x):
   if not args.mode == 'profile' and not os.path.isfile(x): C.warn('file does not exist: %s' % x)
 
-def rp(x): return os.path.join(os.path.dirname(__file__), x)
+def rp(x): return os.path.join(C.dirname(), x)
 
 def uniq_name():
   return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
@@ -257,7 +258,7 @@ def profile(log=False, out='run'):
   perf_stat_log = "%s.perf_stat.log"%out
   perf_report = ' '.join((perf, 'report', '--objdump %s'%do['objdump'] if os.path.isfile(do['objdump']) else ''))
   sort2u = 'sort | uniq -c | sort -n'
-  sort2up = sort2u + ' | %s'%rp('ptage')
+  sort2up = sort2u + ' | ./ptage'
   r = do['run']
   if en(0) or log: log_setup()
   
@@ -291,7 +292,7 @@ def profile(log=False, out='run'):
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.alderlake():   toplev += ' --cputype=core'
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
-  grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|supported)|##placeholder##' "
+  grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|referenced|supported)|##placeholder##' "
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
   def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
@@ -351,14 +352,14 @@ def profile(log=False, out='run'):
       lbr_hdr = '# LBR-based Statistics:'
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
-        "| %s %s" % (data, comm, './lbr_stats', do['lbr-stats-tk']))
+        "| %s %s" % (data, comm, rp('lbr_stats'), do['lbr-stats-tk']))
       if not os.path.isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s PTOOLS_CYCLES=%s" % (loops, exe_1line('grep cycles %s | grep -v atom | tail -1' % C.log_stdout, 0).replace(',', ''))
         perf_script("-i %s -F +brstackinsn --xed -c %s "
           "| tee >(%s %s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
-          "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | %s > %s) | cut -f4- "
+          "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) | cut -f4- "
           "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail" %
-          (data, comm,  lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info,  hits, rp('ptage'), ips,
+          (data, comm,  lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info,  hits, ips,
           sort2up, out, sort2up, out), "@instruction-mix for '%s'" % comm)
         exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'" % comm)
         if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
@@ -372,7 +373,7 @@ def profile(log=False, out='run'):
         while top > 1:
           cmd += ' | tee >(%s %s >> %s) ' % (rp('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
           top -= 1
-        cmd += ' | %s %s >> %s && echo' % (rp('loop_stats'), exe_1line('tail -1 %s' % loops, 2)[:-1], info)
+        cmd += ' | ./loop_stats %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], info)
         print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, rp('loop_stats'),
           exe_1line('tail -1 %s' % loops, 2)[:-1], info))
         perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, C.grep('cyc/iter', info)),
@@ -389,24 +390,24 @@ def profile(log=False, out='run'):
       if pmu.cpu('smt-on'): C.warn('Disable SMT for DSB robust analysis')
       else:
         is_dsb = 1
-        perf_script("-i %s -F ip | %s %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
-                    (data, rp('addrbits'), pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets")
+        perf_script("-i %s -F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
+                    (data, pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets")
     top = 0
     if not is_dsb: pass
     elif top == 1:
       top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
       perf_script("-i %s -F +brstackinsn --xed "
         "| tee >(%s %s | tee -a %s.ips.log) " # asserts in skip_sample() only if piped!!
-        "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data,
-            rp('lbr_stats'), do['lbr-stats'], data), "@ stats on PEBS event")
+        "| ./lbr_stats %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data,
+            do['lbr-stats'], data), "@ stats on PEBS event")
     else:
       perf_script("-i %s -F +brstackinsn --xed "
-        "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), do['lbr-stats'], data), "@ stats on PEBS event")
+        "| ./lbr_stats %s | tee -a %s.ips.log"%(data, do['lbr-stats'], data), "@ stats on PEBS event")
     if top > 1:
       while top > 0:
         top_ip = exe_1line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
         perf_script("-i %s -F +brstackinsn --xed "
-          "| %s %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
+          "| ./lbr_stats %s | tee -a %s.ips.log"%(data, top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
         top -= 1
 
 def do_logs(cmd, ext=[], tag=''):

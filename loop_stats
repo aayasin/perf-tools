@@ -1,14 +1,12 @@
 #!/usr/bin/env python
-# stats for a particular loop
+# in-depth stats for a particular loop
 # Author: Ahmad Yasin
-# edited: April 2022
+# edited: May 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-
-from lbr import *
 import common as C
 
 # usage: perf script -F +brstackinsn [--xed] | ./loop_stats ip-of-loop
 loop = C.arg(1)
-C.exe_cmd('%s - %s 0 1' % ('./lbr_stats', loop))
+C.exe_cmd('%s/lbr_stats - %s 0 1' % (C.dirname(), loop))

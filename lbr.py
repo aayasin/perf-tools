@@ -466,10 +466,11 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
         top -= 1
       new.add('.. %d more'%n)
     loop[s] = C.chop(str(sorted(new, reverse=True)), (")", 'set('))
-  printl('Loop#%d: [ip: %s, hotness: %6d, ' % (num, hex(ip), loop['hotness']))
-  if loop['size']: loop['size'] = str(loop['size'])
-  else: del loop['size']
-  for x in ('FL-cycles%', 'size'): printl('%s: %s, ' % (x, loop[x] if x in loop else '-'))
+  fixl = ('hotness', 'FL-cycles%', 'size') if glob['loop_cycles'] else ('hotness', 'size')
+  loop['hotness'] = '%6d' % loop['hotness']
+  loop['size'] = str(loop['size']) if loop['size'] else '-'
+  printl('Loop#%d: [ip: %s, ' % (num, hex(ip)))
+  for x in fixl: printl('%s: %s, ' % (x, loop[x]))
   if not glob['loop_stats_en']: del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))

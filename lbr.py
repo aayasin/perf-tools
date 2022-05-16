@@ -475,7 +475,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   dell = ['hotness', 'FL-cycles%', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
   if 'TKs' in loop and loop['TKs'] <= loop['Conds']: dell += ['TKs']
-  if not debug: dell += ['Cond_polarity']
+  if not verbose: dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
   for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex(loop[x])))
   for x, y in (('inn', 'out'), ('out', 'inn')):
     if loop[x + 'er'] > 0: set2str(y + 'er-loops')

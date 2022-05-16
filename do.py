@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.00
+__version__= 1.01
 
 import argparse, os.path, sys
 import common as C
@@ -249,7 +249,7 @@ def profile(log=False, out='run'):
       grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, flags.strip(), grep)
-  def perf_script(x, msg, export=''):
+  def perf_script(x, msg=None, export=''):
     if do['perf-scr']: export += ' LBR_STOP=%d' % (1e4 * do['perf-scr'])
     return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1), export=export)
   def record_name(flags):
@@ -341,10 +341,12 @@ def profile(log=False, out='run'):
   if en(8) and do['sample'] > 1:
     assert pmu.lbr_event()[:-1] in do['perf-lbr'], 'Incorrect event for LBR in: '+do['perf-lbr']
     data, comm = perf_record('lbr', comm)
-    info = '%s.info.log'%data
+    info = '%s.info.log' % data
     if not os.path.isfile(info) or do['reprocess']:
       exe(perf +" report -i %s | grep -A11 'Branch Statistics:' | tee %s" % (data, info), "@stats")
       if os.path.isfile(perf_stat_log): exe("egrep '  branches|instructions' %s >> %s" % (perf_stat_log, info))
+      exe("printf '\\nCount of unique taken branches: ' >> %s" % info)
+      perf_script("-i %s -F ip -c %s | %s | egrep -v '\s+[1-9]\s+' | ./ptage | tee %s.takens.log | wc -l >> %s" % (data, comm, sort2u, data, info))
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
@@ -354,7 +356,7 @@ def profile(log=False, out='run'):
       print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
         "| %s %s" % (data, comm, rp('lbr_stats'), do['lbr-stats-tk']))
       if not os.path.isfile(hits) or do['reprocess']:
-        lbr_env = "LBR_LOOPS_LOG=%s PTOOLS_CYCLES=%s" % (loops, exe_1line('grep cycles %s | grep -v atom | tail -1' % C.log_stdout, 0).replace(',', ''))
+        lbr_env = "LBR_LOOPS_LOG=%s PTOOLS_CYCLES=%s" % (loops, exe_1line("egrep '(\s|e/)cycles' %s | tail -1" % C.log_stdout, 0).replace(',', ''))
         perf_script("-i %s -F +brstackinsn --xed -c %s "
           "| tee >(%s %s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
           "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) | cut -f4- "
@@ -376,7 +378,7 @@ def profile(log=False, out='run'):
         cmd += ' | ./loop_stats %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], info)
         print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, rp('loop_stats'),
           exe_1line('tail -1 %s' % loops, 2)[:-1], info))
-        perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, C.grep('cyc/iter', info)),
+        perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, C.grep('FL-cycles', info)),
           "@stats for top %d loops" % do['loops'], export='PTOOLS_HITS=%s' % (hits,))
       else: warn_file(loops)
   

@@ -53,6 +53,9 @@ def cpu_msrs():
   if server() and v5p(): msrs += ['0x6d']
   return msrs
 
+def cpu_TLA():
+  return name()[:3].upper() # a hack for now
+
 def cpu_peak_kernels(widths=range(4, 7)):
   return ['peak%dwide' % x for x in widths]
 

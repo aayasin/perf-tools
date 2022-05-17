@@ -353,8 +353,6 @@ def profile(log=False, out='run'):
       loops = '%s.loops.log' % data
       lbr_hdr = '# LBR-based Statistics:'
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
-      print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s "
-        "| %s %s" % (data, comm, rp('lbr_stats'), do['lbr-stats-tk']))
       if not os.path.isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s PTOOLS_CYCLES=%s" % (loops, exe_1line("egrep '(\s|e/)cycles' %s | tail -1" % C.log_stdout, 0).replace(',', ''))
         perf_script("-i %s -F +brstackinsn --xed -c %s "
@@ -414,7 +412,7 @@ def profile(log=False, out='run'):
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['', 'csv', 'log', 'txt'] + ext
-  res = '%sresults.tar.gz'%tag if cmd == 'tar' else None
+  if cmd == 'tar' and len(tag): res = '-'.join((tag, 'results.tar.gz'))
   s = (uniq_name() if args.app_name else '') + '*'
   if cmd == 'tar': exe('tar -czvf %s run.sh '%res + (' %s.'%s).join(log_files) + ' .%s.cmd'%s)
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')
@@ -520,7 +518,7 @@ def main():
     elif c == 'disable-fix-freq':   fix_frequency('undo')
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
-    elif c == 'tar':          do_logs(c)
+    elif c == 'tar':          do_logs(c, tag='.'.join((uniq_name(), pmu.cpu_TLA())) if args.app_name else C.error('provide a value for -a'))
     elif c == 'clean':        do_logs(c)
     elif c == 'all':
       setup_perf()

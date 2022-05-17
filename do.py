@@ -22,7 +22,7 @@ from datetime import datetime
 from platform import python_version
 
 RUN_DEF = './run.sh'
-TOPLEV_DEF='--metric-group +Summary --frequency' #FIXME: argparse should tell whether user specified an options
+TOPLEV_DEF='--metric-group +Summary' #FIXME: argparse should tell whether user specified an options
 Find_perf = 'sudo find / -name perf -executable -type f'
 cpu = 'cpu_core' if 'hybrid' in pmu.name() else 'cpu'
 do = {'run':        RUN_DEF,

@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.01
+__version__= 1.02
 
 import argparse, os.path, sys
 import common as C
@@ -22,7 +22,7 @@ from datetime import datetime
 from platform import python_version
 
 RUN_DEF = './run.sh'
-TOPLEV_DEF='--metric-group +Summary' #FIXME: argparse should tell whether user specified an options
+TOPLEV_DEF='--metric-group +Summary --frequency' #FIXME: argparse should tell whether user specified an options
 Find_perf = 'sudo find / -name perf -executable -type f'
 cpu = 'cpu_core' if 'hybrid' in pmu.name() else 'cpu'
 do = {'run':        RUN_DEF,
@@ -291,6 +291,7 @@ def profile(log=False, out='run'):
   if do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.alderlake():   toplev += ' --cputype=core'
+    if pmu.sapphire():    toplev += ' --force-cpu=adl'
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
   grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|referenced|supported)|##placeholder##' "
   grep_nz= grep_NZ

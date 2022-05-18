@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.03
+__version__= 1.04
 
 import argparse, os.path, sys
 import common as C
@@ -225,13 +225,22 @@ def perf_format(es, result=''):
     result += (e if result=='' else ','+e)
   return result
 
-def profile(log=False, out='run'):
-  out = uniq_name()
-  perf = args.perf
-  toplev = ''
+def get_perf_toplev():
+  perf, toplev = args.perf, ''
   if perf != 'perf':
     C.check_executable(perf)
     toplev = 'PERF=%s ' % perf
+  C.check_executable(args.pmu_tools.split()[-1] + '/toplev.py')
+  toplev += (args.pmu_tools + '/toplev.py')
+  if do['core']:
+    ##if pmu.perfmetrics(): toplev += ' --pinned'
+    if pmu.alderlake():   toplev += ' --cputype=core'
+    if pmu.sapphire():    toplev += ' --force-cpu=adl'
+  return (perf, toplev)
+
+def profile(log=False, out='run'):
+  out = uniq_name()
+  perf, toplev = get_perf_toplev()
   def en(n): return args.profile_mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
@@ -287,11 +296,7 @@ def profile(log=False, out='run'):
     if do['xed']: perf_script("-i %s -F insn --xed | %s " \
       "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
   
-  toplev+= (args.pmu_tools + '/toplev.py --no-desc')
-  if do['core']:
-    ##if pmu.perfmetrics(): toplev += ' --pinned'
-    if pmu.alderlake():   toplev += ' --cputype=core'
-    if pmu.sapphire():    toplev += ' --force-cpu=adl'
+  toplev += ' --no-desc'
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
   grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|referenced|supported)|##placeholder##' "
   grep_nz= grep_NZ
@@ -517,6 +522,7 @@ def main():
     elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0 && sudo rdmsr 0x1a4')
     elif c == 'enable-fix-freq':    fix_frequency()
     elif c == 'disable-fix-freq':   fix_frequency('undo')
+    elif c == 'help':         exe('%s --describe %s' % (get_perf_toplev()[1], args.metrics), redir_out=None)
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
     elif c == 'tar':          do_logs(c, tag='.'.join((uniq_name(), pmu.cpu_TLA())) if args.app_name else C.error('provide a value for -a'))

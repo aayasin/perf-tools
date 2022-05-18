@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.04
+__version__= 1.2
 
 import argparse, os.path, sys
 import common as C
@@ -57,13 +57,15 @@ do = {'run':        RUN_DEF,
   'pmu':            pmu.name(),
   'python':         sys.executable,
   'repeat':         3,
-  'reprocess':      0,
+  'reprocess':      1,
   'sample':         2,
   'super':          0,
   'tee':            1,
+  'tma-fx':         '+IPC,+Instructions,+Time,+SLOTS,+CLKS',
+  'tma-bot-fe':     ',+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
+  'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
   'toplev':         TOPLEV_DEF,
   'levels':         2,
-  'toplev-full':    '-vl6',
   'xed':            1,
 }
 args = argparse.Namespace()
@@ -298,7 +300,7 @@ def profile(log=False, out='run'):
   
   toplev += ' --no-desc'
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
-  grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|not (found|referenced|supported)|##placeholder##' "
+  grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add|Fra:|Blender)|not (found|referenced|supported)|##placeholder##' "
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
   def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
@@ -306,8 +308,9 @@ def profile(log=False, out='run'):
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
               o.replace('.log', '-perf.csv'), tlargs, r), o
   
-  cmd, log = toplev_V(do['toplev-full'])
-  if en(4): exe(cmd + ' | tee %s | %s'%(log, grep_bk), 'topdown full')
+  # +Info metrics that would not use more counters
+  cmd, log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe']+do['tma-bot-rest']))
+  if en(4): exe(cmd + ' | tee %s | %s' % (log, grep_bk), 'topdown full tree + All Bottlenecks')
   
   cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, do['repeat']))
   if en(5): exe(cmd + ' | tee %s | %s' % (log, grep_nz),
@@ -325,11 +328,14 @@ def profile(log=False, out='run'):
       for c in ('report', 'annotate'):
         exe("%s %s --stdio -i %s > %s "%(perf, c, perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
-  if en(7) and args.no_multiplex:
-    cmd, log = toplev_V(do['toplev-full']+' --no-multiplex', '-nomux', do['nodes'] + ',' + do['extra-metrics'])
-    exe(cmd + " | tee %s | %s"%(log, grep_nz)
-      #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
-      , 'topdown full no multiplexing')
+  # +Info metrics that would not use more counters
+  if en(12):
+    cmd, log = toplev_V('-mvl2', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']).replace('+', '-'))
+    exe(cmd + ' | sort | tee %s | %s' % (log, grep_nz), 'Info metrics')
+
+  if en(13):
+    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4')
+    exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown 2 levels + FE Bottlenecks')
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
   
   data, comm = None, None
@@ -415,6 +421,12 @@ def profile(log=False, out='run'):
         perf_script("-i %s -F +brstackinsn --xed "
           "| ./lbr_stats %s | tee -a %s.ips.log"%(data, top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
         top -= 1
+  
+  if en(7):
+    cmd, log = toplev_V('-mvl6 --no-multiplex', '-nomux', ','.join((do['nodes'], do['extra-metrics'])))
+    exe(cmd + " | tee %s | %s"%(log, grep_nz)
+      #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
+      , 'topdown full no multiplexing')
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['', 'csv', 'log', 'txt'] + ext
@@ -452,9 +464,7 @@ def parse_args():
   ap.add_argument('-s', '--sys-wide', type=int, default=0, help='profile system-wide for x seconds. disabled by default')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
-  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='17F', help='mask to control stages in the profile command')
-  ap.add_argument('-N', '--no-multiplex', action='store_const', const=False, default=True,
-    help='skip no-multiplexing reruns')
+  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='317F', help='mask to control stages in the profile command')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, ' \
     '2:+verbose-on metrics|build, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, 5:+event-groups, .. 9:anything')
   ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS, action='append') # override global variables with python expression

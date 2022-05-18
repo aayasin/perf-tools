@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.7
+__version__= 0.71
 
 import common as C
 import pmu
@@ -222,6 +222,7 @@ size_sum=0
 glob = {x: 0 for x in ('loop_cycles', 'loop_iters')}
 dsb = {}
 footprint = set()
+pages = set()
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
                 loop_ipc=0, lp_stats_en=False, event = LBR_Event):
@@ -318,7 +319,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         break
       ip = None if header or is_label(line) else line_ip(line, lines)
       new_line = is_line_start(ip, xip)
-      if edge_en and new_line: footprint.add(ip >> 6)
+      if edge_en and new_line:
+        footprint.add(ip >> 6)
+        pages.add(ip >> 12)
       if len(lines) and not is_label(line):
         # a 2nd instruction
         if len(lines) > 1:
@@ -401,7 +404,8 @@ def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
   if not loop_ipc: print('LBR samples:', stat)
   if os.getenv('PTOOLS_CYCLES'): print('LBR cycles coverage (scaled by 1K): %s' % ratio(1e3 * stat['total_cycles'], int(os.getenv('PTOOLS_CYCLES'))))
-  if len(footprint): print('code footprint estimate: %.2f KB\n' % (len(footprint) / 16.0))
+  if len(footprint): print('hot code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
+  if len(pages): print('estimate number of hot code 4K-pages: %d' % len(pages))
   if len(dsb): print_hist((dsb['heatmap'], 'DSB-Heatmap'))
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:

@@ -19,7 +19,7 @@ optional arguments:
                         ./pmu-tools)
   --toplev-args TOPLEV_ARGS
                         arguments to pass-through to toplev (default:
-                        --metric-group +Summary)
+                        --frequency --metric-group +Summary)
   --install-perf [INSTALL_PERF]
                         perf tool installation options: [install]|patch|build
                         (default: None)
@@ -48,4 +48,5 @@ optional arguments:
   -v VERBOSE, --verbose VERBOSE
                         verbose level; 0:none, 1:commands, 2:+verbose-on
                         metrics|build, 3:+toplev --perf|ASM on kernel build,
-                        4:+args parsing, 5:+event-groups(ALL) (default: 0)
+                        4:+args parsing, 5:+event-groups, .. 9:anything
+                        (default: 0)

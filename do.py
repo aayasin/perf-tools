@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.02
+__version__= 1.03
 
 import argparse, os.path, sys
 import common as C
@@ -22,7 +22,7 @@ from datetime import datetime
 from platform import python_version
 
 RUN_DEF = './run.sh'
-TOPLEV_DEF='--metric-group +Summary' #FIXME: argparse should tell whether user specified an options
+TOPLEV_DEF='--frequency --metric-group +Summary' #FIXME: argparse should tell whether user specified an options
 Find_perf = 'sudo find / -name perf -executable -type f'
 cpu = 'cpu_core' if 'hybrid' in pmu.name() else 'cpu'
 do = {'run':        RUN_DEF,

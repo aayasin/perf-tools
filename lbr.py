@@ -5,11 +5,12 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.71
+__version__= 0.72
 
 import common as C
 import pmu
 import os, re, sys
+from numpy import average
 
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('DBG')
@@ -393,7 +394,9 @@ def print_hist(hist_t):
   if not tot: return 0
   if loop:
     shist = sorted(hist.items(), key=lambda x: x[1])
-    loop['%s-most' % name] = str(shist[-1][0])
+    loop['%s-mode' % name] = str(shist[-1][0])
+    keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
+    loop['%s-mean' % name] = str(round(average(keys, weights=list(hist.values())), 2))
     loop['%s-num-buckets' % name] = len(hist)
   C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
   for k in sorted(hist.keys(), key=sorter): print('%4s: %6d%6.1f%%' % (k, hist[k], 100.0 * hist[k] / tot))

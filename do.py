@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.2
+__version__= 1.21
 
 import argparse, os.path, sys
 import common as C
@@ -300,7 +300,7 @@ def profile(log=False, out='run'):
   
   toplev += ' --no-desc'
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
-  grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add|Fra:|Blender)|not (found|referenced|supported)|##placeholder##' "
+  grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add|warning:)|not (found|referenced|supported)|##placeholder##' "
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
   def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
@@ -334,7 +334,7 @@ def profile(log=False, out='run'):
     exe(cmd + ' | sort | tee %s | %s' % (log, grep_nz), 'Info metrics')
 
   if en(13):
-    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4')
+    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB')
     exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown 2 levels + FE Bottlenecks')
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
   
@@ -355,7 +355,7 @@ def profile(log=False, out='run'):
     data, comm = perf_record('lbr', comm)
     info = '%s.info.log' % data
     if not os.path.isfile(info) or do['reprocess']:
-      exe(perf +" report -i %s | grep -A11 'Branch Statistics:' | tee %s" % (data, info), "@stats")
+      exe(perf +" report -i %s | grep -A11 'Branch Statistics:' | tee %s | egrep -v '\s0\.0%%'" % (data, info), "@stats")
       if os.path.isfile(perf_stat_log): exe("egrep '  branches|instructions' %s >> %s" % (perf_stat_log, info))
       exe("printf '\\nCount of unique taken branches: ' >> %s" % info)
       perf_script("-i %s -F ip -c %s | %s | egrep -v '\s+[1-9]\s+' | ./ptage | tee %s.takens.log | wc -l >> %s" % (data, comm, sort2u, data, info))

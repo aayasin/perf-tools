@@ -50,6 +50,7 @@ def cpu(what):
 
 def cpu_msrs():
   msrs = ['0x48', '0x8b', '0x1a4']
+  if goldencove(): msrs += ['0x6a0', '0x6a2']
   if server() and v5p(): msrs += ['0x6d']
   return msrs
 

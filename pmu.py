@@ -44,8 +44,11 @@ def cpu(what):
   if 1:  # not cpu.state:
     sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools')
     import tl_cpu
-    cpu_state = tl_cpu.CPU((), False, tl_cpu.Env())
-  return {'smt-on': cpu_state.ht}[what]
+    cs = tl_cpu.CPU((), False, tl_cpu.Env()) # cpu.state
+  if what == 'get': return cs
+  return {'smt-on': cs.ht,
+    'corecount': int(len(cs.allcpus) / cs.threads),
+  }[what]
 # cpu.state = None
 
 def cpu_msrs():

@@ -35,7 +35,7 @@ do = {'run':        RUN_DEF,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'forgive':        0,
   'gen-kernel':     1,
-  'loops':          5,
+  'loops':          pmu.cpu('corecount'),
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
   'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed

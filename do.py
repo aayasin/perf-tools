@@ -24,7 +24,6 @@ from platform import python_version
 RUN_DEF = './run.sh'
 TOPLEV_DEF='--frequency --metric-group +Summary' #FIXME: argparse should tell whether user specified an options
 Find_perf = 'sudo find / -name perf -executable -type f'
-cpu = 'cpu_core' if 'hybrid' in pmu.name() else 'cpu'
 do = {'run':        RUN_DEF,
   'asm-dump':       30,
   'cmds_file':      None,
@@ -47,7 +46,7 @@ do = {'run':        RUN_DEF,
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
-  'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003'%cpu,
+  'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003' % pmu.pmu(),
   'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
@@ -155,7 +154,7 @@ def setup_perf(actions=('set', 'log'), out=None):
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
     ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e9), 'root'),
-    ('/sys/devices/%s/perf_event_mux_interval_ms'%cpu, 100, ),
+    ('/sys/devices/%s/perf_event_mux_interval_ms' % pmu.pmu(), 100, ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/nmi_watchdog', 0, ),
     ('/proc/sys/kernel/soft_watchdog', 0, ),
@@ -221,8 +220,8 @@ def perf_format(es, result=''):
   for e in es.split(','):
     if e.startswith('r') and ':' in e:
       e = e.split(':')
-      if len(e[0])==5:   e='%s/event=0x%s,umask=0x%s,name=%s/'%(cpu, e[0][3:5], e[0][1:3], e[1])
-      elif len(e[0])==7: e='%s/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/'%(cpu, e[0][5:7], e[0][3:5], e[0][1:3], e[1])
+      if len(e[0])==5:   e='%s/event=0x%s,umask=0x%s,name=%s/' % (pmu.pmu(), e[0][3:5], e[0][1:3], e[1])
+      elif len(e[0])==7: e='%s/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/' % (pmu.pmu(), e[0][5:7], e[0][3:5], e[0][1:3], e[1])
       else: C.error("profile:perf-stat: invalid syntax in '%s'"%':'.join(e))
     result += (e if result=='' else ','+e)
   return result
@@ -236,7 +235,7 @@ def get_perf_toplev():
   toplev += (args.pmu_tools + '/toplev.py')
   if do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
-    if pmu.alderlake():   toplev += ' --cputype=core'
+    if pmu.hybrid():      toplev += ' --cputype=core'
     if pmu.sapphire():    toplev += ' --force-cpu=adl'
   return (perf, toplev)
 
@@ -254,7 +253,7 @@ def profile(log=False, out='run'):
       prefix = ',topdown-'
       events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
       events += (prefix.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}']) if pmu.goldencove() else '}')
-      if pmu.alderlake(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
+      if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
     if args.events:
       events += append(perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: May 2022
+# edited: June 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.72
+__version__= 0.73
 
 import common as C
 import pmu
@@ -154,15 +154,23 @@ def detect_loop(ip, lines, loop_ipc,
     loop['hotness'] += 1
     if is_taken(lines[-1]): iter_update()
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
-      size, takens, conds = 1, 0, []
+      size, cnt, conds = 1, {}, []
+      types = ('taken', 'load', 'store', 'lea', 'nop')
+      for i in types: cnt[i] = 0
       x = len(lines)-2
       while x >= 1:
         size += 1
-        if is_taken(lines[x]): takens += 1
+        if is_taken(lines[x]): cnt['taken'] += 1
         if re.match(r"\s+\S+\s+j[^m]", lines[x]): conds += [line_ip(lines[x])]
+        if 'nop' in lines[x]: cnt['nop'] += 1
+        elif '(' in lines[x]:
+          if 'lea' in lines[x]: cnt['lea'] += 1
+          elif re.match(r"\s+\S+\s+(cmp[^x]|test)", lines[x]): cnt['load'] += 1
+          else: cnt['store' if re.match(r"\s+\S+\s+[^\(\),]+,", lines[x]) else 'load'] += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
-          loop['size'], loop['TKs'], loop['Conds'] = size, takens, len(conds)
+          loop['size'], loop['Conds'] = size, len(conds)
+          for i in types: loop[i] = cnt[i]
           if len(conds):
             loop['Cond_polarity'] = {}
             for c in conds: loop['Cond_polarity'][c] = {'tk': 0, 'nt': 0}
@@ -417,12 +425,12 @@ def print_all(nloops=10, loop_ipc=0):
       tot = print_hist(get_loop_hist(loop_ipc, 'IPC'))
       lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / glob['loop_iters'])
       lp['FL-cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
-      if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1 and lp['TKs'] < 2:
+      if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1 and lp['taken'] < 2:
         for c in lp['Cond_polarity'].keys():
           lp['%s_taken' % hex(c)] = ratio(lp['Cond_polarity'][c]['tk'], lp['Cond_polarity'][c]['tk'] + lp['Cond_polarity'][c]['nt'])
       tot = print_hist(get_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0])))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
-      if hitcounts and lp['size'] and lp['TKs'] == 0:
+      if hitcounts and lp['size'] and lp['taken'] == 0:
         C.exe_cmd(C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
           'Hitcounts & ASM of loop %s' % hex(loop_ipc))
       find_print_loop(loop_ipc, sloops)
@@ -482,7 +490,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   dell = ['hotness', 'FL-cycles%', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
-  if 'TKs' in loop and loop['TKs'] <= loop['Conds']: dell += ['TKs']
+  if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if not verbose: dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
   for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex(loop[x])))
   for x, y in (('inn', 'out'), ('out', 'inn')):

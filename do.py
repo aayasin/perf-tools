@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.22
+__version__= 1.23
 
 import argparse, os.path, sys
 import common as C
@@ -333,7 +333,7 @@ def profile(log=False, out='run'):
     exe(cmd + ' | sort | tee %s | %s' % (log, grep_nz), 'Info metrics')
 
   if en(13):
-    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB')
+    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
     exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown 2 levels + FE Bottlenecks')
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
   
@@ -540,6 +540,7 @@ def main():
       profile(True)
       do_logs('tar')
     elif c == 'build':        build_kernel()
+    elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
     else:
       C.error("Unknown command: '%s' !"%c)
       return -1

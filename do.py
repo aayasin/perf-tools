@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: May 2022
+# edited: June 2022
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.21
+__version__= 1.22
 
 import argparse, os.path, sys
 import common as C
@@ -99,11 +99,11 @@ def print_cmd(x, show=True):
   if show: C.printc(x)
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
 
-def exe_1line(x, f=None): return "-1" if args.mode == 'profile' else C.exe_one_line(x, f)
+def exe_1line(x, f=None): return "-1" if args.mode == 'profile' or args.print_only else C.exe_one_line(x, f)
 
 def grep(x, f=''): return "(egrep '%s' %s || true)" % (x, f) # grep with 0 exit status
 def warn_file(x):
-  if not args.mode == 'profile' and not os.path.isfile(x): C.warn('file does not exist: %s' % x)
+  if not args.mode == 'profile' and not args.print_only and not os.path.isfile(x): C.warn('file does not exist: %s' % x)
 
 def rp(x): return os.path.join(C.dirname(), x)
 
@@ -477,7 +477,6 @@ def main():
   #args sanity checks
   if (args.gen_args or 'build' in args.command) and not args.app_name:
     C.error('must specify --app-name with any of: --gen-args, build')
-  assert not (args.print_only and (args.profile_mask & 0x300) and 'profile' in args.command), 'No print-only + lbr/pebs profile-steps'
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
@@ -498,7 +497,7 @@ def main():
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'record', 'lbr', 'pebs', 'stat-ipc'): do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
-    args.profile_mask &= 0xFFB # disable system-wide profile-step
+    args.profile_mask &= ~0x4 # disable system-wide profile-step
   do_cmd = '%s # version %.2f' % (C.argv2str(), __version__)
   C.log_stdout = '%s-out.txt' % ('run-default' if do['run'] == RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)

@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.73
+__version__= 0.74
 
 import common as C
 import pmu
@@ -81,7 +81,7 @@ def loop_stats(line, loop_ipc, tc_state):
       if not loop_stats.atts or not tag in loop_stats.atts:
         loop_stats.atts = ';'.join((loop_stats.atts, tag)) if loop_stats.atts else tag
   def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
-  def vec_len(i): return 'vec%d' % (128 * (i + 1))
+  def vec_len(i): return 'vec%d' % (128 * (2**i))
   # loop-body stats, FIXME: on the 1st encoutered loop in a new sample for now
   # TODO: improve perf of loop_stats invocation
   #if (glob['loop_stats_en'] == 'No' or
@@ -423,7 +423,7 @@ def print_all(nloops=10, loop_ipc=0):
     if loop_ipc in loops:
       lp = loops[loop_ipc]
       tot = print_hist(get_loop_hist(loop_ipc, 'IPC'))
-      lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / glob['loop_iters'])
+      if glob['loop_iters']: lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / glob['loop_iters'])
       lp['FL-cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
       if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1 and lp['taken'] < 2:
         for c in lp['Cond_polarity'].keys():
@@ -484,7 +484,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   fixl = ('hotness', 'FL-cycles%', 'size') if glob['loop_cycles'] else ('hotness', 'size')
   loop['hotness'] = '%6d' % loop['hotness']
   loop['size'] = str(loop['size']) if loop['size'] else '-'
-  printl('Loop#%d: [ip: %s, ' % (num, hex(ip)))
+  printl('%soop#%d: [ip: %s, ' % ('L' if detailed else 'l', num, hex(ip)))
   for x in fixl: printl('%s: %s, ' % (x, loop[x]))
   if not glob['loop_stats_en']: del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'

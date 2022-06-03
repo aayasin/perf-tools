@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.23
+__version__= 1.3
 
 import argparse, os.path, sys
 import common as C
@@ -353,11 +353,20 @@ def profile(log=False, out='run'):
     assert pmu.lbr_event()[:-1] in do['perf-lbr'], 'Incorrect event for LBR in: '+do['perf-lbr']
     data, comm = perf_record('lbr', comm)
     info = '%s.info.log' % data
+    clean = "sed 's/#.*//;s/^\s*//;s/\s*$//'"
+    def log_count(x, l): return "printf '\\nCount of %s: ' >> %s && wc -l < %s >> %s" % (x, info, l, info)
+    def log_br_count(x, s): return log_count("unique %s branches" % x, "%s.%s.log" % (data, s))
     if not os.path.isfile(info) or do['reprocess']:
       exe(perf +" report -i %s | grep -A11 'Branch Statistics:' | tee %s | egrep -v '\s0\.0%%'" % (data, info), "@stats")
       if os.path.isfile(perf_stat_log): exe("egrep '  branches|instructions' %s >> %s" % (perf_stat_log, info))
-      exe("printf '\\nCount of unique taken branches: ' >> %s" % info)
-      perf_script("-i %s -F ip -c %s | %s | egrep -v '\s+[1-9]\s+' | ./ptage | tee %s.takens.log | wc -l >> %s" % (data, comm, sort2u, data, info))
+      sort2uf = "%s | egrep -v '\s+[1-9]\s+' | ./ptage" % sort2u
+      perf_script("-i %s -F ip -c %s | %s | tee %s.samples.log | %s" %
+        (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples')))
+      if do['xed']:
+        perf_script("-i %s -F +brstackinsn --xed -c %s | egrep '^\s+[0-9a-f]+\s.*#' | %s "
+          "| tee >(%s > %s.takens.log) | grep call | %s > %s.calls.log" %
+          (data, comm, clean, sort2uf, data, sort2uf, data))
+        for x in ('taken', 'call'): exe(log_br_count(x, "%ss" % x))
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
@@ -367,12 +376,12 @@ def profile(log=False, out='run'):
       if not os.path.isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s PTOOLS_CYCLES=%s" % (loops, exe_1line("egrep '(\s|e/)cycles' %s | tail -1" % C.log_stdout, 0).replace(',', ''))
         perf_script("-i %s -F +brstackinsn --xed -c %s "
-          "| tee >(%s %s %s >> %s) | egrep '^\s[0f7]' | sed 's/#.*//;s/^\s*//;s/\s*$//' "
+          "| tee >(%s %s %s >> %s) | egrep '^\s[0f7]' | %s"
           "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) | cut -f4- "
           "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail" %
-          (data, comm,  lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info,  hits, ips,
+          (data, comm, lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info, clean, hits, ips,
           sort2up, out, sort2up, out), "@instruction-mix for '%s'" % comm)
-        exe("tail %s.perf-imix-no.log"%out, "@i-mix no operands for '%s'" % comm)
+        exe("tail %s.perf-imix-no.log && %s" % (out, log_count('instructions', hits)), "@i-mix no operands for '%s'" % comm)
         if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
         exe("%s && tail %s" % (C.grep('code footprint', info), info), "@top loops & more stats in " + info)
       else: exe('head -42 %s > .1.log && mv .1.log %s' % (info, info), '@reuse of %s , loops and i-mix log files' % hits)

@@ -246,14 +246,15 @@ def profile(log=False, out='run'):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
-  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown"'):
-    def append(x, y): return x if y == '' else ','+x
+  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|WORK|instructions|cycles"'):
+    def append(x, y): return x if y == '' else ',' + x
     perf_args = ' '.join((flags, do['perf-stat']))
     if pmu.perfmetrics() and do['core']:
       prefix = ',topdown-'
       events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
       events += (prefix.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}']) if pmu.goldencove() else '}')
       if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
+      events += append(perf_format(pmu.workproxy_event()), events)
     if args.events:
       events += append(perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events

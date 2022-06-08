@@ -36,6 +36,9 @@ def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
 
+def workproxy_event():
+  return 'r03c4:BR_INST_RETIRED.WORK_PROXY' if v5p() else ''
+
 #
 # CPU, cpu_ prefix
 #

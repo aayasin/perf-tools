@@ -25,7 +25,7 @@ test-mem-bw: run-mem-bw
 	$(DO) profile -s1 -pm $(PM) | $(SHOW)
 	kill -9 `pidof m0-n8192-u01.llv`
 run-mt:
-	./omp-bin.sh ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv $(NUM_THREADS)
+	./omp-bin.sh $(NUM_THREAD) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv
 test-mt: install run-mt
 	sleep 2s
 	$(DO) profile -s1 -pm $(PM) | $(SHOW)

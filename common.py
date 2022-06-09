@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, debug, strings, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: May 2022
+# edited: June 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -208,6 +208,7 @@ def chop(source, stuff):
   for i in range(len(chars)): items += [chars[i]]
   for x in items: r = r.replace(x, '')
   return r.strip()
+def chop_app(a): return chop(a, './~<>=\'{};|"')
 
 def str2list(s):
   return ' '.join(s.split()).split(' ')
@@ -238,16 +239,15 @@ def commands_list():
 def command_basename(comm, iterations=None):
   if comm is None or comm.isdigit(): return 'run%d' % (int(comm) if comm else os.getpid())
   name = comm.strip().split(' ')
-  for x in ('taskset', 'bash'):
+  for x in ('taskset', 'bash', 'omp-bin', 'n-copies'):
     if x in name[0]: name = name[2:]
-  if 'omp-bin' in name[0]: name = name[1:]
   if '/' in name[0]:
     check_executable(name[0])
     name[0] = name[0].split('/')[-1].replace('.sh', '')
   if len(name) == 1 and ('kernels' in comm or iterations): name.append(iterations)
   namestr = name.pop(0)
   for x in name: namestr += "%s%s" % ('' if x.startswith('-') else '-', x)
-  return chop(namestr, './~<>=\'{};|')
+  return chop_app(namestr)
 
 # stats
 def ratio(x, histo, denom='total'):

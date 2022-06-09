@@ -1,0 +1,29 @@
+#!/usr/bin/env python
+# runs n-copies of a given binary in spec-rate style
+# Author: Ahmad Yasin
+# edited: June 2022
+#
+from __future__ import print_function
+__author__ = 'ayasin'
+
+import common as C
+import os, sys
+
+# usage: [V=1] n-copies <N> <app> [<and> <its> <args>]
+assert len(sys.argv) > 2
+n = int(C.arg(1, "2"))
+app = ' '.join(sys.argv[2:])
+verbose = os.getenv('V')
+
+name = './.%s-%03d.cmd' % (C.chop_app(app.split()[0].split('/')[-1]), n)
+cmds = open(name, 'w')
+head = ["#!/bin/bash", "ulimit -s unlimited"]
+if verbose: head += ["set -x"]
+cmds.write('\n'.join(head + [""]))
+cpus = [i for i in range(n)]
+if n == 2: cpus = [int(x) for x in C.exe2list('pmu-tools/cputop "core == 0 and socket == 0"')]
+
+while len(cpus) > 1: cmds.write("taskset -c %d %s &\n" % (cpus.pop(0), app))
+cmds.write("taskset -c %d %s\n" % (cpus.pop(0), app))
+cmds.close()
+C.exe_cmd('. ' + name)

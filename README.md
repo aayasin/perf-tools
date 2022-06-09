@@ -75,6 +75,7 @@ A set of command-line tools to facilitate profiling
 * **addrbits** -- extracts certain bit-range of hexa input
 * **lbr_stats** -- calculates stats on LBR-based profile
 * **loop_stats** -- calculates stats for a particular loop in an LBR-based profile
+* **n-copied** -- invokes N-copied of a given app, with CPU affinity (uses sibling thread with 2-copies)
 * **ptage** -- computes percentages & sum of number-prefixed input
 
 ### wrappers

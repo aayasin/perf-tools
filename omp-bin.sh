@@ -1,9 +1,9 @@
 #!/bin/sh
 # Author: Ahmad Yasin
-# Dec. 2021
+# June 2022
 
-bin=$1
-omp=$2
+bin=$2
+omp=$1
 aff=$3
 cmd="taskset $aff"
 if [ $# -le 1 ]; then

@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.3
+__version__= 1.31
 
 import argparse, os.path, sys
 import common as C
@@ -246,7 +246,7 @@ def profile(log=False, out='run'):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
-  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|WORK|instructions|cycles"'):
+  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|Work|instructions|cycles"'):
     def append(x, y): return x if y == '' else ',' + x
     perf_args = ' '.join((flags, do['perf-stat']))
     if pmu.perfmetrics() and do['core']:

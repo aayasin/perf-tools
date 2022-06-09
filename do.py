@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.31
+__version__= 1.32
 
 import argparse, os.path, sys
 import common as C
@@ -28,6 +28,7 @@ do = {'run':        RUN_DEF,
   'asm-dump':       30,
   'cmds_file':      None,
   'compiler':       'gcc -O2', # ~/tools/llvm-6.0.0/bin/clang',
+  'container':      0,
   'core':           1,
   'cpuid':          1,
   'dmidecode':      0,
@@ -83,6 +84,7 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, ba
     if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
       if args.mode == 'process':
         x, run = '# ' + x, False
+        if not 'perf record ' in x: msg = None
     elif args.mode == 'profile':
         x, run = '# ' + x, False
     if background: x = x + ' &'
@@ -131,6 +133,7 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
   if do['xed']:
     if os.path.isfile('/usr/local/bin/xed'): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
+    exe('%s install numpy' % ('pip3' if python_version().startswith('3') else 'pip'), 'installing numpy')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
 
 def tools_update(kernels=[], level=3):
@@ -246,7 +249,7 @@ def profile(log=False, out='run'):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
-  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|Work|instructions|cycles"'):
+  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|Work|branches|instructions|cycles"'):
     def append(x, y): return x if y == '' else ',' + x
     perf_args = ' '.join((flags, do['perf-stat']))
     if pmu.perfmetrics() and do['core']:
@@ -500,13 +503,18 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
-  if args.mode == 'process': C.info('post-processing only (not profiling)')
+  if args.mode == 'process':
+    C.info('post-processing only (not profiling)')
+    args.profile_mask &= ~0x1
   if args.sys_wide:
-    C.info('system-wide profiling')
+    if args.mode != 'process': C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'record', 'lbr', 'pebs', 'stat-ipc'): do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
     args.profile_mask &= ~0x4 # disable system-wide profile-step
+  if do['container']:
+    if args.mode != 'process': C.info('container profiling')
+    for x in ('record', 'lbr', 'pebs'): do['perf-'+x] += ' --buildid-all --all-cgroup'
   do_cmd = '%s # version %.2f' % (C.argv2str(), __version__)
   C.log_stdout = '%s-out.txt' % ('run-default' if do['run'] == RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)

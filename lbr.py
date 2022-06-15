@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.74
+__version__= 0.75
 
 import common as C
 import pmu
@@ -100,7 +100,7 @@ def loop_stats(line, loop_ipc, tc_state):
       loop_stats.atts = ''
       loop_stats.id = None
     else:
-      mark(r"(jmp|call)\s%", 'indirect')
+      mark(r"(jmp|call).*%", 'indirect')
       mark(r"[^k]s[sdh]([a-z])\s[\sa-z0-9,\(\)%%]+mm", 'scalar-fp')
       for i in range(loop_stats_vec):
         mark(r"[^k]p[sdh]\s+" + vec_reg(i), vec_len(i) + '-fp')

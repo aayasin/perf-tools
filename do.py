@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.33
+__version__= 1.34
 
 import argparse, os.path, sys
 import common as C
@@ -36,6 +36,7 @@ do = {'run':        RUN_DEF,
   'forgive':        0,
   'gen-kernel':     1,
   'loops':          pmu.cpu('corecount'),
+  'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
   'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
@@ -57,7 +58,7 @@ do = {'run':        RUN_DEF,
   'pmu':            pmu.name(),
   'python':         sys.executable,
   'repeat':         3,
-  'reprocess':      1,
+  'reprocess':      2,
   'sample':         2,
   'super':          0,
   'tee':            1,
@@ -264,7 +265,13 @@ def profile(log=False, out='run'):
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, flags.strip(), grep)
   def perf_script(x, msg=None, export=''):
-    if do['perf-scr']: export += ' LBR_STOP=%d' % (1e4 * do['perf-scr'])
+    if do['perf-scr']:
+      samples = 1e4 * do['perf-scr']
+      export += ' LBR_STOP=%d' % samples
+      x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (300*samples))
+    instline = '^\s+[0-9a-f]+\s'
+    if msg and 'counting takens' in msg: instline += '.*#'
+    x = x.replace('GREP_INST', "grep -E '%s'" % instline)
     return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1), export=export)
   def record_name(flags):
     return '%s%s'%(out, C.chop(flags, (' :/,=', 'cpu_core', 'cpu')))
@@ -358,19 +365,21 @@ def profile(log=False, out='run'):
     data, comm = perf_record('lbr', comm)
     info = '%s.info.log' % data
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
-    instline = '^\s+[0-9a-f]+\s'
-    def log_count(x, l): return "printf '\\nCount of %s: ' >> %s && wc -l < %s >> %s" % (x, info, l, info)
-    def log_br_count(x, s): return log_count("unique %s branches" % x, "%s.%s.log" % (data, s))
-    if not os.path.isfile(info) or do['reprocess']:
-      exe(perf +" report -i %s | grep -A11 'Branch Statistics:' | tee %s | egrep -v '\s0\.0%%'" % (data, info), "@stats")
+    def log_count(x, l): return "printf 'Count of unique %s: ' >> %s && wc -l < %s >> %s" % (x, info, l, info)
+    def log_br_count(x, s): return log_count("%s branches" % x, "%s.%s.log" % (data, s))
+    def tail(f=''): return "tail %s | grep -v total" % f
+    if not os.path.isfile(info) or do['reprocess'] > 1:
+      exe(perf +" report -i %s | grep -A13 'Branch Statistics:' | tee %s | egrep -v ':\s+0\.0%%|CROSS'" % (data, info), "@stats")
       if os.path.isfile(perf_stat_log): exe("egrep '  branches|instructions' %s >> %s" % (perf_stat_log, info))
       sort2uf = "%s | egrep -v '\s+[1-9]\s+' | ./ptage" % sort2u
       perf_script("-i %s -F ip -c %s | %s | tee %s.samples.log | %s" %
-        (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples')))
+        (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')))
       if do['xed']:
-        perf_script("-i %s -F +brstackinsn --xed -c %s | egrep '%s.*#' | %s "
-          "| tee >(%s > %s.takens.log) | grep call | %s > %s.calls.log" %
-          (data, comm, instline, clean, sort2uf, data, sort2uf, data))
+        perf_script("-i %s -F +brstackinsn --xed -c %s | GREP_INST"
+          "| tee >(grep MISPRED | %s | %s > %s.mispreds.log) | %s"
+          "| tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) "
+          "| grep call | %s > %s.calls.log" %
+          (data, comm, clean, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data), '@counting takens')
         for x in ('taken', 'call'): exe(log_br_count(x, "%ss" % x))
     if do['xed']:
       ips = '%s.ips.log'%data
@@ -380,16 +389,17 @@ def profile(log=False, out='run'):
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       if not os.path.isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s PTOOLS_CYCLES=%s" % (loops, exe_1line("egrep '(\s|e/)cycles' %s | tail -1" % C.log_stdout, 0).replace(',', ''))
+        if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         perf_script("-i %s -F +brstackinsn --xed -c %s "
-          "| tee >(%s %s %s >> %s) | egrep '%s' | %s"
+          "| tee >(%s %s %s >> %s) | GREP_INST | %s"
           "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) | cut -f2- "
-          "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | tail" %
-          (data, comm, lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info, instline, clean, hits, ips,
-          sort2up, out, sort2up, out), "@instruction-mix for '%s'" % comm)
-        exe("tail %s.perf-imix-no.log && %s" % (out, log_count('instructions', hits)), "@i-mix no operands for '%s'" % comm)
+          "| tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) | %s | tee %s.perf-imix.log | %s" %
+          (data, comm, lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info, clean, hits, ips,
+          sort2up, out, sort2up, out, tail()), "@instruction-mix for '%s'" % comm)
+        exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)), "@i-mix no operands for '%s'" % comm)
         if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
-        exe("%s && tail %s" % (C.grep('code footprint', info), info), "@top loops & more stats in " + info)
-      else: exe('head -42 %s > .1.log && mv .1.log %s' % (info, info), '@reuse of %s , loops and i-mix log files' % hits)
+        exe("%s && tail %s | grep -v unique" % (C.grep('code footprint', info), info), "@top loops & more stats in " + info)
+      else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and os.path.isfile(loops):
         if do['perf-scr']: info = '%s%d0k.info.log' % (data, do['perf-scr'])
         prn_line(info)

@@ -45,7 +45,7 @@ def warn(msg, bold=False, col=color.ORANGE):
 dump_stack_on_error = 0
 def error(msg):
   printc('ERROR: %s !'%msg, color.RED)
-  logs = [log[1] for log in re.findall(r"(>|tee) (\S+\.log)", msg)]
+  logs = [log[1] for log in re.findall(r"(>|tee) (\S+\.log)", msg) if log[1][0].isalpha()]
   if len(logs): exe_cmd('tail ' + ' '.join(logs), debug=True)
   if dump_stack_on_error: print(let_python_fail)
   sys.exit(' !')

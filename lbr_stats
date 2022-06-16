@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # stats re path to precise events
 # Author: Ahmad Yasin
-# edited: May 2022
+# edited: June 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
@@ -41,7 +41,10 @@ while True:
       print_sample(sample, slen)
     continue
   c['total'] += 1
-  if stop and c['total'] >= 1000*int(stop): break
+  if stop and c['total'] >= int(stop):
+    C.info('stopping after %s valid samples' % stop)
+    if not loop: C.printf(' !\n')
+    break
   if not is_taken(sample[-2]): c['sequential'] += 1
   if is_loop(sample[-1]):
     c['loop_head'] += 1

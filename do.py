@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.34
+__version__= 1.40
 
 import argparse, os.path, sys
 import common as C
@@ -267,12 +267,15 @@ def profile(log=False, out='run'):
   def perf_script(x, msg=None, export=''):
     if do['perf-scr']:
       samples = 1e4 * do['perf-scr']
+      if perf_script.first: C.info('processing first %d samples only' % samples)
       export += ' LBR_STOP=%d' % samples
       x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (300*samples))
     instline = '^\s+[0-9a-f]+\s'
     if msg and 'counting takens' in msg: instline += '.*#'
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
+    perf_script.first = False
     return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1), export=export)
+  perf_script.first = True
   def record_name(flags):
     return '%s%s'%(out, C.chop(flags, (' :/,=', 'cpu_core', 'cpu')))
   
@@ -380,7 +383,8 @@ def profile(log=False, out='run'):
           "| tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) "
           "| grep call | %s > %s.calls.log" %
           (data, comm, clean, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data), '@counting takens')
-        for x in ('taken', 'call'): exe(log_br_count(x, "%ss" % x))
+        for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
+        exe(log_br_count('mispredicted taken', 'mispreds'))
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
@@ -401,7 +405,6 @@ def profile(log=False, out='run'):
         exe("%s && tail %s | grep -v unique" % (C.grep('code footprint', info), info), "@top loops & more stats in " + info)
       else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and os.path.isfile(loops):
-        if do['perf-scr']: info = '%s%d0k.info.log' % (data, do['perf-scr'])
         prn_line(info)
         cmd, top = '', min(do['loops'], int(exe_1line('wc -l %s' % loops, 0)))
         do['loops'] = top

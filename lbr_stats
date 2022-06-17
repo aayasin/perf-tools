@@ -42,8 +42,9 @@ while True:
     continue
   c['total'] += 1
   if stop and c['total'] >= int(stop):
-    C.info('stopping after %s valid samples' % stop)
-    if not loop: C.printf(' !\n')
+    if not loop:
+      C.info('stopping after %s valid samples' % stop)
+      C.printf(' !\n')
     break
   if not is_taken(sample[-2]): c['sequential'] += 1
   if is_loop(sample[-1]):

@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.80
+__version__= 0.81
 
 import common as C
 import pmu
@@ -419,7 +419,7 @@ def print_glob_hist(hist, name):
     d['mode'] = hex(int(d['mode']))
   print('%s histogram summary: %s\n' % (name, hist_fmt(d)))
 
-def print_hist(hist_t):
+def print_hist(hist_t, Threshold=0.01):
   if not hist_t[0]: return -1
   hist, name = hist_t[0], hist_t[1]
   loop, loop_ipc, sorter, weighted = (None, ) * 4
@@ -433,8 +433,12 @@ def print_hist(hist_t):
   d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
   d['num-buckets'] = len(hist)
   C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
-  for k in sorted(hist.keys(), key=sorter): print('%4s: %6d%6.1f%%' %
-	  (hex(k) if 'indir' in name else k, hist[k], 100.0 * hist[k] / tot))
+  left, threshold = 0, int(Threshold * tot)
+  for k in sorted(hist.keys(), key=sorter):
+    if hist[k] >= threshold:
+      print('%5s: %6d%6.1f%%' % (hex(k) if 'indir' in name else k, hist[k], 100.0 * hist[k] / tot))
+    else: left += hist[k]
+  if left: print('other: %6d%6.1f%%\t// buckets < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
   d['total'] = sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
   return d
 

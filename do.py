@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.40
+__version__= 1.41
 
 import argparse, os.path, sys
 import common as C
@@ -541,6 +541,7 @@ def main():
   if args.verbose > 6: C.printc(str(do))
   
   for c in args.command:
+    param = c.split(':')[1:] if ':' in c else None
     if   c == 'forgive-me':   pass
     elif c == 'setup-all':
       tools_install()
@@ -550,7 +551,7 @@ def main():
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()
-    elif c.startswith('tools-update:'): tools_update(level=int(c.split(':')[1]))
+    elif c.startswith('tools-update:'): tools_update(level=int(param[0]))
     # TODO: generalize disable/enable features that follow
     elif c == 'disable-smt':  smt()
     elif c == 'enable-smt':   smt('on')
@@ -565,6 +566,7 @@ def main():
     elif c == 'help':         exe('%s --describe %s' % (get_perf_toplev()[1], args.metrics), redir_out=None)
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
+    elif c.startswith('get'): get(param)
     elif c == 'tar':          do_logs(c, tag='.'.join((uniq_name(), pmu.cpu_TLA())) if args.app_name else C.error('provide a value for -a'))
     elif c == 'clean':        do_logs(c)
     elif c == 'all':
@@ -577,6 +579,14 @@ def main():
       C.error("Unknown command: '%s' !"%c)
       return -1
   return 0
+
+def get(param):
+  assert param and len(param) == 3, '3 parameters expected: e.g. get:<what>:<logfile>:<num>'
+  sub, log, num = param
+  num = int(num)
+  if log == '-': log = exe_1line('ls -1tr *.%s.log | tail -1' % ('info' if c == 'x2g-indirects' else c))
+  if sub == 'indirects':        print(','.join([ '0x%s' % x.lstrip('0') for x in C.exe2list("tail -%d %s | grep -v total | sed 's/bnd jmp/bnd-jmp/'" % (num, log))[2:][::5] ]))
+  elif sub == 'x2g-indirects':  exe("grep -E '^0x[0-9a-f]+:' %s | sort -n -k2 |grep -v total|uniq|tail -%d|cut -d: -f1|tr '\\n' ,|sed 's/.$/\\n/'" % (log, num))
 
 if __name__ == "__main__":
   main()

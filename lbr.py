@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.81
+__version__= 0.82
 
 import common as C
 import pmu
@@ -19,8 +19,8 @@ debug = os.getenv('DBG')
 verbose = os.getenv('VER')
 use_cands = os.getenv('LBR_USE_CANDS')
 
-def hex(ip): return '0x%x'%ip if ip else '-'
-def hist_fmt(d): return str(d).replace("'", "")
+def hex(ip): return '0x%x' % ip if ip > 0 else '-'
+def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 def inc(d, b): d[b] = d.get(b, 0) + 1
 def ratio(a, b): return '%.2f%%' % (100.0 * a / b)
 def read_line(): return sys.stdin.readline()
@@ -35,7 +35,7 @@ def str2int(ip, plist):
   try:
     return int(ip, 16)
   except ValueError:
-    print_sample(plist[2])
+    print_sample(plist[1])
     assert 0, "expect address in '%s' of '%s'" % (ip, plist[0])
 
 def skip_sample(s):
@@ -251,7 +251,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
     if os.getenv('LBR_INDIRECTS'):
       for x in os.getenv('LBR_INDIRECTS').split(','):
         indirects.add(int(x, 16))
-        hsts['indirect_%s' % x] = {}
+        hsts['indirect_%s_targets' % x] = {}
+        hsts['indirect_%s_paths' % x] = {}
     if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'] = {}
   if stat['total']==0 and debug: C.printf('DBG=%s\n' % debug)
   tick = int(os.getenv('LBR_TICK')) if os.getenv('LBR_TICK') else 1000
@@ -348,7 +349,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           if 'indirect-x2g' in hsts and re.findall(INDIRECT, lines[-1]) and abs(ip - xip) >= 2**31:
             inc(hsts['indirect-x2g'], xip)
             if 'MISP' in lines[-1]: inc(hsts['indirect-x2g-misp'], xip)
-          if xip in indirects: inc(hsts['indirect_%s' % hex(xip)], ip)
+          if xip in indirects:
+            inc(hsts['indirect_%s_targets' % hex(xip)], ip)
+            inc(hsts['indirect_%s_paths' % hex(xip)], '%s.%s.%s' % (hex(get_taken(lines, -2)['from']), hex(xip), hex(ip)))
         tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
         line = line.rstrip('\r\n')
@@ -394,8 +397,8 @@ def get_taken(sample, n):
     if is_taken(sample[i]):
       n += 1
       if n==0:
-        frm = line_ip(sample[i])
-        if i < (len(sample)-1): to = line_ip(sample[i+1])
+        frm = line_ip(sample[i], sample)
+        if i < (len(sample)-1): to = line_ip(sample[i+1], sample)
         break
     i -= 1
   return {'from': frm, 'to': to, 'taken': 1}
@@ -407,6 +410,7 @@ def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   if not type(d) is dict: return d
   tot = d['total']
   del d['total']
+  del d['type']
   for x in d.keys(): loop['%s-%s' % (name, x)] = d[x]
   print('')
   return tot
@@ -414,10 +418,10 @@ def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
 def print_glob_hist(hist, name):
   d = print_hist((hist, name))
   if not type(d) is dict: return d
-  if 'indir' in name:
-    del d['mean']
+  if d['type'] == 'hex':
     d['mode'] = hex(int(d['mode']))
-  print('%s histogram summary: %s\n' % (name, hist_fmt(d)))
+  del d['type']
+  print('%s histogram summary: %s' % (name, hist_fmt(d)))
 
 def print_hist(hist_t, Threshold=0.01):
   if not hist_t[0]: return -1
@@ -425,20 +429,23 @@ def print_hist(hist_t, Threshold=0.01):
   loop, loop_ipc, sorter, weighted = (None, ) * 4
   if len(hist_t) > 2: (loop, loop_ipc, sorter, weighted) = hist_t[2:]
   tot = sum(hist.values())
+  if debug: C.printf('%s tot=%d\n' % (name, tot))
   if not tot: return 0
   d = {}
+  d['type'] = 'paths' if 'paths' in name else ('hex' if 'indir' in name else 'number')
   shist = sorted(hist.items(), key=lambda x: x[1])
   d['mode'] = str(shist[-1][0])
   keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
-  d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
+  if d['type'] == 'number': d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
   d['num-buckets'] = len(hist)
-  C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
-  left, threshold = 0, int(Threshold * tot)
-  for k in sorted(hist.keys(), key=sorter):
-    if hist[k] >= threshold:
-      print('%5s: %6d%6.1f%%' % (hex(k) if 'indir' in name else k, hist[k], 100.0 * hist[k] / tot))
-    else: left += hist[k]
-  if left: print('other: %6d%6.1f%%\t// buckets < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
+  if d['num-buckets'] > 1:
+    C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
+    left, threshold = 0, int(Threshold * tot)
+    for k in sorted(hist.keys(), key=sorter):
+      if hist[k] >= threshold:
+        print('%5s: %6d%6.1f%%' % (hex(k) if d['type'] == 'hex' else k, hist[k], 100.0 * hist[k] / tot))
+      else: left += hist[k]
+    if left: print('other: %6d%6.1f%%\t// buckets < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
   d['total'] = sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
   return d
 
@@ -460,7 +467,7 @@ def print_all(nloops=10, loop_ipc=0):
     for x in indirects:
       if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
         print('misprediction ratio for indirect branch at %s: %s' % (hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x])))
-  for x in hsts.keys(): print_glob_hist(hsts[x], x)
+  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:
     if loop_ipc in loops:

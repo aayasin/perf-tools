@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.41
+__version__= 1.42
 
 import argparse, os.path, sys
 import common as C
@@ -220,16 +220,6 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   exe("ulimit -a > setup-ulimit.log")
   if do['dmidecode']: exe('sudo dmidecode > setup-memory.log')
 
-def perf_format(es, result=''):
-  for e in es.split(','):
-    if e.startswith('r') and ':' in e:
-      e = e.split(':')
-      if len(e[0])==5:   e='%s/event=0x%s,umask=0x%s,name=%s/' % (pmu.pmu(), e[0][3:5], e[0][1:3], e[1])
-      elif len(e[0])==7: e='%s/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/' % (pmu.pmu(), e[0][5:7], e[0][3:5], e[0][1:3], e[1])
-      else: C.error("profile:perf-stat: invalid syntax in '%s'"%':'.join(e))
-    result += (e if result=='' else ','+e)
-  return result
-
 def get_perf_toplev():
   perf, toplev = args.perf, ''
   if perf != 'perf':
@@ -258,9 +248,9 @@ def profile(log=False, out='run'):
       events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
       events += (prefix.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}']) if pmu.goldencove() else '}')
       if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
-      events += append(perf_format(pmu.workproxy_event()), events)
+      events += append(pmu.basic_events(), events)
     if args.events:
-      events += append(perf_format(args.events), events)
+      events += append(pmu.perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, flags.strip(), grep)
@@ -364,7 +354,7 @@ def profile(log=False, out='run'):
     return perf_data, comm
   
   if en(8) and do['sample'] > 1:
-    assert pmu.lbr_event()[:-1] in do['perf-lbr'], 'Incorrect event for LBR in: '+do['perf-lbr']
+    assert pmu.lbr_event()[:-1] in do['perf-lbr'] or do['forgive'], 'Incorrect event for LBR in: ' + do['perf-lbr']
     data, comm = perf_record('lbr', comm)
     info = '%s.info.log' % data
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"

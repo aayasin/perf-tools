@@ -33,11 +33,31 @@ def hybrid():     return 'hybrid' in name()
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 
+def event(x):
+  e = {'lbr':     'r20c4:Taken-branches:ppp',
+    'work-proxy': 'r03c4:Work-progress-proxy',
+    'sentries':   'r40c4:System-entries:u',
+    }[x]
+  return perf_format(e) if x == 'lbr' or v5p() else ''
+
 def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
 
-def workproxy_event():
-  return 'r03c4:Work-progress-proxy' if v5p() else ''
+def basic_events():
+  return ','.join((event('work-proxy'), event('sentries')))
+
+# perf_events add-ons
+def perf_format(es):
+  rs = []
+  for e in es.split(','):
+    if e.startswith('r') and ':' in e:
+      e, f = e.split(':'), None
+      if len(e[0])==5:   f='%s/event=0x%s,umask=0x%s,name=%s/' % (pmu(), e[0][3:5], e[0][1:3], e[1])
+      elif len(e[0])==7: f='%s/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/' % (pmu(), e[0][5:7], e[0][3:5], e[0][1:3], e[1])
+      else: C.error("profile:perf-stat: invalid syntax in '%s'" % ':'.join(e))
+      f += ':'.join(e[2:])
+    rs += [ f ]
+  return ','.join(rs)
 
 #
 # CPU, cpu_ prefix

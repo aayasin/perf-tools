@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.42
+__version__= 1.43
 
 import argparse, os.path, sys
 import common as C
@@ -39,7 +39,7 @@ do = {'run':        RUN_DEF,
   'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
-  'metrics':        "+L2MPKI,+ILP,+IpTB,+IpMispredict", #,+UPI once ICL mux fixed
+  'metrics':        "+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict", # +UPI once ICL mux fixed, +ORO with TMA 4.5
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,-CPU_Utilization",
@@ -317,7 +317,7 @@ def profile(log=False, out='run'):
   
   cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, do['repeat']))
   if en(5): exe(cmd + ' | tee %s | %s' % (log, grep_nz),
-              'topdown %d-levels %d runs' % (do['levels'], do['repeat']))
+              'topdown primary, %d-levels %d runs' % (do['levels'], do['repeat']))
   
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',

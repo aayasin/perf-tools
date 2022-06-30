@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.82
+__version__= 0.83
 
 import common as C
 import pmu
@@ -327,6 +327,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       # a line with a label
       if not labels and is_label(line):
         continue
+      # e.g. "        00007ffff7afc6ca        <bad>" then "mismatch of LBR data and executable"
+      if 'mismatch of LBR data' in line:
+        valid = skip_sample(lines[0])
+        stat['bad'] += 1
+        break
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
       if skip_bad and len(lines) and not line.strip().startswith('0'):
         if debug and debug == timestamp:
@@ -384,7 +389,7 @@ def has_timing(line): return line.endswith('IPC')
 def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else False
 def is_label(line):   return line.strip().endswith(':')
 def is_loop(line):    return line_ip(line) in loops
-def is_taken(line):   return '#' in line
+def is_taken(line):   return '# ' in line
 def is_in_loop(ip, loop): return ip >= loop and ip <= loops[loop]['back']
 def get_inst(l):      return C.str2list(l)[1]
 def get_loop(ip):     return loops[ip] if ip in loops else None
@@ -454,10 +459,10 @@ def print_hist_sum(name, h):
 
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
-  if glob['size_stats_en']:
-    total = stat['IPs'][glob['ip_filter']] if glob['ip_filter'] else stat['total']
-    stat['size']['avg'] = round(size_sum / (total - stat['bad'] - stat['bogus']), 1)
+  total = stat['IPs'][glob['ip_filter']] if glob['ip_filter'] else stat['total']
+  if glob['size_stats_en']: stat['size']['avg'] = round(size_sum / (total - stat['bad'] - stat['bogus']), 1)
   if not loop_ipc: print('LBR samples:', hist_fmt(stat))
+  if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5: C.error('Too many LBR bad/bogus samples in profile')
   if os.getenv('PTOOLS_CYCLES'): print('LBR cycles coverage (scaled by 1K): %s' % ratio(1e3 * stat['total_cycles'], int(os.getenv('PTOOLS_CYCLES'))))
   if len(footprint): print('hot code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
   if len(pages): print('estimate number of hot code 4K-pages: %d' % len(pages))
@@ -552,9 +557,9 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
 
 def print_sample(sample, n=10):
   if not len(sample): return
-  C.printf('\n'.join(('sample#%d'%stat['total'], sample[0], '\n')))
-  print('\n'.join(sample[-n:] if n else sample) + '\n')
-  sys.stdout.flush()
+  C.printf('\n'.join(('sample#%d size=%d' % (stat['total'], len(sample)-1), sample[0], '\n')))
+  C.printf('\n'.join((sample[-min(n, len(sample)-1):] if n else sample) + ['\n']))
+  sys.stderr.flush()
 
 def print_header():
   C.printc('Global stats:')

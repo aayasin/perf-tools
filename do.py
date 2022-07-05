@@ -197,6 +197,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   def new_line(): return prn_line(out)
   def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s'%(args.pmu_tools, m))
   C.printc(do['pmu']) #OS
+  if args.mode == 'process': return
   exe('uname -a > ' + out, 'logging setup')
   exe("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME' >> " + out)
   for f in ('/sys/kernel/mm/transparent_hugepage/enabled', '/proc/sys/vm/nr_hugepages', '/proc/sys/vm/nr_overcommit_hugepages'):

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: June 2022
+# edited: July 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.83
+__version__= 0.84
 
 import common as C
 import pmu
@@ -158,7 +158,7 @@ def detect_loop(ip, lines, loop_ipc,
     if is_taken(lines[-1]): iter_update()
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds = 1, {}, []
-      types = ('taken', 'load', 'store', 'lea', 'nop')
+      types = ('taken', 'load', 'store', 'prefetch', 'lea', 'nop')
       for i in types: cnt[i] = 0
       x = len(lines)-2
       while x >= 1:
@@ -168,6 +168,7 @@ def detect_loop(ip, lines, loop_ipc,
         if 'nop' in lines[x]: cnt['nop'] += 1
         elif '(' in lines[x]:
           if 'lea' in lines[x]: cnt['lea'] += 1
+          elif 'prefetch' in lines[x]: cnt['prefetch'] += 1
           elif re.match(r"\s+\S+\s+(cmp[^x]|test)", lines[x]): cnt['load'] += 1
           else: cnt['store' if re.match(r"\s+\S+\s+[^\(\),]+,", lines[x]) else 'load'] += 1
         inst_ip = line_ip(lines[x])

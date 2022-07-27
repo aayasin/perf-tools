@@ -10,7 +10,11 @@ __version__= 0.84
 import common as C
 import pmu
 import os, re, sys
-from numpy import average
+try:
+  from numpy import average
+  numpy_imported = True
+except ImportError:
+  numpy_imported = False
 
 INDIRECT = r"(jmp|call).*%"
 
@@ -442,7 +446,7 @@ def print_hist(hist_t, Threshold=0.01):
   shist = sorted(hist.items(), key=lambda x: x[1])
   d['mode'] = str(shist[-1][0])
   keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
-  if d['type'] == 'number': d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
+  if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
   d['num-buckets'] = len(hist)
   if d['num-buckets'] > 1:
     C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))

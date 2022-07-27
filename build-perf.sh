@@ -23,6 +23,7 @@ sudo apt-get install make
 #warning: next line was tested only on Ubuntu
 sudo apt-get install -y libbfd-dev libdwarf-dev libelf-dev libdw-dev libunwind-dev
 make clean
+#make PYTHON=false PYTHON_CONFIG=false
 make
 ls -l $PWD/perf
 cp perf ../../../../

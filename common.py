@@ -113,7 +113,7 @@ def glob(regex):
 #
 def os_installer():
   installer='yum'
-  name = file2str('/etc/os-release')
+  name = file2str('/etc/os-release', 1)
   if 'Ubuntu' in name: installer='apt-get'
   if 'CentOS' in name: installer='dnf'
   return installer
@@ -147,9 +147,9 @@ def file2lines(filename, fail=False):
       warn('cannot open %s'%filename, bold=True)
       return [None]
 
-def file2str(f):
+def file2str(f, lines=0):
   out = file2lines(f)
-  return out[0].replace('\n', '') if out[0] else None
+  return ';'.join(out[:lines] if lines else out).replace('\n', '') if out[0] else None
 
 # (colored) grep with 0 exit status
 def grep(what, file='', flags='', color=False):

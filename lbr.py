@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.84
+__version__= 0.85
 
 import common as C
 import pmu
@@ -26,7 +26,7 @@ use_cands = os.getenv('LBR_USE_CANDS')
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 def inc(d, b): d[b] = d.get(b, 0) + 1
-def ratio(a, b): return '%.2f%%' % (100.0 * a / b)
+def ratio(a, b): return '%.2f%%' % (100.0 * a / b) if b else '-'
 def read_line(): return sys.stdin.readline()
 
 def exit(x, sample, label):
@@ -89,6 +89,13 @@ def loop_stats(line, loop_ipc, tc_state):
         loop_stats.atts = ';'.join((loop_stats.atts, tag)) if loop_stats.atts else tag
   def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
   def vec_len(i): return 'vec%d' % (128 * (2**i))
+  if not line: # update loop attributes & exit
+    if len(loop_stats.atts) > len(loops[loop_stats.id]['attributes']):
+      loops[loop_stats.id]['attributes'] = loop_stats.atts
+      if debug and int(debug, 16) == loop_stats.id: print(loop_stats.atts, stat['total'])
+      loop_stats.atts = ''
+      loop_stats.id = None
+    return
   # loop-body stats, FIXME: on the 1st encoutered loop in a new sample for now
   # TODO: improve perf of loop_stats invocation
   #if (glob['loop_stats_en'] == 'No' or
@@ -101,11 +108,7 @@ def loop_stats(line, loop_ipc, tc_state):
     loop_stats.atts = ''
   if loop_stats.id:
     if not is_in_loop(line_ip(line), loop_stats.id): # just exited a loop
-      if len(loop_stats.atts) > len(loops[loop_stats.id]['attributes']):
-        loops[loop_stats.id]['attributes'] = loop_stats.atts
-        if debug and int(debug, 16) == loop_stats.id: print(loop_stats.atts, stat['total'])
-      loop_stats.atts = ''
-      loop_stats.id = None
+      loop_stats(None, 0, 0)
     else:
       mark(INDIRECT, 'indirect')
       mark(r"[^k]s[sdh]([a-z])\s[\sa-z0-9,\(\)%%]+mm", 'scalar-fp')
@@ -313,6 +316,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         elif len_m1 and type(tc_state) == int and is_in_loop(line_ip(lines[-1]), loop_ipc):
           if tc_state == 31 or verbose:
             inc(loops[loop_ipc]['tripcount'], '%d+' % (tc_state + 1))
+            if loop_stats.id: loop_stats(None, 0, 0)
           # else: note a truncated tripcount, i.e. unknown in 1..31, is not accounted for by default.
         if debug and debug == timestamp:
           exit((line.strip(), len(lines)), lines, 'sample-of-interest ended')
@@ -415,7 +419,7 @@ def get_taken(sample, n):
 
 def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   loop = loops[loop_ipc]
-  assert name in loop
+  if not name in loop: return None
   d = print_hist((loop[name], name, loop, loop_ipc, sortfunc, weighted))
   if not type(d) is dict: return d
   tot = d['total']

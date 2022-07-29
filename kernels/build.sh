@@ -1,6 +1,6 @@
 #!/bin/sh
 # Author: Ahmad Yasin
-# April 2022
+# July 2022
 #
 CC=${CC:-gcc -g -O2}
 GEN=${GEN:-1}
@@ -32,9 +32,10 @@ for x in add mul; do
 done
 $PY ./gen-kernel.py -i "vdivps %ymm@,%ymm@,%ymm@" -r3 -n1 > fp-divps.c
 $PY ./gen-kernel.py -i 'vfmadd132pd %ymm10,%ymm11,%ymm11' 'vfmadd132ps %ymm12,%ymm13,%ymm13' 'vaddpd %xmm0,%xmm0,%xmm0' 'vaddps %xmm1,%xmm1,%xmm1' 'vsubsd %xmm2,%xmm2,%xmm2' 'vsubss %xmm3,%xmm3,%xmm3' -n1 --reference 'ICL-PMU' > fp-arith-mix.c
+$PY ./gen-kernel.py -i 'xor %eax,%eax' 'xor %ecx,%ecx' cpuid -n1 > cpuid.c
 fi
 
-ks="fp-{{add,mul}-{bw,lat},arith-mix,divps},dsb-jmp,jcc20k,jumpy*,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx"
+ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

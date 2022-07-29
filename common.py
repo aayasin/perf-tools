@@ -157,29 +157,6 @@ def grep(what, file='', flags='', color=False):
   if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('egrep', 'egrep --color')
   return "(%s || true)" % cmd
 
-import csv
-def read_perf_toplev(filename):
-  perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
-  d = {}
-  with open(filename) as csvfile:
-    reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl)
-    for r in reader:
-      if r['Event'] in ('Event', 'dummy'): continue
-      x = r['Event']
-      v = int(float(r['Value']))
-      if x == 'msr/tsc/': x='tsc'
-      elif x == 'duration_time':
-        x='DurationTimeInMilliSeconds'
-        v=float(v/1e6)
-        d[x] = v
-        continue
-      elif '.' in x or x.startswith('cpu/topdown-'): pass
-      else: print(r['Event'])
-      x = x.upper()
-      if v == 0 and x in d and d[x] != 0: warn('skipping zero override in: '+str(r))
-      else: d[x] = v
-  return d
-
 # auxiliary: strings, argv, python-stuff
 #
 

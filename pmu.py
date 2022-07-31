@@ -51,12 +51,14 @@ def perf_format(es):
   rs = []
   for e in es.split(','):
     if e.startswith('r') and ':' in e:
-      e, f = e.split(':'), None
-      if len(e[0])==5:   f='%s/event=0x%s,umask=0x%s,name=%s/' % (pmu(), e[0][3:5], e[0][1:3], e[1])
-      elif len(e[0])==7: f='%s/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/' % (pmu(), e[0][5:7], e[0][3:5], e[0][1:3], e[1])
+      e, f, n = e.split(':'), None, ':'.join(e.split(':')[1:])
+      if len(e[0])==5:   f='%s/event=0x%s,umask=0x%s,name=%s/' % (pmu(), e[0][3:5], e[0][1:3], n)
+      elif len(e[0])==7: f='%s/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/' % (pmu(), e[0][5:7], e[0][3:5], e[0][1:3], n)
+      elif len(e[0])==9: f='%s/event=0x%s,umask=0x%s,cmask=0x%s,edge=%d,name=%s/' % (pmu(),
+        e[0][7:9], e[0][5:7], e[0][3:5], (int(e[0][1:3], 16) >> 2) & 0x1, n)
       else: C.error("profile:perf-stat: invalid syntax in '%s'" % ':'.join(e))
-      f += ':'.join(e[2:])
-    rs += [ f ]
+      rs += [ f ]
+    else: rs += [ e ]
   return ','.join(rs)
 
 import csv, re

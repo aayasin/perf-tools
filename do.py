@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: June 2022
+# edited: Aug 2022
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
@@ -13,7 +13,7 @@
 #   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.43
+__version__= 1.44
 
 import argparse, os.path, sys
 import common as C
@@ -44,7 +44,7 @@ do = {'run':        RUN_DEF,
   'msrs':           pmu.cpu_msrs(),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,-CPU_Utilization",
   'numactl':        1,
-  'objdump':        './binutils-gdb/binutils/objdump',
+  'objdump':        'binutils-gdb/binutils/objdump' if os.path.isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
@@ -211,9 +211,11 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   exe("dmesg -T | tee %s | %s >> %s && %s | tail -1 >> %s" % (d, C.grep('Performance E|micro'), out, C.grep('BIOS ', d), out))
   new_line()          #PMU
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
-  exe('%s --version >> '%args.perf + out)
+  exe('%s --version >> ' % args.perf + out)
   setup_perf('log', out)
-  exe('echo "python version: %s" >> %s'%(python_version(), out))
+  new_line()          #Tools
+  exe('echo "python version: %s" >> %s' % (python_version(), out))
+  for x in (do['compiler'], 'as'): exe('%s --version | head -1 >> ' % x + out)
   new_line()          #Memory
   if do['numactl']: exe('numactl -H >> ' + out)
   new_line()          #Devices, etc
@@ -271,7 +273,7 @@ def profile(log=False, out='run'):
     return '%s%s'%(out, C.chop(flags, (' :/,=', 'cpu_core', 'cpu')))
   
   perf_stat_log = "%s.perf_stat.log"%out
-  perf_report = ' '.join((perf, 'report', '--objdump %s'%do['objdump'] if os.path.isfile(do['objdump']) else ''))
+  perf_report = ' '.join((perf, 'report', '--objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else ''))
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | ./ptage'
   r = do['run']
@@ -461,7 +463,7 @@ def build_kernel(dir='./kernels/'):
     if args.verbose > 1: exe(fixup('grep instructions ./%s.c'%app))
   exe(fixup('%s -g -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
   do['run'] = fixup('%s ./%s %d'%(do['pin'], app, int(float(args.app_iterations))))
-  if args.verbose > 2: exe(fixup("objdump -dw ./%s | grep -A%d pause | egrep '[ 0-9a-f]+:'"%(app, do['asm-dump'])), '@kernel ASM')
+  if args.verbose > 2: exe(fixup("%s -dw ./%s | grep -A%d pause | egrep '[ 0-9a-f]+:'" % (do['objdump'], app, do['asm-dump'])), '@kernel ASM')
 
 def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list

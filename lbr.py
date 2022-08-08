@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.85
+__version__= 0.86
 
 import common as C
 import pmu
@@ -165,7 +165,7 @@ def detect_loop(ip, lines, loop_ipc,
     if is_taken(lines[-1]): iter_update()
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds = 1, {}, []
-      types = ('taken', 'load', 'store', 'prefetch', 'lea', 'nop')
+      types = ('taken', 'load', 'store', 'prefetch', 'lea', 'nop', 'cmov', 'zcnt')
       for i in types: cnt[i] = 0
       x = len(lines)-2
       while x >= 1:
@@ -173,11 +173,13 @@ def detect_loop(ip, lines, loop_ipc,
         if is_taken(lines[x]): cnt['taken'] += 1
         if re.match(r"\s+\S+\s+j[^m]", lines[x]): conds += [line_ip(lines[x])]
         if 'nop' in lines[x]: cnt['nop'] += 1
-        elif '(' in lines[x]:
+        elif '(' in lines[x]: # load/store take priority in CISC insts
           if 'lea' in lines[x]: cnt['lea'] += 1
           elif 'prefetch' in lines[x]: cnt['prefetch'] += 1
           elif re.match(r"\s+\S+\s+(cmp[^x]|test)", lines[x]): cnt['load'] += 1
           else: cnt['store' if re.match(r"\s+\S+\s+[^\(\),]+,", lines[x]) else 'load'] += 1
+        elif 'cmov' in lines[x]: cnt['cmov'] += 1
+        elif 'zcnt' in lines[x]: cnt['zcnt'] += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
           loop['size'], loop['Conds'] = size, len(conds)
@@ -457,7 +459,7 @@ def print_hist(hist_t, Threshold=0.01):
     left, threshold = 0, int(Threshold * tot)
     for k in sorted(hist.keys(), key=sorter):
       if hist[k] >= threshold:
-        print('%5s: %6d%6.1f%%' % (hex(k) if d['type'] == 'hex' else k, hist[k], 100.0 * hist[k] / tot))
+        print('%5s: %7d%6.1f%%' % (hex(k) if d['type'] == 'hex' else k, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
     if left: print('other: %6d%6.1f%%\t// buckets < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
   d['total'] = sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot

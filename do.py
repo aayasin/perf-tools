@@ -10,12 +10,11 @@
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
 #   support disable nmi_watchdog in CentOS
-#   check sudo permissions
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.44
+__version__= 1.45
 
-import argparse, os.path, sys
+import argparse, math, os.path, sys
 import common as C
 import pmu
 from datetime import datetime
@@ -256,7 +255,8 @@ def profile(log=False, out='run'):
       events += append(pmu.perf_format(args.events), events)
       grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
-    return '%s stat %s -- %s | tee %s.perf_stat%s.log %s'%(perf, perf_args, r, out, flags.strip(), grep)
+    log = '%s.perf_stat%s.log' % (out, flags.strip())
+    return '%s stat %s -- %s | tee %s %s' % (perf, perf_args, r, log, grep), log
   def perf_script(x, msg=None, export=''):
     if do['perf-scr']:
       samples = 1e4 * do['perf-scr']
@@ -269,19 +269,33 @@ def profile(log=False, out='run'):
     perf_script.first = False
     return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1), export=export)
   perf_script.first = True
+  perf_stat_log = None
   def record_name(flags):
     return '%s%s'%(out, C.chop(flags, (' :/,=', 'cpu_core', 'cpu')))
-  
-  perf_stat_log = "%s.perf_stat.log"%out
+  def get_metric(m, default=-1):
+    if perf_stat_log and os.path.isfile(perf_stat_log):
+      for l in C.file2lines(perf_stat_log):
+        if m in l: return float(l.strip().split()[4])
+    return default
+  def record_calibrate(x):
+    factor = int(math.log(get_metric('CPUs', 1), 10))
+    if factor:
+      do[x] = do[x].replace('0000', '0' * (4 + factor))
+      C.info('\tcalibrated: %s' % do[x])
+    return record_name(do[x])
   perf_report = ' '.join((perf, 'report', '--objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else ''))
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | ./ptage'
   r = do['run']
   if en(0) or log: log_setup()
   
-  if en(1): exe(perf_stat(flags='-r%d' % do['repeat']), 'per-app counting %d runs' % do['repeat'])
+  if args.profile_mask & ~0x1: C.info('App: %s %s' % (args.app_name, args.app_iterations if args.gen_args else ''))
+  if en(1):
+    x = perf_stat(flags='-r%d' % do['repeat'])
+    exe(x[0], 'per-app counting %d runs' % do['repeat'])
+    perf_stat_log = x[1]
   
-  if en(2): exe(perf_stat('-a', a_events(), grep='| egrep "seconds|insn|topdown|pkg"'), 'system-wide counting')
+  if en(2): exe(perf_stat('-a', a_events(), grep='| egrep "seconds|insn|topdown|pkg"')[0], 'system-wide counting')
   
   if en(3) and do['sample']:
     base = out+'.perf'
@@ -290,7 +304,8 @@ def profile(log=False, out='run'):
       base += C.chop(do['perf-record'], ' :/,=')
     data = '%s.perf.data'%record_name(do['perf-record'])
     exe(perf + ' record -c 1000003 -g -o %s '%data+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
-    print_cmd("Try '%s -i %s' to browse time-consuming sources"%(perf_report, data))
+    exe(perf_report + " --header-only -i %s | grep duration" % data)
+    print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_report, data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
     exe(perf_report + " --stdio -F sample,overhead,comm,dso,sym -n --no-call-graph -i %s " \
       " | tee %s-funcs.log | grep -A7 Overhead | egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//'" %
@@ -347,7 +362,7 @@ def profile(log=False, out='run'):
   data, comm = None, None
   def perf_record(tag, comm):
     assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag] or do['forgive'], 'No unfiltered LBRs! tag=%s'%tag
-    perf_data = '%s.perf.data' % record_name(do['perf-%s'%tag])
+    perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
     exe(perf + ' record %s -o %s %s -- %s' % (do['perf-%s'%tag], perf_data, do['perf-stat-ipc'], r), 'sampling w/ '+tag.upper())
     warn_file(perf_data)
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
@@ -418,7 +433,7 @@ def profile(log=False, out='run'):
     perf_script("-i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
-      if pmu.cpu('smt-on'): C.warn('Disable SMT for DSB robust analysis')
+      if pmu.cpu('smt-on') and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')
       else:
         is_dsb = 1
         perf_script("-i %s -F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %

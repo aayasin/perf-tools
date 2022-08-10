@@ -360,10 +360,10 @@ def profile(log=False, out='run'):
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
   
   data, comm = None, None
-  def perf_record(tag, comm):
+  def perf_record(tag, comm, msg=''):
     assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag] or do['forgive'], 'No unfiltered LBRs! tag=%s'%tag
     perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
-    exe(perf + ' record %s -o %s %s -- %s' % (do['perf-%s'%tag], perf_data, do['perf-stat-ipc'], r), 'sampling w/ '+tag.upper())
+    exe(perf + ' record %s -o %s %s -- %s' % (do['perf-%s'%tag], perf_data, do['perf-stat-ipc'], r), 'sampling-%s %s' % (tag.upper(), msg))
     warn_file(perf_data)
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if not comm:
@@ -381,7 +381,7 @@ def profile(log=False, out='run'):
     def tail(f=''): return "tail %s | grep -v total" % f
     if not os.path.isfile(info) or do['reprocess'] > 1:
       exe(perf +" report -i %s | grep -A13 'Branch Statistics:' | tee %s | egrep -v ':\s+0\.0%%|CROSS'" % (data, info), "@stats")
-      if os.path.isfile(perf_stat_log): exe("egrep '  branches|instructions' %s >> %s" % (perf_stat_log, info))
+      if perf_stat_log and os.path.isfile(perf_stat_log): exe("egrep '  branches|instructions' %s >> %s" % (perf_stat_log, info))
       sort2uf = "%s | egrep -v '\s+[1-9]\s+' | ./ptage" % sort2u
       perf_script("-i %s -F ip -c %s | %s | tee %s.samples.log | %s" %
         (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')))
@@ -427,7 +427,7 @@ def profile(log=False, out='run'):
       else: warn_file(loops)
   
   if en(9) and do['sample'] > 2:
-    data, comm = perf_record('pebs', comm)
+    data, comm = perf_record('pebs', comm, C.flag_value(do['perf-pebs'], '-e'))
     exe(perf + " report -i %s --stdio -F overhead,comm,dso | tee %s.modules.log | grep -A12 Overhead" %
       (data, data), "@ top-10 modules")
     perf_script("-i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")

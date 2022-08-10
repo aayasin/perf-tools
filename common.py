@@ -187,6 +187,10 @@ def chop(source, stuff):
   return r.strip()
 def chop_app(a): return chop(a, './~<>=\'{};|"')
 
+def flag_value(s, f, v='', sep=' '):
+  if f in s: v = s.split(f)[1].split(sep)[1]
+  return v
+
 def str2list(s):
   return ' '.join(s.split()).split(' ')
 

@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.45
+__version__= 1.46
 
 import argparse, math, os.path, sys
 import common as C
@@ -208,6 +208,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
     for m in do['msrs']: exe('echo "MSR %5s:\t%16s" >> '%(m, read_msr(m)) + out)
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
   exe("dmesg -T | tee %s | %s >> %s && %s | tail -1 >> %s" % (d, C.grep('Performance E|micro'), out, C.grep('BIOS ', d), out))
+  exe("perf record true 2> /dev/null && perf report -I --header-only > setup-cpu-toplogy.log".replace('perf', get_perf_toplev()[0]))
   new_line()          #PMU
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
   exe('%s --version >> ' % args.perf + out)

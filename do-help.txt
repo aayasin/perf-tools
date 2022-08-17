@@ -27,8 +27,8 @@ optional arguments:
   --print-only          print the commands without running them (default:
                         False)
   -m METRICS, --metrics METRICS
-                        user metrics to pass to toplev's --nodes (default:
-                        +L2MPKI,+ILP,+IpTB,+IpMispredict)
+                        user metrics to pass to toplev's --nodes (default: +Lo
+                        ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict)
   -e EVENTS, --events EVENTS
                         user events to pass to perf-stat's -e (default: None)
   --power               collect power metrics/events as well (default: False)

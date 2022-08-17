@@ -1,12 +1,13 @@
 DO = ./do.py
 PM = 0x80
+MGR = sudo apt
 SHOW = tee
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
 
 all: tramp3d-v4
 	@echo done
 install: link-python
-	sudo apt -y -q install curl clang
+	$(MGR) -y -q install curl clang
 	make -s -C workloads/mmm install
 link-python:
 	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
@@ -25,8 +26,8 @@ test-mem-bw: run-mem-bw
 	$(DO) profile -s1 -pm $(PM) | $(SHOW)
 	kill -9 `pidof m0-n8192-u01.llv`
 run-mt:
-	./omp-bin.sh $(NUM_THREAD) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv
-test-mt: install run-mt
+	./omp-bin.sh $(NUM_THREADS) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv &
+test-mt: run-mt
 	sleep 2s
 	$(DO) profile -s1 -pm $(PM) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`

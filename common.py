@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, debug, strings, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: June 2022
+# edited: Aug 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 

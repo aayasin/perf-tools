@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.46
+__version__= 1.47
 
 import argparse, math, os.path, sys
 import common as C
@@ -350,7 +350,6 @@ def profile(log=False, out='run'):
       for c in ('report', 'annotate'):
         exe("%s %s --stdio -i %s > %s "%(perf, c, perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
-  # +Info metrics that would not use more counters
   if en(12):
     cmd, log = toplev_V('-mvl2', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']).replace('+', '-'))
     exe(cmd + ' | sort | tee %s | %s' % (log, grep_nz), 'Info metrics')
@@ -391,7 +390,7 @@ def profile(log=False, out='run'):
           "| tee >(grep MISPRED | %s | %s > %s.mispreds.log) | %s"
           "| tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) "
           "| grep call | %s > %s.calls.log" %
-          (data, comm, clean, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data), '@counting takens')
+          (data, comm, clean, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data), '@processing taken branches')
         for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
         exe(log_br_count('mispredicted taken', 'mispreds'))
     if do['xed']:
@@ -469,7 +468,6 @@ def do_logs(cmd, ext=[], tag=''):
   s = (uniq_name() if args.app_name else '') + '*'
   if cmd == 'tar': exe('tar -czvf %s run.sh '%res + (' %s.'%s).join(log_files) + ' .%s.cmd'%s)
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')
-  return res
 
 def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
@@ -529,6 +527,7 @@ def main():
   if args.mode == 'process':
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
+    if args.profile_mask & 0x300: args.profile_mask |= 0x2
   if args.sys_wide:
     if args.mode != 'process': C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide

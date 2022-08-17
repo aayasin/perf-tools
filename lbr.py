@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: July 2022
+# edited: Aug 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.86
+__version__= 0.87
 
 import common as C
 import pmu
@@ -16,6 +16,7 @@ try:
 except ImportError:
   numpy_imported = False
 
+FP_SUFFIX = "[sdh]([a-z])"
 INDIRECT = r"(jmp|call).*%"
 
 hitcounts = C.envfile('PTOOLS_HITS')
@@ -111,9 +112,9 @@ def loop_stats(line, loop_ipc, tc_state):
       loop_stats(None, 0, 0)
     else:
       mark(INDIRECT, 'indirect')
-      mark(r"[^k]s[sdh]([a-z])\s[\sa-z0-9,\(\)%%]+mm", 'scalar-fp')
+      mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % FP_SUFFIX, 'scalar-fp')
       for i in range(loop_stats_vec):
-        mark(r"[^k]p[sdh]\s+" + vec_reg(i), vec_len(i) + '-fp')
+        mark(r"[^k]p%s\s+" % FP_SUFFIX + vec_reg(i), vec_len(i) + '-fp')
         mark(r"\s%sp.*%s" % ('(v)' if i==0 else 'v', vec_reg(i)), vec_len(i) + '-int')
   return tripcount(line_ip(line), loop_ipc, tc_state)
 loop_stats.id = None
@@ -265,7 +266,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         hsts['indirect_%s_paths' % x] = {}
     if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'] = {}
   if stat['total']==0 and debug: C.printf('DBG=%s\n' % debug)
-  tick = int(os.getenv('LBR_TICK')) if os.getenv('LBR_TICK') else 1000
+  tick = C.env2int('LBR_TICK', 1000)
   if loop_ipc: tick *= 10
   
   while not valid:

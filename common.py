@@ -38,9 +38,10 @@ def info(msg, bold=False, col=color.GREY):
   if bold: col += color.BOLD
   printc('INFO: %s .'%msg, col)
 
-def warn(msg, bold=False, col=color.ORANGE):
+def warn(msg, bold=False, col=color.ORANGE, level=0):
+  WARN = env2int('WARN')
   if bold: col += color.BOLD
-  printc('WARNING: %s !'%msg, col)
+  if level <= WARN: printc('WARNING: %s' % msg, col)
 
 dump_stack_on_error = 0
 def error(msg):
@@ -122,6 +123,9 @@ def check_executable(x):
   if not os.access(x, os.X_OK): error("'%s' is not executable" % x)
 
 def dirname(): return os.path.dirname(__file__)
+
+def env2int(x, default=0):
+  return int(os.getenv(x)) if os.getenv(x) else default
 
 def env2str(x):
   y = os.getenv(x)

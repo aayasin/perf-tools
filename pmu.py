@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Abstraction of Intel Architecture and its Performance Monitoring Unit (PMU)
 # Author: Ahmad Yasin
-# edited: June 2022
+# edited: Aug 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -81,7 +81,7 @@ def read_perf_toplev(filename):
       else: print(r['Event'])
       b = re.match(r"[a-zA-Z\.0-9_]+:?", x).group(0)
       for i in (b, ':sup', ':user'): x = x.replace(i, i.upper())
-      if v == 0 and x in d and d[x] != 0: C.warn('skipping zero override in: ' + str(r))
+      if v == 0 and x in d and d[x] != 0: C.warn('skipping zero override in: ' + str(r), level=1)
       else: d[x] = v
   return d
 

@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.47
+__version__= 1.48
 
 import argparse, math, os.path, sys
 import common as C
@@ -461,6 +461,13 @@ def profile(log=False, out='run'):
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
       #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
       , 'topdown full no multiplexing')
+  
+  if en(16):
+    assert do['msr']
+    perf_data = '%s.perf.data' % record_name('-e msr')
+    exe('sudo %s record -e msr:* -o %s -- %s' % (perf, perf_data, r), 'tracing MSRs')
+    x = '-i %s | cut -d: -f3-4 | cut -d, -f1 | sort | uniq -c' % perf_data
+    exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 1))
 
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['', 'csv', 'log', 'txt'] + ext

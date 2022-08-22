@@ -50,3 +50,7 @@ help: do-help.txt
 do-help.txt: $(DO)
 	./$^ -h > $@
 
+pre-push: help tramp3d-v4
+	$(DO) help -m GFLOPs
+	make test-mem-bw SHOW='grep =='
+	$(DO) profile -a ./CLTRAMP3D --tune :loops:20

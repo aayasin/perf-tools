@@ -1,15 +1,21 @@
 #!/bin/sh
-CLONE=${CLONE:-1}
+CLONE=${CLONE:-2}
 PERFV=${PERFV:-5.15.0}
+LINUXV=${PERFV:-5.19.3}
 OBJDUMP=${OBJDUMP:-0}
 
-perfdir=linux/tools/perf/
+perfdir=linux/tools/perf
 set -xe
 if [ $CLONE -eq 1 ]; then
   git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+elif [ $CLONE -eq 2 ]; then
+  wget https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-$LINUXV.tar.xz
+  tar -vxf linux-$LINUXV.tar.xz
+  perfdir=linux-$LINUXV/tools/perf
 else
-  # if previous command fails, try this alternative :
-  wget https://mirrors.edge.kernel.org/pub/linux/kernel/tools/perf/v$PERFV/perf-$PERFV.tar.xz && tar -xvf ./perf-$PERFV.tar.xz
+  # if previous commands fail, try this alternative :
+  wget https://mirrors.edge.kernel.org/pub/linux/kernel/tools/perf/v$PERFV/perf-$PERFV.tar.xz
+  tar -xvf ./perf-$PERFV.tar.xz
   perfdir=perf-$PERFV/tools/perf
 fi
 

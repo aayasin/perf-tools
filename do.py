@@ -245,7 +245,8 @@ def profile(log=False, out='run'):
     return power() if args.power and not pmu.v5p() else ''
   def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|Work|branches|instructions|cycles"'):
     def append(x, y): return x if y == '' else ',' + x
-    perf_args = ' '.join((flags, do['perf-stat']) + ('-M', args.metrics) if args.metrics else ())
+    perf_args = ' '.join((flags, do['perf-stat']) + ('--metric-no-group ' # workaround bug 4804e0111662 in perf-stat -r2 -M
+      '-M', args.metrics) if args.metrics else ())
     if pmu.perfmetrics() and do['core']:
       prefix = ',topdown-'
       events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
@@ -522,7 +523,7 @@ def main():
   if args.verbose > 2: args.toplev_args += ' --perf'
   if args.app_name: do['run'] = args.app_name
   if args.print_only and args.verbose == 0: args.verbose = 1
-  do['nodes'] += ("," + args.metrics)
+  do['nodes'] += ("," + args.nodes)
   if args.tune:
     for tlists in args.tune:
       for t in tlists:
@@ -599,7 +600,7 @@ def get(param):
   assert param and len(param) == 3, '3 parameters expected: e.g. get:<what>:<logfile>:<num>'
   sub, log, num = param
   num = int(num)
-  if log == '-': log = exe_1line('ls -1tr *.%s.log | tail -1' % ('info' if c == 'x2g-indirects' else c))
+  if log == '-': log = exe_1line('ls -1tr *.%s.log | tail -1' % ('info' if sub == 'x2g-indirects' else sub))
   if sub == 'indirects':        print(','.join([ '0x%s' % x.lstrip('0') for x in C.exe2list("tail -%d %s | grep -v total | sed 's/bnd jmp/bnd-jmp/'" % (num, log))[2:][::5] ]))
   elif sub == 'x2g-indirects':  exe("grep -E '^0x[0-9a-f]+:' %s | sort -n -k2 |grep -v total|uniq|tail -%d|cut -d: -f1|tr '\\n' ,|sed 's/.$/\\n/'" % (log, num))
 

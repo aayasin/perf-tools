@@ -5,14 +5,14 @@
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
-#   toplevl 3-levels default Icelake onwards
+#   toplev 3-levels default Icelake onwards
 #   quiet mode
 #   convert verbose to a bitmask
 #   add test command to gate commits to this file
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.48
+__version__= 1.50
 
 import argparse, math, os.path, sys
 import common as C
@@ -245,16 +245,15 @@ def profile(log=False, out='run'):
     return power() if args.power and not pmu.v5p() else ''
   def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|Work|branches|instructions|cycles"'):
     def append(x, y): return x if y == '' else ',' + x
-    perf_args = ' '.join((flags, do['perf-stat']))
+    perf_args = ' '.join((flags, do['perf-stat']) + ('-M', args.metrics) if args.metrics else ())
     if pmu.perfmetrics() and do['core']:
       prefix = ',topdown-'
       events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
       events += (prefix.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}']) if pmu.goldencove() else '}')
       if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
       events += append(pmu.basic_events(), events)
-    if args.events:
-      events += append(pmu.perf_format(args.events), events)
-      grep = '' #keep output unfiltered with user-defined events
+    if args.events: events += append(pmu.perf_format(args.events), events)
+    if args.events or args.metrics: grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     log = '%s.perf_stat%s.log' % (out, flags.strip())
     return '%s stat %s -- %s | tee %s %s' % (perf, perf_args, r, log, grep), log
@@ -497,9 +496,10 @@ def parse_args():
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
   ap.add_argument('--install-perf', nargs='?', default=None, const='install', help='perf tool installation options: [install]|patch|build')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
-  ap.add_argument('-m', '--metrics', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
+  ap.add_argument('-m', '--metrics', help='user metrics to pass to perf-stat\'s -M')
   ap.add_argument('-e', '--events', help='user events to pass to perf-stat\'s -e')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
+  ap.add_argument('-n', '--nodes', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
   ap.add_argument('-a', '--app-name', default=None, help='name of user-application/kernel/command to profile')
   ap.add_argument('-s', '--sys-wide', type=int, default=0, help='profile system-wide for x seconds. disabled by default')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')

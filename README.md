@@ -57,11 +57,12 @@ System-wide profiling is supported as well.
   For topdown profiling and advanced sampling, see [system requirements](#head3sys).
 * `./do.py log` will only log hardware and software setup.
 * `./do.py setup-all` will setup all required tool (fetch and build those needed. Internet access required).
-* `./do.py setup-perf profile` will just setup perf and then do default profiling (multiple commands can be used at once).
+* `./do.py setup-perf profile` will setup just perf then do default profiling (multiple commands can be used at once).
 * `./do.py tar` will archive all logs into a shareable tar file.
 * `./do.py all` will setup perf before doing all above profiling steps.
 * `./do.py profile -pm 13a -v1` will do selected profile steps - *per-app counting, sampling, topdown 2-levels,
   sampling w/ LBR* - and print underlying commands as well.
+* `./do.py help -m My_Metric` will print description of given metric (that toplev understands)
 
 ### kernels (microbenchmarks)
 * to build pre-defined ones, simply `cd kernels/ && ./build.sh`, or
@@ -84,8 +85,7 @@ A set of command-line tools to facilitate profiling
 Shortcuts to set-up certain tools
 * **build-perf.sh** -- builds the perf tool from scratch; invoke with `./do.py build-perf` to let it
     use the installer of your Linux distribution (Ubuntu is the default).
-* **build-xed.sh** -- downloads & builds Intel's xed. Note xed usage is disabled by default;
-    invoke with `./do.py setup-all --tune :xed:1`.
+* **build-xed.sh** -- downloads & builds Intel's xed. Enabled by default with `./do.py setup-all --tune :xed:1`.
 * **omp-bin.sh** -- a wrapper for OpenMP apps with #threads and affinity controls
 
 ## More information

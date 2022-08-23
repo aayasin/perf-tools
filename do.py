@@ -70,7 +70,7 @@ do = {'run':        RUN_DEF,
 }
 args = argparse.Namespace()
 
-def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, background=False, export=None):
+def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, log=True, timeit=False, background=False, export=None):
   X = x.split()
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee'] and redir_out: x = x.split('|')[0]
@@ -91,8 +91,11 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, timeit=False, ba
     do['cmds_file'].write(x + '\n')
     do['cmds_file'].flush()
     verbose = args.verbose > 0
-  return C.exe_cmd(x, msg, redir_out, verbose, run, background)
-def exe_to_null(x): return exe(x + ' > /dev/null', redir_out=None)
+  return C.exe_cmd(x, msg, redir_out, verbose, run, log, background)
+def exe1(x, m=None, log=True):
+  if args.stdout and '| tee' in x: x, log = x.split('| tee')[0], False
+  return exe(x, m, redir_out=None, log=log)
+def exe_to_null(x): return exe1(x + ' > /dev/null')
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) # don't append to cmds_file
 def prn_line(f): exe_v0('echo >> %s' % f)
 
@@ -102,7 +105,6 @@ def print_cmd(x, show=True):
 
 def exe_1line(x, f=None): return "-1" if args.mode == 'profile' or args.print_only else C.exe_one_line(x, f)
 
-def grep(x, f=''): return "(egrep '%s' %s || true)" % (x, f) # grep with 0 exit status
 def warn_file(x):
   if not args.mode == 'profile' and not args.print_only and not os.path.isfile(x): C.warn('file does not exist: %s' % x)
 
@@ -243,10 +245,12 @@ def profile(log=False, out='run'):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
-  def perf_stat(flags='', events='', grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|Work|branches|instructions|cycles"'):
+  def perf_stat(flags, events='',
+    grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|Work|branches|instructions|cycles"'):
     def append(x, y): return x if y == '' else ',' + x
-    perf_args = ' '.join((flags, do['perf-stat']) + ('--metric-no-group ' # workaround bug 4804e0111662 in perf-stat -r2 -M
-      '-M', args.metrics) if args.metrics else ())
+    perf_args = [flags, '--log-fd=1', do['perf-stat'] ]
+    if args.metrics: perf_args += ['--metric-no-group', '-M', args.metrics] # 1st is workaround bug 4804e0111662 in perf-stat -r2 -M
+    perf_args = ' '.join(perf_args)
     if pmu.perfmetrics() and do['core']:
       prefix = ',topdown-'
       events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
@@ -296,10 +300,10 @@ def profile(log=False, out='run'):
   if args.profile_mask & ~0x1: C.info('App: %s %s' % (args.app_name, args.app_iterations if args.gen_args else ''))
   if en(1):
     x = perf_stat(flags='-r%d' % do['repeat'])
-    exe(x[0], 'per-app counting %d runs' % do['repeat'])
+    exe1(x[0], 'per-app counting %d runs' % do['repeat'])
     perf_stat_log = x[1]
   
-  if en(2): exe(perf_stat('-a', a_events(), grep='| egrep "seconds|insn|topdown|pkg"')[0], 'system-wide counting')
+  if en(2): exe1(perf_stat('-a', a_events(), grep='| egrep "seconds|insn|topdown|pkg"')[0], 'system-wide counting')
   
   if en(3) and do['sample']:
     base = out+'.perf'
@@ -500,6 +504,7 @@ def parse_args():
   ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
   ap.add_argument('--install-perf', nargs='?', default=None, const='install', help='perf tool installation options: [install]|patch|build')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
+  ap.add_argument('--stdout', action='store_const', const=True, default=False, help='keep profiling unfiltered results in stdout')
   ap.add_argument('-m', '--metrics', help='user metrics to pass to perf-stat\'s -M')
   ap.add_argument('-e', '--events', help='user events to pass to perf-stat\'s -e')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')

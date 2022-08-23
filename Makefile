@@ -6,11 +6,12 @@ NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}
 
 all: tramp3d-v4
 	@echo done
-install: link-python
-	$(MGR) -y -q install curl clang
+install: link-python llvm
 	make -s -C workloads/mmm install
 link-python:
 	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
+llvm:
+	$(MGR) -y -q install curl clang
 
 intel:
 	git clone https://gitlab.devtools.intel.com/micros/dtlb
@@ -52,5 +53,7 @@ do-help.txt: $(DO)
 
 pre-push: help tramp3d-v4
 	$(DO) help -m GFLOPs
-	make test-mem-bw SHOW='grep =='
-	$(DO) profile -a ./CLTRAMP3D --tune :loops:20
+	make test-mem-bw SHOW="grep --color -E '.*<=='" 	# tests sys-wide + topdown tree; MEM_Bandwidth in L5
+	$(DO) profile -m IpCall -pm 42				# tests perf -M + toplev --drilldown
+	$(DO) profile -a pmu-tools/workloads/BC2s -pm 42	# tests topdown across-tree tagging
+	$(DO) profile -a ./CLTRAMP3D --tune :loops:20		# tests default commands

@@ -250,7 +250,10 @@ def profile(log=False, out='run'):
     if pmu.perfmetrics() and do['core']:
       prefix = ',topdown-'
       events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
-      events += (prefix.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}']) if pmu.goldencove() else '}')
+      if pmu.goldencove():
+        events += prefix.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}'])
+        perf_args += ' --td-level=2'
+      else: events += '}'
       if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
       events += append(pmu.basic_events(), events)
     if args.events: events += append(pmu.perf_format(args.events), events)

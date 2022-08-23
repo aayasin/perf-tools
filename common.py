@@ -77,8 +77,9 @@ def annotate(stuff, label=''):
 # @debug: print the command before its execution
 # @redir_out:  redirect output of the (first non-piped) command as specified
 # @run:   do run the specified command
+# @log:   log the commands's output into log_stdout (if any)
 # @background: run the specified command in background (do not block)
-def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, background=False):
+def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
   if msg:
     if '@' in msg: msg='\t' + msg.replace('@', '')
@@ -86,7 +87,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, background=False
     if run or msg.endswith('..'): printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
-  if log_stdout: x = x + ' | tee -a ' + log_stdout
+  if log and log_stdout: x = x + ' | tee -a ' + log_stdout
   if background: return Popen(x.split())
   ret = os.system(x) if run else 0
   if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))

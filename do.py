@@ -246,7 +246,7 @@ def profile(log=False, out='run'):
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
   def perf_stat(flags, events='',
-    grep='| egrep "seconds [st]|CPUs|GHz|insn|topdown|Work|branches|instructions|cycles"'):
+    grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
     perf_args = [flags, '--log-fd=1', do['perf-stat'] ]
     if args.metrics: perf_args += ['--metric-no-group', '-M', args.metrics] # 1st is workaround bug 4804e0111662 in perf-stat -r2 -M
@@ -297,7 +297,7 @@ def profile(log=False, out='run'):
   r = do['run']
   if en(0) or log: log_setup()
   
-  if args.profile_mask & ~0x1: C.info('App: %s %s' % (args.app_name, args.app_iterations if args.gen_args else ''))
+  if args.profile_mask & ~0x1: C.info('App: %s %s' % (r, args.app_iterations if args.gen_args else ''))
   if en(1):
     x = perf_stat(flags='-r%d' % do['repeat'])
     exe1(x[0], 'per-app counting %d runs' % do['repeat'])

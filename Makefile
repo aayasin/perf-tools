@@ -54,6 +54,6 @@ do-help.txt: $(DO)
 pre-push: help tramp3d-v4
 	$(DO) help -m GFLOPs
 	make test-mem-bw SHOW="grep --color -E '.*<=='" 	# tests sys-wide + topdown tree; MEM_Bandwidth in L5
-	$(DO) profile -m IpCall -pm 42				# tests perf -M + toplev --drilldown
+	$(DO) profile -m IpCall --stdout -pm 42				# tests perf -M + toplev --drilldown
 	$(DO) profile -a pmu-tools/workloads/BC2s -pm 42	# tests topdown across-tree tagging
 	$(DO) profile -a ./CLTRAMP3D --tune :loops:20		# tests default commands

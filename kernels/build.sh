@@ -1,6 +1,6 @@
 #!/bin/sh
 # Author: Ahmad Yasin
-# July 2022
+# Aug 2022
 #
 CC=${CC:-gcc -g -O2}
 GEN=${GEN:-1}
@@ -40,4 +40,7 @@ kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c
 done
+
+x=callchain
+$CC -O0 -fno-inline $x.c -o $x
 

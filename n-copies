@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # runs n-copies of a given binary in SPEC CPU-rate style
 # Author: Ahmad Yasin
 # edited: Aug 2022
@@ -8,6 +8,8 @@ __author__ = 'ayasin'
 
 import common as C
 import os, sys
+if sys.version_info[0] < 3:
+  raise Exception("Must be using Python 3")
 
 # usage: [V=1] n-copies <N> <app> [<and> <its> <args>]
 assert len(sys.argv) > 2

@@ -1,20 +1,12 @@
-// Here it is – the simple version with no variable instructions in between.
-
+#define MSG "Reference: Establishing a Base of Trust with Performance Counters for Enterprise Workloads. Andrzej Nowak, Ahmad Yasin, Avi Mendelson, Willy Zwaenepoel. In 2015 USENIX Annual Technical Conference, USENIX ATC 2015."
 #include <stdio.h>
 #include <stdlib.h>
 
 #define COO 1.354364576457745
 double CO = COO;
 
-#define MSG "Reference: Establishing a Base of Trust with Performance Counters for Enterprise Workloads. Andrzej Nowak, Ahmad Yasin, Avi Mendelson, Willy Zwaenepoel. In 2015 USENIX Annual Technical Conference, USENIX ATC 2015."
-
-
-double f0(double a) {
-    return CO*a;
-}
-
 double f9(double a) {
-    return f0(a*CO);
+    return CO*a;
 }
 
 double f8(double a) {

@@ -133,7 +133,7 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']:
-    if os.path.isfile('/usr/local/bin/xed'): exe_v0(msg='xed is already installed')
+    if do['xed'] < 2 and os.path.isfile('/usr/local/bin/xed'): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
     exe('%s install numpy' % ('pip3' if python_version().startswith('3') else 'pip'), 'installing numpy')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')

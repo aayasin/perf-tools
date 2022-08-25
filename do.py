@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.50
+__version__= 1.51
 
 import argparse, math, os.path, sys
 import common as C
@@ -477,7 +477,7 @@ def profile(log=False, out='run'):
     exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 1))
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', 'csv', 'log', 'txt'] + ext
+  log_files = ['', 'csv', 'log'] + ext
   if cmd == 'tar' and len(tag): res = '-'.join((tag, 'results.tar.gz'))
   s = (uniq_name() if args.app_name else '') + '*'
   if cmd == 'tar': exe('tar -czvf %s run.sh '%res + (' %s.'%s).join(log_files) + ' .%s.cmd'%s)
@@ -530,6 +530,7 @@ def main():
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
   if args.app_name: do['run'] = args.app_name
+  if do['repeat'] > 1: do['perf-stat-def'] += ',cycles:k'
   if args.print_only and args.verbose == 0: args.verbose = 1
   do['nodes'] += ("," + args.nodes)
   if args.tune:

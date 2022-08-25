@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # Author: Ahmad Yasin
-# edited: Sep. 2021
+# edited: Oct 2022
 Papers = {
-  'MGM':      'A Metric-Guided Method for Discovering Impactful Features and Architectural Insights for Skylake-Based Processors. Ahmad Yasin, Jawad Haj-Yahya, Yosi Ben-Asher, Avi Mendelson. TACO 2019 and HiPEAC 2020.',
-  'ICL-PMU':  'How TMA Addresses Challenges in Modern Servers and Enhancements Coming in IceLake. Ahmad Yasin. Scalable Tools Workshop, Utah, July 2018.',
+  'ICL-PMU':    'How TMA Addresses Challenges in Modern Servers and Enhancements Coming in IceLake. Ahmad Yasin. Scalable Tools Workshop, Utah, July 2018.',
+  'MGM':        'A Metric-Guided Method for Discovering Impactful Features and Architectural Insights for Skylake-Based Processors. Ahmad Yasin, Jawad Haj-Yahya, Yosi Ben-Asher, Avi Mendelson. TACO 2019 and HiPEAC 2020.',
+  'PMU-trust':  'Establishing a Base of Trust with Performance Counters for Enterprise Workloads. Andrzej Nowak, Ahmad Yasin, Avi Mendelson, Willy Zwaenepoel. In 2015 USENIX Annual Technical Conference, USENIX ATC 2015.',
 }
 
 Comments = {

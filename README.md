@@ -80,6 +80,7 @@ A set of command-line tools to facilitate profiling
 * **lbr_stats** -- calculates stats on LBR-based profile
 * **loop_stats** -- calculates stats for a particular loop in an LBR-based profile
 * **n-copies** -- invokes N-copies of an app, with CPU affinity (uses sibling thread N=2, 1 thread/core when N <= nproc)
+* **n-loop** -- run a given app n-times in a loop
 * **ptage** -- computes percentages & sum of number-prefixed input
 
 ### wrappers

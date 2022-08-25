@@ -225,7 +225,7 @@ def commands_list():
 def command_basename(comm, iterations=None):
   if comm is None or comm.isdigit(): return 'run%d' % (int(comm) if comm else os.getpid())
   name = comm.strip().split(' ')
-  for x in ('taskset', 'bash', 'omp-bin', 'n-copies'):
+  for x in ('taskset', 'bash', 'omp-bin', 'n-copies', 'n-loop'):
     if x in name[0]: name = name[2:]
   if '/' in name[0]:
     check_executable(name[0])

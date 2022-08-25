@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+# runs a given application n-times
+# Author: Ahmad Yasin
+# edited: Aug 2022
+#
+from __future__ import print_function
+__author__ = 'ayasin'
+import common as C, os, sys
+
+# usage: [V=1] n-loop <N> <app> [<and> <its> <args>]
+n = int(C.arg(1))
+app = ' '.join(sys.argv[2:])
+redirect = os.getenv('NLOOP_R')
+if redirect: app += ' > /dev/null 2>1'
+
+for i in range(n): C.exe_cmd(app)

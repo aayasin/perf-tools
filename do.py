@@ -235,7 +235,6 @@ def get_perf_toplev():
   if do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.hybrid():      toplev += ' --cputype=core'
-    if pmu.sapphire():    toplev += ' --force-cpu=adl'
   return (perf, toplev)
 
 def profile(log=False, out='run'):

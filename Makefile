@@ -1,5 +1,7 @@
 DO = ./do.py
+DO1 = $(DO) profile -a "taskset 0x4 ./CLTRAMP3D" --tune :loops:20
 PM = 0x80
+MAKE = make --no-print-directory
 MGR = sudo apt
 SHOW = tee
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
@@ -53,7 +55,9 @@ do-help.txt: $(DO)
 
 pre-push: help tramp3d-v4
 	$(DO) help -m GFLOPs
-	make test-mem-bw SHOW="grep --color -E '.*<=='" 	# tests sys-wide + topdown tree; MEM_Bandwidth in L5
+	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='" 	# tests sys-wide + topdown tree; MEM_Bandwidth in L5
 	$(DO) profile -m IpCall --stdout -pm 42				# tests perf -M + toplev --drilldown
 	$(DO) profile -a pmu-tools/workloads/BC2s -pm 42	# tests topdown across-tree tagging
-	$(DO) profile -a ./CLTRAMP3D --tune :loops:20		# tests default commands
+	$(DO1) -pm 216f                                     # tests default non-MUX sensitive commands
+	$(DO1) --toplev-args ' --no-multiplex' -pm 1010     # carefully tests MUX sensitive commands
+	$(DO1) > .log 2>1 || (echo "failed! $$?"; exit 1)   # tests default commands (errors only)

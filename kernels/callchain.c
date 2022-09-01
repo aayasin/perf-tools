@@ -5,8 +5,12 @@
 #define COO 1.354364576457745
 double CO = COO;
 
-double f9(double a) {
+double h0(double a) {
     return CO*a;
+}
+
+double f9(double a) {
+    return h0(a*CO);
 }
 
 double f8(double a) {
@@ -57,7 +61,7 @@ int main(int argc, const char* argv[])
   CO += 1.0f/len;
 
   for (i=0; i<len; i++)
-    r += f1(1);
+    r = f1(3*CO); // r += f1(1);
 
   printf("%f\n", r);  
   return 0;

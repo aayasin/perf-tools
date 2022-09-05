@@ -88,7 +88,7 @@ Shortcuts to set-up certain tools
 * **build-perf.sh** -- builds the perf tool from scratch; invoke with `./do.py build-perf` to let it
     use the installer of your Linux distribution (Ubuntu is the default).
 * **build-xed.sh** -- downloads & builds Intel's xed. Enabled by default with `./do.py setup-all --tune :xed:1`.
-* **omp-bin.sh** -- a wrapper for OpenMP apps with #threads and affinity controls
+* **omp-bin[.sh]** -- wrapper for OpenMP apps setting # of threads and CPU affinity
 
 ## More information
 ### <a name="head3sys">System requirements</a>

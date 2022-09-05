@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+# runs an OpenMP app with n-threads and affinity
+# Author: Ahmad Yasin
+# edited: Sep 2022
+#
+from __future__ import print_function
+__author__ = 'ayasin'
+import common as C, os, sys
+
+# usage: [OMPBIN_{V,DR}=1] [--taskset-arg its-val] omp-bin <N> <app> [<and its args>]
+
+verbose = os.getenv('OMPBIN_V')
+dontrun = os.getenv('OMPBIN_DR')
+
+n = int(C.arg(1))
+assert n > 0
+
+a = 2
+mask = '0x%x' % (2**n - 1)
+if sys.argv[2].startswith('--'):
+  mask = ' '.join(sys.argv[2:4])
+  a = 4
+app = ' '.join(sys.argv[a:])
+
+cmd = 'OMP_NUM_THREAD=%d taskset %s  %s' % (n, mask, app)
+C.exe_cmd(cmd, debug=verbose, run=not dontrun)
+

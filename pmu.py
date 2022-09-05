@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Abstraction of Intel Architecture and its Performance Monitoring Unit (PMU)
 # Author: Ahmad Yasin
-# edited: Aug 2022
+# edited: Sep 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -35,7 +35,7 @@ def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 
 def event(x):
   e = {'lbr':     'r20c4:Taken-branches:ppp',
-    'work-proxy': 'r03c4:Work-progress-proxy',
+    'calls-loop': 'r0bc4:callret_loop-overhead',
     'sentries':   'r40c4:System-entries:u',
     }[x]
   return perf_format(e) if x == 'lbr' or v5p() else ''
@@ -44,7 +44,7 @@ def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
 
 def basic_events():
-  return ','.join((event('work-proxy'), event('sentries')))
+  return ','.join([event('sentries'), ])
 
 # perf_events add-ons
 def perf_format(es):

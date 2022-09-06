@@ -1,6 +1,7 @@
 DO = ./do.py
-DO1 = $(DO) profile -a "taskset 0x4 ./CLTRAMP3D" --tune :loops:20
-PM = 0x80
+ST = --toplev-args '--single-thread --frequency --metric-group +Summary'
+DO1 = $(DO) profile -a "taskset 0x4 ./CLTRAMP3D" $(ST) --tune :loops:10
+RERUN = -pm 0x80
 MAKE = make --no-print-directory
 MGR = sudo apt
 SHOW = tee
@@ -26,13 +27,13 @@ run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
 test-mem-bw: run-mem-bw
 	sleep 2s
-	$(DO) profile -s1 -pm $(PM) | $(SHOW)
+	$(DO) profile -s2 $(ST) $(RERUN) | $(SHOW)
 	kill -9 `pidof m0-n8192-u01.llv`
 run-mt:
 	./omp-bin.sh $(NUM_THREADS) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv &
 test-mt: run-mt
 	sleep 2s
-	$(DO) profile -s1 -pm $(PM) | $(SHOW)
+	$(DO) profile -s1 $(RERUN) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
 
 clean:

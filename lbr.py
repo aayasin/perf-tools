@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: Aug 2022
+# edited: Sep 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.87
+__version__= 0.90
 
 import common as C
 import pmu
@@ -17,7 +17,9 @@ except ImportError:
   numpy_imported = False
 
 FP_SUFFIX = "[sdh]([a-z])"
-INDIRECT = r"(jmp|call).*%"
+INDIRECT  = r"(jmp|call).*%"
+CALL_RET  = r"(call|ret)"
+COND_BR   = r"j[^m].*"
 
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('DBG')
@@ -55,11 +57,13 @@ def header_ip(line):
   assert x, "Not a head of sample: " + line
   return str2int(C.str2list(line)[6 if '[' in x.group(1) else 5], (line, None))
 
-def line_ip(line, sample=None):
+def line_ip_hex(line):
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
   assert x, 'expect <address> at left of %s'%line
-  ip = x.group(1).lstrip("0")
-  return str2int(ip, (line, sample))
+  return x.group(1).lstrip("0")
+
+def line_ip(line, sample=None):
+  return str2int(line_ip_hex(line), (line, sample))
 
 def line_timing(line):
   x = re.match(r"[^#]+# (\S+) (\d+) cycles \[\d+\] ([0-9\.]+) IPC", line)
@@ -242,14 +246,14 @@ stat['IPs'] = {}
 stat['events'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
-glob = {x: 0 for x in ('loop_cycles', 'loop_iters')}
+glob = {x: 0 for x in ('loop_cycles', 'loop_iters', 'cond_backward', 'cond_forward')}
 hsts = {}
 footprint = set()
 pages = set()
 indirects = set()
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
-                loop_ipc=0, lp_stats_en=False, event = LBR_Event, indirect_en=True):
+                loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
   global lbr_events, size_sum, bwd_br_tgts
   valid, lines, bwd_br_tgts = 0, [], []
   glob['size_stats_en'] = skip_bad and not labels
@@ -321,6 +325,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
             inc(loops[loop_ipc]['tripcount'], '%d+' % (tc_state + 1))
             if loop_stats.id: loop_stats(None, 0, 0)
           # else: note a truncated tripcount, i.e. unknown in 1..31, is not accounted for by default.
+        if mispred_ip and valid < 2: valid = 0
         if debug and debug == timestamp:
           exit((line.strip(), len(lines)), lines, 'sample-of-interest ended')
         break
@@ -360,6 +365,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         # a 2nd instruction
         if len(lines) > 1:
           detect_loop(ip, lines, loop_ipc)
+          if is_taken(lines[-1]) and is_cond_br(lines[-1]):
+            glob['cond_%sward' % ('for' if ip > xip else 'back')] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)
@@ -375,6 +382,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         if has_timing(line):
           cycles = line_timing(line)[0]
           stat['total_cycles'] += cycles
+        if mispred_ip and is_taken(line) and mispred_ip == line_ip(line) and 'MISPRED' in line: valid += 1
         lines += [ line ]
       xip = ip
   if glob['size_stats_en']:
@@ -386,9 +394,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
     size_sum += size
   return lines
 
-def is_callret(l):    return re.findall(r"(call|ret)", l)
-
-def is_header(line): return re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line)
+def is_callret(l):    return re.findall(CALL_RET, l)
+def is_cond_br(l):    return re.findall(COND_BR, l)
+def is_header(line):  return re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line)
 
 def is_jmp_next(br, # a hacky implementation for now
   JS=2,             # short direct Jump Size
@@ -432,6 +440,10 @@ def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   print('')
   return tot
 
+def hist_get_mode(hist):
+  shist = sorted(hist.items(), key=lambda x: x[1])
+  return shist[-1][0]
+
 def print_glob_hist(hist, name):
   d = print_hist((hist, name))
   if not type(d) is dict: return d
@@ -450,8 +462,7 @@ def print_hist(hist_t, Threshold=0.01):
   if not tot: return 0
   d = {}
   d['type'] = 'paths' if 'paths' in name else ('hex' if 'indir' in name else 'number')
-  shist = sorted(hist.items(), key=lambda x: x[1])
-  d['mode'] = str(shist[-1][0])
+  d['mode'] = str(hist_get_mode(hist))
   keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
   d['num-buckets'] = len(hist)
@@ -466,8 +477,8 @@ def print_hist(hist_t, Threshold=0.01):
   d['total'] = sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
   return d
 
-def print_hist_sum(name, h):
-  print('count of %s: %d' % (name, sum(hsts[h].values())))
+def print_hist_sum(name, h): print_stat(name, sum(hsts[h].values()))
+def print_stat(name, count): print('count of %s: %d' % (name, count))
 
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
@@ -478,12 +489,15 @@ def print_all(nloops=10, loop_ipc=0):
   if os.getenv('PTOOLS_CYCLES'): print('LBR cycles coverage (scaled by 1K): %s' % ratio(1e3 * stat['total_cycles'], int(os.getenv('PTOOLS_CYCLES'))))
   if len(footprint): print('hot code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
   if len(pages): print('estimate number of hot code 4K-pages: %d' % len(pages))
+  if glob['size_stats_en']:
+    for x in ('backward', 'forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect call/jump of >2GB offset', 'indirect-x2g')
     print_hist_sum('mispredicted indirect call/jump of >2GB offset', 'indirect-x2g-misp')
     for x in indirects:
       if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
         print('misprediction ratio for indirect branch at %s: %s' % (hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x])))
+  print('')
   for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:

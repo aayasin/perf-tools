@@ -489,8 +489,8 @@ def print_all(nloops=10, loop_ipc=0):
   if os.getenv('PTOOLS_CYCLES'): print('LBR cycles coverage (scaled by 1K): %s' % ratio(1e3 * stat['total_cycles'], int(os.getenv('PTOOLS_CYCLES'))))
   if len(footprint): print('hot code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
   if len(pages): print('estimate number of hot code 4K-pages: %d' % len(pages))
-  if glob['size_stats_en']:
-    for x in ('backward', 'forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x])
+  if glob['size_stats_en'] and not loop_ipc:
+    for x in ('backward', ' forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x.strip()])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect call/jump of >2GB offset', 'indirect-x2g')
     print_hist_sum('mispredicted indirect call/jump of >2GB offset', 'indirect-x2g-misp')

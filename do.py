@@ -376,6 +376,8 @@ def profile(log=False, out='run'):
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
+      if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE | wc -l' % (perf, perf_data))) == 0:
+        C.error('No samples collected in %s' % perf_data)
       comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (perf_data, sort2u), 1)
     return perf_data, comm
   

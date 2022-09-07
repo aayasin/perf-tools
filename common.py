@@ -100,9 +100,10 @@ def exe_output(x, sep=";"):
 
 def exe2list(x): return str2list(exe_output(x, ' '))
 
-def exe_one_line(x, field=None):
+def exe_one_line(x, field=None, debug=False):
   res = exe_output(x, '')
   if field is not None: res = str2list(res)[field]
+  if debug: printc('exe_one_line(%s, f=%s) = %s' % (x, str(field), res), color.BLUE)
   return res
 
 import glob as python_glob

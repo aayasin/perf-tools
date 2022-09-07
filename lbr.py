@@ -365,7 +365,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         # a 2nd instruction
         if len(lines) > 1:
           detect_loop(ip, lines, loop_ipc)
-          if is_taken(lines[-1]) and is_cond_br(lines[-1]):
+          if edge_en and is_taken(lines[-1]) and is_cond_br(lines[-1]):
             glob['cond_%sward' % ('for' if ip > xip else 'back')] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))

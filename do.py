@@ -26,6 +26,7 @@ Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        RUN_DEF,
   'asm-dump':       30,
   'cmds_file':      None,
+  'comm':           None,
   'compiler':       'gcc -O2', # ~/tools/llvm-6.0.0/bin/clang',
   'container':      0,
   'core':           1,
@@ -79,7 +80,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, backgro
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
   if 'tee >(' in x: x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
   x = x.replace('  ', ' ').strip()
-  if timeit: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
+  if timeit and not export: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
   if len(vars(args)):
     run = not args.print_only
     if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
@@ -367,17 +368,17 @@ def profile(log=False, out='run'):
     exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown 2 levels + FE Bottlenecks')
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
   
-  data, comm = None, None
+  data, comm = None, do['comm']
   def perf_record(tag, comm, msg=''):
     assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag] or do['forgive'], 'No unfiltered LBRs! tag=%s'%tag
     perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
     exe(perf + ' record %s -o %s %s -- %s' % (do['perf-%s'%tag], perf_data, do['perf-stat-ipc'], r), 'sampling-%s %s' % (tag.upper(), msg))
     warn_file(perf_data)
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
+    if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:
+      C.error('No samples collected in %s' % perf_data)
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
-      if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE | wc -l' % (perf, perf_data))) == 0:
-        C.error('No samples collected in %s' % perf_data)
       comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (perf_data, sort2u), 1)
     return perf_data, comm
   

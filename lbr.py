@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.90
+__version__= 0.91
 
 import common as C
 import pmu
@@ -246,7 +246,7 @@ stat['IPs'] = {}
 stat['events'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
-glob = {x: 0 for x in ('loop_cycles', 'loop_iters', 'cond_backward', 'cond_forward')}
+glob = {x: 0 for x in ('loop_cycles', 'loop_iters', 'insts', 'cond_backward', 'cond_forward')}
 hsts = {}
 footprint = set()
 pages = set()
@@ -362,10 +362,12 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         footprint.add(ip >> 6)
         pages.add(ip >> 12)
       if len(lines) and not is_label(line):
+        if edge_en:
+          glob['insts'] += 1
         # a 2nd instruction
         if len(lines) > 1:
           detect_loop(ip, lines, loop_ipc)
-          if edge_en and is_taken(lines[-1]) and is_cond_br(lines[-1]):
+          if edge_en and is_taken(lines[-1]) and is_type(COND_BR, lines[-1]):
             glob['cond_%sward' % ('for' if ip > xip else 'back')] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
@@ -394,8 +396,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
     size_sum += size
   return lines
 
-def is_callret(l):    return re.findall(CALL_RET, l)
-def is_cond_br(l):    return re.findall(COND_BR, l)
+def is_type(t, l):    return re.findall(t, l)
+def is_callret(l):    return is_type(CALL_RET, l)
 def is_header(line):  return re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line)
 
 def is_jmp_next(br, # a hacky implementation for now
@@ -414,18 +416,23 @@ def is_in_loop(ip, loop): return ip >= loop and ip <= loops[loop]['back']
 def get_inst(l):      return C.str2list(l)[1]
 def get_loop(ip):     return loops[ip] if ip in loops else None
 
-def get_taken(sample, n):
-  assert n in range(-32, 0), 'invalid n='+str(n)
+def get_taken_idx(sample, n):
   i = len(sample)-1
-  frm, to = -1, -1
   while i >= 0:
     if is_taken(sample[i]):
       n += 1
       if n==0:
-        frm = line_ip(sample[i], sample)
-        if i < (len(sample)-1): to = line_ip(sample[i+1], sample)
         break
     i -= 1
+  return i
+
+def get_taken(sample, n):
+  assert n in range(-32, 0), 'invalid n='+str(n)
+  i = get_taken_idx(sample, n)
+  frm, to = -1, -1
+  if i >= 0:
+    frm = line_ip(sample[i], sample)
+    if i < (len(sample)-1): to = line_ip(sample[i+1], sample)
   return {'from': frm, 'to': to, 'taken': 1}
 
 def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
@@ -478,7 +485,7 @@ def print_hist(hist_t, Threshold=0.01):
   return d
 
 def print_hist_sum(name, h): print_stat(name, sum(hsts[h].values()))
-def print_stat(name, count): print('count of %s: %d' % (name, count))
+def print_stat(name, count): print('count of %40s: %10d' % (name, count))
 
 def print_all(nloops=10, loop_ipc=0):
   stat['detected-loops'] = len(loops)
@@ -491,9 +498,10 @@ def print_all(nloops=10, loop_ipc=0):
   if len(pages): print('estimate number of hot code 4K-pages: %d' % len(pages))
   if glob['size_stats_en'] and not loop_ipc:
     for x in ('backward', ' forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x.strip()])
+    print_stat('dynamic instructions', glob['insts'])
   if 'indirect-x2g' in hsts:
-    print_hist_sum('indirect call/jump of >2GB offset', 'indirect-x2g')
-    print_hist_sum('mispredicted indirect call/jump of >2GB offset', 'indirect-x2g-misp')
+    print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')
+    print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')
     for x in indirects:
       if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
         print('misprediction ratio for indirect branch at %s: %s' % (hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x])))

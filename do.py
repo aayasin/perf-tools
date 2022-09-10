@@ -71,7 +71,7 @@ do = {'run':        RUN_DEF,
 }
 args = argparse.Namespace()
 
-def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, log=True, timeit=False, background=False, export=None):
+def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, background=False, export=None):
   X = x.split()
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee'] and redir_out: x = x.split('|')[0]
@@ -89,10 +89,10 @@ def exe(x, msg=None, redir_out='2>&1', verbose=False, run=True, log=True, timeit
     elif args.mode == 'profile':
         x, run = '# ' + x, False
     if background: x = x + ' &'
-    do['cmds_file'].write(x + '\n')
-    do['cmds_file'].flush()
-    verbose = args.verbose > 0
-  return C.exe_cmd(x, msg, redir_out, verbose, run, log, background)
+    if not 'loop_stats' in x or args.verbose > 0:
+      do['cmds_file'].write(x + '\n')
+      do['cmds_file'].flush()
+  return C.exe_cmd(x, msg, redir_out, args.verbose > 0, run, log, background)
 def exe1(x, m=None, log=True):
   if args.stdout and '| tee' in x: x, log = x.split('| tee')[0], False
   return exe(x, m, redir_out=None, log=log)

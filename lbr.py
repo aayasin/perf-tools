@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.91
+__version__= 0.92
 
 import common as C
 import pmu
@@ -18,8 +18,8 @@ except ImportError:
 
 FP_SUFFIX = "[sdh]([a-z])"
 INDIRECT  = r"(jmp|call).*%"
-CALL_RET  = r"(call|ret)"
-COND_BR   = r"j[^m].*"
+CALL_RET  = '(call|ret)'
+COND_BR   = 'j[^m].*'
 
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('DBG')
@@ -176,12 +176,12 @@ def detect_loop(ip, lines, loop_ipc,
       while x >= 1:
         size += 1
         if is_taken(lines[x]): cnt['taken'] += 1
-        if re.match(r"\s+\S+\s+j[^m]", lines[x]): conds += [line_ip(lines[x])]
+        if is_type(COND_BR, lines[x]): conds += [line_ip(lines[x])]
         if 'nop' in lines[x]: cnt['nop'] += 1
         elif '(' in lines[x]: # load/store take priority in CISC insts
           if 'lea' in lines[x]: cnt['lea'] += 1
           elif 'prefetch' in lines[x]: cnt['prefetch'] += 1
-          elif re.match(r"\s+\S+\s+(cmp[^x]|test)", lines[x]): cnt['load'] += 1
+          elif is_type('cisc-test', lines[x]): cnt['load'] += 1
           else: cnt['store' if re.match(r"\s+\S+\s+[^\(\),]+,", lines[x]) else 'load'] += 1
         elif 'cmov' in lines[x]: cnt['cmov'] += 1
         elif 'zcnt' in lines[x]: cnt['zcnt'] += 1
@@ -246,7 +246,17 @@ stat['IPs'] = {}
 stat['events'] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
 size_sum=0
-glob = {x: 0 for x in ('loop_cycles', 'loop_iters', 'insts', 'cond_backward', 'cond_forward')}
+
+def inst2pred(i):
+  i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
+         'ld+test':   '(cmp[^x]|test).*\(',
+  }
+  if i is None: return i2p.keys()
+  return i2p[i] if i in i2p else i
+insts = inst2pred(None) + ['call', 'push']
+insts_all = insts + ['cond_backward', 'cond_forward', 'all']
+
+glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + insts_all}
 hsts = {}
 footprint = set()
 pages = set()
@@ -363,7 +373,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         pages.add(ip >> 12)
       if len(lines) and not is_label(line):
         if edge_en:
-          glob['insts'] += 1
+          glob['all'] += 1
+          for x in insts:
+            if is_type(x, line): glob[x] += 1
         # a 2nd instruction
         if len(lines) > 1:
           detect_loop(ip, lines, loop_ipc)
@@ -372,7 +384,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)
-          if 'indirect-x2g' in hsts and re.findall(INDIRECT, lines[-1]) and abs(ip - xip) >= 2**31:
+          if 'indirect-x2g' in hsts and is_type(INDIRECT, lines[-1]) and abs(ip - xip) >= 2**31:
             inc(hsts['indirect-x2g'], xip)
             if 'MISP' in lines[-1]: inc(hsts['indirect-x2g-misp'], xip)
           if xip in indirects:
@@ -396,7 +408,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
     size_sum += size
   return lines
 
-def is_type(t, l):    return re.findall(t, l)
+def is_type(t, l):
+  #if t == 'ld+test' and re.match(r"\s+\S+\s+%s" % inst2pred(t), l): C.printf('IS_TYPE:' + l)
+  return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
 def is_callret(l):    return is_type(CALL_RET, l)
 def is_header(line):  return re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line)
 
@@ -498,7 +512,7 @@ def print_all(nloops=10, loop_ipc=0):
   if len(pages): print('estimate number of hot code 4K-pages: %d' % len(pages))
   if glob['size_stats_en'] and not loop_ipc:
     for x in ('backward', ' forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x.strip()])
-    print_stat('dynamic instructions', glob['insts'])
+    for x in insts + ['all', ]: print_stat(x.upper() + ' dynamic instructions', glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')

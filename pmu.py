@@ -5,8 +5,12 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 
-import sys, os
+import os, platform, sys
 import common as C
+if sys.version_info[0] < 3:
+  from multiprocessing import cpu_count
+else:
+  from os import cpu_count
 
 #
 # PMU, no prefix
@@ -99,7 +103,9 @@ def cpu(what):
     cs = tl_cpu.CPU((), False, tl_cpu.Env()) # cpu.state
   if what == 'get': return cs
   return {'smt-on': cs.ht,
-    'corecount': int(len(cs.allcpus) / cs.threads),
+    'corecount':    int(len(cs.allcpus) / cs.threads),
+    'cpucount':     cpu_count(),
+    'x86':          int(platform.machine().startswith('x86')),
   }[what]
 # cpu.state = None
 

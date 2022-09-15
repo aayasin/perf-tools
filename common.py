@@ -179,6 +179,9 @@ def dict_load(f):
     fo.close()
     return d
 
+def dict2str(d):
+  return str(sorted(d.items())).replace("', ", ":\t").replace("), ('", ",\n\t").replace("[('", '\t').replace(')]', '\n')
+
 # chop - clean a list of charecters from a string
 # @s:     input string
 # @stuff: input charecters as string, or a first item in a tuple of strings
@@ -192,6 +195,11 @@ def chop(source, stuff):
   for x in items: r = r.replace(x, '')
   return r.strip()
 def chop_app(a): return chop(a, './~<>=,;{}|"\'')
+
+def any_in(l, s):
+  for i in l:
+    if i in s: return 1
+  return 0
 
 def flag_value(s, f, v='', sep=' '):
   if f in s: v = s.split(f)[1].split(sep)[1]

@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.53
+__version__ = 1.54
 
 import argparse, math, os.path, sys
 import common as C
@@ -30,13 +30,13 @@ do = {'run':        RUN_DEF,
   'compiler':       'gcc -O2', # ~/tools/llvm-6.0.0/bin/clang',
   'container':      0,
   'core':           1,
-  'cpuid':          0 if 'Red Hat' in C.file2str('/etc/os-release', 1) else 1,
+  'cpuid':          0 if C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'forgive':        0,
   'gen-kernel':     1,
   'imix':           0xf,
-  'loops':          pmu.cpu('corecount'),
+  'loops':          int(pmu.cpu('cpucount') / 2),
   'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
@@ -68,7 +68,7 @@ do = {'run':        RUN_DEF,
   'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
   'toplev':         TOPLEV_DEF,
   'levels':         2,
-  'xed':            1,
+  'xed':            1 if pmu.cpu('x86') else 0,
 }
 args = argparse.Namespace()
 
@@ -116,7 +116,7 @@ def rp(x): return os.path.join(C.dirname(), x)
 def uniq_name():
   return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
 
-def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
+def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=[]):
   pkg_name = {'msr': 'msr-tools'}
   if args.install_perf:
     if args.install_perf == 'install':
@@ -133,6 +133,7 @@ def tools_install(installer='sudo %s install '%do['package-mgr'], packages=[]):
     else: C.error('Unsupported --perf-install option: '+args.install_perf)
   for x in do['packages']:
     if do[x]: packages += [pkg_name[x] if x in pkg_name else x]
+  #if len(packages) and not do['package-mgr'].startswith('apt'): exe(installer.replace('install', 'makecache --refresh'), 'updating %s DB' % do['package-mgr'])
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']:
@@ -585,7 +586,7 @@ def main():
   do['cmds_file'] = open(cmds_file, 'w')
   do['cmds_file'].write('# %s\n' % do_cmd)
   if args.verbose > 5: C.printc(str(args))
-  if args.verbose > 6: C.printc(str(do))
+  if args.verbose > 6: C.printc(C.dict2str(do))
   
   for c in args.command:
     param = c.split(':')[1:] if ':' in c else None

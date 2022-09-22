@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.92
+__version__= 0.93
 
 import common as C
 import pmu
@@ -23,7 +23,7 @@ COND_BR   = 'j[^m].*'
 
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('DBG')
-verbose = os.getenv('VER')
+verbose = C.env2int('LBR_VERBOSE', base=16)
 use_cands = os.getenv('LBR_USE_CANDS')
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
@@ -262,6 +262,16 @@ footprint = set()
 pages = set()
 indirects = set()
 
+FUNCP = 'Params_of_func'
+FUNCR = 'Regs_by_func'
+def count_of(t, lines, x, hist):
+  r = 0
+  while x < len(lines):
+    if is_type(t, lines[x]): r += 1
+    x += 1
+  inc(hsts[hist], r)
+  return r
+
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
   global lbr_events, size_sum, bwd_br_tgts
@@ -271,6 +281,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   glob['ip_filter'] = ip_filter
   edge_en = event.startswith(LBR_Event) and not ip_filter and not loop_ipc # config good for edge-profile
   if stat['total'] == 0 and edge_en:
+    hsts[FUNCR] = {}
+    hsts[FUNCP] = {}
     if indirect_en:
       for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
     if os.getenv('LBR_INDIRECTS'):
@@ -331,7 +343,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           if debug and debug == timestamp:
             exit((line.strip(), len(lines)), lines, 'a bogus sample ended')
         elif len_m1 and type(tc_state) == int and is_in_loop(line_ip(lines[-1]), loop_ipc):
-          if tc_state == 31 or verbose:
+          if tc_state == 31 or (verbose & 0x10):
             inc(loops[loop_ipc]['tripcount'], '%d+' % (tc_state + 1))
             if loop_stats.id: loop_stats(None, 0, 0)
           # else: note a truncated tripcount, i.e. unknown in 1..31, is not accounted for by default.
@@ -379,6 +391,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         # a 2nd instruction
         if len(lines) > 1:
           detect_loop(ip, lines, loop_ipc)
+          if (verbose & 0x1) and edge_en and is_taken(line): #FUNCR
+            x = get_taken_idx(lines, -1)
+            if x >= 0:
+              if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
+              if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
           if edge_en and is_taken(lines[-1]) and is_type(COND_BR, lines[-1]):
             glob['cond_%sward' % ('for' if ip > xip else 'back')] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
@@ -498,19 +515,22 @@ def print_hist(hist_t, Threshold=0.01):
   d['total'] = sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
   return d
 
-def print_hist_sum(name, h): print_stat(name, sum(hsts[h].values()))
-def print_stat(name, count): print('count of %40s: %10d' % (name, count))
+def print_hist_sum(name, h): print_stat(name, sum(hsts[h].values()), comment='histogram')
+def print_stat(name, count, prefix='count', comment=''):
+  if len(comment): comment = '\t(see %s below)' % comment
+  print('%s of %s: %10s%s' % (prefix, '{: >{}}'.format(name, 45 - len(prefix)), str(count), comment))
+def print_estimate(name, s): print_stat(name, s, 'estimate')
 
-def print_all(nloops=10, loop_ipc=0):
-  stat['detected-loops'] = len(loops)
-  total = stat['IPs'][glob['ip_filter']] if glob['ip_filter'] else stat['total']
+def print_common(total):
+  def nc(x): return 'non-cold ' + x
   if glob['size_stats_en']: stat['size']['avg'] = round(size_sum / (total - stat['bad'] - stat['bogus']), 1)
-  if not loop_ipc: print('LBR samples:', hist_fmt(stat))
-  if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5: C.error('Too many LBR bad/bogus samples in profile')
-  if os.getenv('PTOOLS_CYCLES'): print('LBR cycles coverage (scaled by 1K): %s' % ratio(1e3 * stat['total_cycles'], int(os.getenv('PTOOLS_CYCLES'))))
-  if len(footprint): print('hot code footprint estimate: %.2f KB' % (len(footprint) / 16.0))
-  if len(pages): print('estimate number of hot code 4K-pages: %d' % len(pages))
-  if glob['size_stats_en'] and not loop_ipc:
+  print('LBR samples:', hist_fmt(stat))
+  cycles, scl = os.getenv('PTOOLS_CYCLES'), 1e3
+  if cycles: print_estimate('LBR cycles coverage (x%d)' % scl, ratio(scl * stat['total_cycles'], int(cycles)))
+  if len(footprint): print_estimate(nc('code footprint [KB]'), '%.2f' % (len(footprint) / 16.0))
+  if len(pages): print_stat(nc('code 4K-pages'), len(pages))
+  print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
+  if glob['size_stats_en']:
     for x in ('backward', ' forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x.strip()])
     for x in insts + ['all', ]: print_stat(x.upper() + ' dynamic instructions', glob[x])
   if 'indirect-x2g' in hsts:
@@ -518,8 +538,14 @@ def print_all(nloops=10, loop_ipc=0):
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')
     for x in indirects:
       if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
-        print('misprediction ratio for indirect branch at %s: %s' % (hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x])))
+        print_stat('branch at %s' % hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
+                   prefix='misprediction-ratio', comment='paths histogram')
   print('')
+
+def print_all(nloops=10, loop_ipc=0):
+  total = stat['IPs'][glob['ip_filter']] if glob['ip_filter'] else stat['total']
+  if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5: C.error('Too many LBR bad/bogus samples in profile')
+  if not loop_ipc: print_common(total)
   for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:

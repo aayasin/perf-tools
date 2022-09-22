@@ -1,5 +1,5 @@
 DO = ./do.py
-ST = --toplev-args '--single-thread --frequency --metric-group +Summary'
+ST = --toplev-args ' --single-thread'
 DO1 = $(DO) profile -a "taskset 0x4 ./CLTRAMP3D" $(ST) --tune :loops:10
 RERUN = -pm 0x80
 MAKE = make --no-print-directory
@@ -54,11 +54,14 @@ help: do-help.txt
 do-help.txt: $(DO)
 	./$^ -h > $@
 
+test-default:
+	$(DO1) -pm 216f
+
 pre-push: help tramp3d-v4
 	$(DO) help -m GFLOPs
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='" 	# tests sys-wide + topdown tree; MEM_Bandwidth in L5
 	$(DO) profile -m IpCall --stdout -pm 42				# tests perf -M + toplev --drilldown
 	$(DO) profile -a pmu-tools/workloads/BC2s -pm 42	# tests topdown across-tree tagging
-	$(DO1) -pm 216f                                     # tests default non-MUX sensitive commands
+	$(MAKE) test-default                                # tests default non-MUX sensitive commands
 	$(DO1) --toplev-args ' --no-multiplex' -pm 1010     # carefully tests MUX sensitive commands
-	$(DO1) > .log 2>1 || (echo "failed! $$?"; exit 1)   # tests default commands (errors only)
+	$(DO1) > .log 2>&1 || (echo "failed! $$?"; exit 1)  # tests default commands (errors only)

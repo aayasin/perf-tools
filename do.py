@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.54
+__version__ = 1.55
 
 import argparse, math, os.path, sys
 import common as C
@@ -21,7 +21,7 @@ from datetime import datetime
 from platform import python_version
 
 RUN_DEF = './run.sh'
-TOPLEV_DEF='--frequency --metric-group +Summary' #FIXME: argparse should tell whether user specified an options
+TOPLEV_DEF=' --frequency --metric-group +Summary'
 Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        RUN_DEF,
   'asm-dump':       30,
@@ -37,9 +37,11 @@ do = {'run':        RUN_DEF,
   'gen-kernel':     1,
   'imix':           0xf,
   'loops':          int(pmu.cpu('cpucount') / 2),
+  'lbr-verbose':    0,
   'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
+  'levels':         2,
   'metrics':        "+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict", # +UPI once ICL mux fixed, +ORO with TMA 4.5
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
@@ -67,7 +69,6 @@ do = {'run':        RUN_DEF,
   'tma-bot-fe':     ',+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
   'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
   'toplev':         TOPLEV_DEF,
-  'levels':         2,
   'xed':            1 if pmu.cpu('x86') else 0,
 }
 args = argparse.Namespace()
@@ -418,6 +419,7 @@ def profile(log=False, out='run'):
       if not os.path.isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s PTOOLS_CYCLES=%s" % (loops, exe_1line("egrep '(\s\s|e/)cycles' %s | tail -1" %
                                                                           C.log_stdout, 0).replace(',', ''))
+        if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         misp = ''
         cmd, msg = "-i %s -F +brstackinsn --xed -c %s | tee >(%s %s %s >> %s) %s " % (data, comm,
@@ -524,7 +526,7 @@ def parse_args():
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
   ap.add_argument('--perf', default='perf', help='use a custom perf tool')
   ap.add_argument('--pmu-tools', default='%s ./pmu-tools'%do['python'], help='use a custom pmu-tools')
-  ap.add_argument('--toplev-args', default=do['toplev'], help='arguments to pass-through to toplev')
+  ap.add_argument('--toplev-args', default='', help='arguments to pass-through to toplev')
   ap.add_argument('--install-perf', nargs='?', default=None, const='install', help='perf tool installation options: [install]|patch|build')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('--stdout', action='store_const', const=True, default=False, help='keep profiling unfiltered results in stdout')
@@ -568,6 +570,7 @@ def main():
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
     if args.profile_mask & 0x300: args.profile_mask |= 0x2
+  args.toplev_args += do['toplev']
   if args.sys_wide:
     if args.mode != 'process': C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide

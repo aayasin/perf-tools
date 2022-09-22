@@ -126,8 +126,8 @@ def check_executable(x):
 
 def dirname(): return os.path.dirname(__file__)
 
-def env2int(x, default=0):
-  return int(os.getenv(x)) if os.getenv(x) else default
+def env2int(x, default=0, base=10):
+  return int(os.getenv(x), base) if os.getenv(x) else default
 
 def env2str(x):
   y = os.getenv(x)

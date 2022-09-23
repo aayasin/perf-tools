@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# common functions for logging, debug, strings, system commands and file I/O.
+# common functions for logging, debug, arg-parsing, strings, system commands and file I/O.
 # Author: Ahmad Yasin
 # edited: Sep 2022
 from __future__ import print_function
@@ -108,6 +108,18 @@ def exe_one_line(x, field=None, debug=False):
   if field is not None: res = str2list(res)[field]
   if debug: printc('exe_one_line(%s, f=%s) = %s' % (x, str(field), res), color.BLUE)
   return res
+
+def par_jobs_file(commands, name=None, verbose=False, shell='bash'):
+  if not name: name = './.p%d.sh' % os.getpid()
+  cmds = open(name, 'w')
+  head = ["#!/bin/%s" % shell, "ulimit -s unlimited"]
+  if verbose: head += ["set -x"]
+  cmds.write('\n'.join(head + [""]))
+  while len(commands) > 1:
+    cmds.write("%s &\n" % commands.pop(0))
+  cmds.write('\n'.join((commands.pop(), '', '')))
+  cmds.close()
+  return name
 
 import glob as python_glob
 def glob(regex):
@@ -230,6 +242,22 @@ def args_parse(d, args):
       assert arg in d, "unknown option '%s' in '%s'!" % (arg, args)
       d[arg] = int(val) if val.isdigit() else val
   return d
+
+import argparse
+RUN_DEF = './run.sh'
+def argument_parser(usg=None, defs=None, mask=0x317F, fc=argparse.ArgumentDefaultsHelpFormatter):
+  def get_def(): return defs.pop(0) if defs else None
+  ap = argparse.ArgumentParser(usage=usg, formatter_class=fc) if usg else argparse.ArgumentParser(formatter_class=fc)
+  ap.add_argument('--perf', default=get_def(), help='use a custom perf tool')
+  ap.add_argument('--pmu-tools', default=get_def(), help='use a custom pmu-tools')
+  ap.add_argument('--toplev-args', default=get_def(), help='arguments to pass-through to toplev')
+  ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
+  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x, 16), default=mask,
+                  help='mask to control stages in the profile command')
+  ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, '
+    '2:+verbose-on metrics|build, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, 5:+event-groups, '
+    '.. 9:anything')
+  return ap
 
 def commands_list():
   return chop(exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort"%sys.argv[0], sep=' '), "),'")

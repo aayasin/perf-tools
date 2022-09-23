@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.56
+__version__ = 1.57
 
 import argparse, math, os.path, sys
 import common as C
@@ -20,7 +20,7 @@ import pmu
 from datetime import datetime
 from platform import python_version
 
-RUN_DEF = './run.sh'
+RUN_DEF = C.RUN_DEF
 TOPLEV_DEF=' --frequency --metric-group +Summary'
 Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        RUN_DEF,
@@ -116,9 +116,10 @@ def warn_file(x):
 def isfile(f): return f and os.path.isfile(f)
 def rp(x): return os.path.join(C.dirname(), x)
 def version(): return str(round(__version__, 3 if args.tune else 2))
+def app_name(): return args.app != RUN_DEF
 
 def uniq_name():
-  return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
+  return C.command_basename(args.app, iterations=(args.app_iterations if args.gen_args else None))
 
 def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=[]):
   pkg_name = {'msr': 'msr-tools'}
@@ -301,7 +302,7 @@ def profile(log=False, out='run'):
   perf_report = ' '.join((perf, 'report', '--objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else ''))
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | ./ptage'
-  r = do['run']
+  r = args.app
   if en(0) or log: log_setup()
   
   if args.profile_mask & ~0x1: C.info('App: %s %s' % (r, args.app_iterations if args.gen_args else ''))
@@ -395,6 +396,7 @@ def profile(log=False, out='run'):
     def static_stats():
       bins = exe2list(perf + " script -i %s | cut -d\( -f2 | cut -d\) -f1 | grep -v '^\[' | %s | tail -5" %
                         (data, sort2u))[1:][::2]
+      if args.mode == 'profile': return
       assert len(bins)
       exe_v0('printf "# %s:\n#\n" > %s' % ('Static Statistics', info))
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
@@ -516,13 +518,13 @@ def profile(log=False, out='run'):
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['', 'csv', 'log'] + ext
   if cmd == 'tar' and len(tag): res = '-'.join((tag, 'results.tar.gz'))
-  s = (uniq_name() if args.app_name else '') + '*'
+  s = (uniq_name() if app_name() else '') + '*'
   if cmd == 'tar': exe('tar -czvf %s run.sh '%res + (' %s.'%s).join(log_files) + ' .%s.cmd'%s)
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')
 
 def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
-  app = args.app_name
+  app = args.app
   if do['gen-kernel']:
     exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app, redir_out=None)
     if args.verbose > 1: exe(fixup('grep instructions ./%s.c'%app))
@@ -532,13 +534,11 @@ def build_kernel(dir='./kernels/'):
 
 def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
-  ap = argparse.ArgumentParser(usage='do.py command [command ..] [options]', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  ap = C.argument_parser(usg='do.py command [command ..] [options]',
+         defs=['perf', '%s ./pmu-tools' % do['python'], ''])
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '\
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
-  ap.add_argument('--perf', default='perf', help='use a custom perf tool')
-  ap.add_argument('--pmu-tools', default='%s ./pmu-tools'%do['python'], help='use a custom pmu-tools')
-  ap.add_argument('--toplev-args', default='', help='arguments to pass-through to toplev')
   ap.add_argument('--install-perf', nargs='?', default=None, const='install', help='perf tool installation options: [install]|patch|build')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('--stdout', action='store_const', const=True, default=False, help='keep profiling unfiltered results in stdout')
@@ -546,13 +546,9 @@ def parse_args():
   ap.add_argument('-e', '--events', help='user events to pass to perf-stat\'s -e')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
   ap.add_argument('-n', '--nodes', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
-  ap.add_argument('-a', '--app-name', default=None, help='name of user-application/kernel/command to profile')
   ap.add_argument('-s', '--sys-wide', type=int, default=0, help='profile system-wide for x seconds. disabled by default')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
-  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x,16), default='317F', help='mask to control stages in the profile command')
-  ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, ' \
-    '2:+verbose-on metrics|build, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, 5:+event-groups, .. 9:anything')
   ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS, action='append') # override global variables with python expression
   x = ap.parse_args()
   return x
@@ -561,12 +557,11 @@ def main():
   global args
   args = parse_args()
   #args sanity checks
-  if (args.gen_args or 'build' in args.command) and not args.app_name:
+  if (args.gen_args or 'build' in args.command) and app_name():
     C.error('must specify --app-name with any of: --gen-args, build')
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
-  if args.app_name: do['run'] = args.app_name
   if do['repeat'] > 1: do['perf-stat-def'] += ',cycles:k'
   if args.print_only and args.verbose == 0: args.verbose = 1
   do['nodes'] += ("," + args.nodes)
@@ -630,7 +625,7 @@ def main():
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
     elif c.startswith('get'): get(param)
-    elif c == 'tar':          do_logs(c, tag='.'.join((uniq_name(), pmu.cpu_TLA())) if args.app_name else C.error('provide a value for -a'))
+    elif c == 'tar':          do_logs(c, tag='.'.join((uniq_name(), pmu.cpu_TLA())) if app_name() else C.error('provide a value for -a'))
     elif c == 'clean':        do_logs(c)
     elif c == 'all':
       setup_perf()

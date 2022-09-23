@@ -7,7 +7,8 @@
 A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
 
 ## Overview
-* **do.py** -- A driver with handy shortcuts for setting up and doing profiling, over [Linux perf](https://perf.wiki.kernel.org/index).
+* **do.py** -- The main driver with handy shortcuts for setting up and doing profiling, over [Linux perf](https://perf.wiki.kernel.org/index)
+* **study.py** -- A driver that wraps do.py to study multiple flavors of an application (with parallel post-processing)
 * **kernels/** -- an evolving collection of x86 kernels
   * **gen-kernel.py** -- generator of X86 kernels
   * **jumpy.py** -- module for different jumping constructs

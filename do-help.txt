@@ -11,15 +11,25 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  --mode [{profile,process,both}]
-                        analysis mode options: profile-only, (post)process-
-                        only or both (default: both)
   --perf PERF           use a custom perf tool (default: perf)
   --pmu-tools PMU_TOOLS
                         use a custom pmu-tools (default: /usr/bin/python
                         ./pmu-tools)
   --toplev-args TOPLEV_ARGS
                         arguments to pass-through to toplev (default: )
+  -a APP, --app APP     name of user-application/kernel/command to profile
+                        (default: ./run.sh)
+  -pm PROFILE_MASK, --profile-mask PROFILE_MASK
+                        mask to control stages in the profile command
+                        (default: 12671)
+  -v VERBOSE, --verbose VERBOSE
+                        verbose level; 0:none, 1:commands, 2:+verbose-on
+                        metrics|build, 3:+toplev --perf|ASM on kernel build,
+                        4:+args parsing, 5:+event-groups, .. 9:anything
+                        (default: 0)
+  --mode [{profile,process,both}]
+                        analysis mode options: profile-only, (post)process-
+                        only or both (default: both)
   --install-perf [INSTALL_PERF]
                         perf tool installation options: [install]|patch|build
                         (default: None)
@@ -35,9 +45,6 @@ optional arguments:
   -n NODES, --nodes NODES
                         user metrics to pass to toplev's --nodes (default: +Lo
                         ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict)
-  -a APP_NAME, --app-name APP_NAME
-                        name of user-application/kernel/command to profile
-                        (default: None)
   -s SYS_WIDE, --sys-wide SYS_WIDE
                         profile system-wide for x seconds. disabled by default
                         (default: 0)
@@ -45,11 +52,3 @@ optional arguments:
                         args to gen-kernel.py (default: None)
   -ki APP_ITERATIONS, --app-iterations APP_ITERATIONS
                         num-iterations of kernel (default: 1e9)
-  -pm PROFILE_MASK, --profile-mask PROFILE_MASK
-                        mask to control stages in the profile command
-                        (default: 317F)
-  -v VERBOSE, --verbose VERBOSE
-                        verbose level; 0:none, 1:commands, 2:+verbose-on
-                        metrics|build, 3:+toplev --perf|ASM on kernel build,
-                        4:+args parsing, 5:+event-groups, .. 9:anything
-                        (default: 0)

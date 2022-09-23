@@ -23,11 +23,9 @@ cpu_count = os.cpu_count()
 if n > cpu_count: C.error('Too large # of copies %d ( > %d )' % (n, cpu_count))
 
 name = './.%s-%03d.cmd' % (C.chop_app(app.split()[0].split('/')[-1]), n)
+
 def gen_cmd():
-  cmds = open(name, 'w')
-  head = ["#!/bin/bash", "ulimit -s unlimited"]
-  if verbose: head += ["set -x"]
-  cmds.write('\n'.join(head + [""]))
+  cmds = []
   cpus = None
   if n == 2:
     cpus = [int(x) for x in C.exe2list('pmu-tools/cputop "core == 0 and socket == 0"')]
@@ -35,9 +33,8 @@ def gen_cmd():
     cpus = [int(x) for x in C.exe2list('pmu-tools/cputop "thread == 0" | head -%d' % n)]
   else:
     cpus = [i for i in range(n)]
-  while len(cpus) > 1: cmds.write("taskset -c %d %s &\n" % (cpus.pop(0), app))
-  cmds.write("taskset -c %d %s\n" % (cpus.pop(0), app))
-  cmds.close()
+  while len(cpus): cmds += ["taskset -c %d %s" % (cpus.pop(0), app)]
+  C.par_jobs_file(cmds, name, verbose)
 
 if reuse and os.path.isfile(name): pass
 else: gen_cmd()

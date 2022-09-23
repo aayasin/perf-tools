@@ -19,8 +19,7 @@ optional arguments:
                         use a custom pmu-tools (default: /usr/bin/python
                         ./pmu-tools)
   --toplev-args TOPLEV_ARGS
-                        arguments to pass-through to toplev (default:
-                        --frequency --metric-group +Summary)
+                        arguments to pass-through to toplev (default: )
   --install-perf [INSTALL_PERF]
                         perf tool installation options: [install]|patch|build
                         (default: None)

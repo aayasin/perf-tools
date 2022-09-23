@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.55
+__version__ = 1.56
 
 import argparse, math, os.path, sys
 import common as C
@@ -63,6 +63,7 @@ do = {'run':        RUN_DEF,
   'repeat':         3,
   'reprocess':      2,
   'sample':         2,
+  'size':           1,
   'super':          0,
   'tee':            1,
   'tma-fx':         '+IPC,+Instructions,+Time,+SLOTS,+CLKS',
@@ -107,12 +108,14 @@ def print_cmd(x, show=True):
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
 
 def exe_1line(x, f=None): return "-1" if args.mode == 'profile' or args.print_only else C.exe_one_line(x, f, args.verbose > 1)
+def exe2list(x, f=None): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, args.verbose > 1)
 
 def warn_file(x):
   if not args.mode == 'profile' and not args.print_only and not os.path.isfile(x): C.warn('file does not exist: %s' % x)
 
 def isfile(f): return f and os.path.isfile(f)
 def rp(x): return os.path.join(C.dirname(), x)
+def version(): return str(round(__version__, 3 if args.tune else 2))
 
 def uniq_name():
   return C.command_basename(args.app_name, iterations=(args.app_iterations if args.gen_args else None))
@@ -279,7 +282,7 @@ def profile(log=False, out='run'):
     if msg and 'counting takens' in msg: instline += '.*#'
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
     perf_script.first = False
-    return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1), export=export)
+    return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 2), export=export)
   perf_script.first = True
   perf_stat_log = None
   def record_name(flags):
@@ -389,11 +392,20 @@ def profile(log=False, out='run'):
     data, comm = perf_record('lbr', comm)
     info = '%s.info.log' % data
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
+    def static_stats():
+      bins = exe2list(perf + " script -i %s | cut -d\( -f2 | cut -d\) -f1 | grep -v '^\[' | %s | tail -5" %
+                        (data, sort2u))[1:][::2]
+      assert len(bins)
+      exe_v0('printf "# %s:\n#\n" > %s' % ('Static Statistics', info))
+      exe('size %s >> %s' % (' '.join(bins), info), "@stats")
+      exe_v0('echo >> %s' % info)
     def log_count(x, l): return "printf 'Count of unique %s: ' >> %s && wc -l < %s >> %s" % (x, info, l, info)
     def log_br_count(x, s): return log_count("%s branches" % x, "%s.%s.log" % (data, s))
     def tail(f=''): return "tail %s | grep -v total" % f
     if not os.path.isfile(info) or do['reprocess'] > 1:
-      exe(perf +" report -i %s | grep -A13 'Branch Statistics:' | tee %s | egrep -v ':\s+0\.0%%|CROSS'" % (data, info), "@stats")
+      if do['size']: static_stats()
+      exe(perf + " report -i %s | grep -A13 'Branch Statistics:' | tee %s %s | egrep -v ':\s+0\.0%%|CROSS'" %
+          (data, '-a' if do['size'] else '', info), None if do['size'] else "@stats")
       if isfile(perf_stat_log): exe("egrep '  branches|instructions' %s >> %s" % (perf_stat_log, info))
       sort2uf = "%s | egrep -v '\s+[1-9]\s+' | ./ptage" % sort2u
       perf_script("-i %s -F ip -c %s | %s | tee %s.samples.log | %s" %
@@ -580,7 +592,7 @@ def main():
   if do['container']:
     if args.mode != 'process': C.info('container profiling')
     for x in ('record', 'lbr', 'pebs'): do['perf-'+x] += ' --buildid-all --all-cgroup'
-  do_cmd = '%s # version %s' % (C.argv2str(), str(round(__version__, 3 if args.tune else 2)))
+  do_cmd = '%s # version %s' % (C.argv2str(), version())
   C.log_stdout = '%s-out.txt' % ('run-default' if do['run'] == RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   cmds_file = '.%s.cmd' % uniq_name()
@@ -626,8 +638,13 @@ def main():
       do_logs('tar')
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
+    elif c.startswith('backup'):
+      r, to = '../perf-tools-%s.tar.gz' % version(), 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
+      if os.path.isfile(r): C.warn('file exists: %s' % r)
+      fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + param if param else [])
+      exe('tar -czvf %s %s && scp %s %s' % (r, fs, r, to), redir_out=None)
     else:
-      C.error("Unknown command: '%s' !"%c)
+      C.error("Unknown command: '%s' !" % c)
       return -1
   return 0
 
@@ -636,7 +653,7 @@ def get(param):
   sub, log, num = param
   num = int(num)
   if log == '-': log = exe_1line('ls -1tr *.%s.log | tail -1' % ('info' if sub == 'x2g-indirects' else sub))
-  if sub == 'indirects':        print(','.join([ '0x%s' % x.lstrip('0') for x in C.exe2list("tail -%d %s | grep -v total | sed 's/bnd jmp/bnd-jmp/'" % (num, log))[2:][::5] ]))
+  if sub == 'indirects': print(','.join([ '0x%s' % x.lstrip('0') for x in exe2list("tail -%d %s | grep -v total | sed 's/bnd jmp/bnd-jmp/'" % (num, log))[2:][::5] ]))
   elif sub == 'x2g-indirects':  exe("grep -E '^0x[0-9a-f]+:' %s | sort -n -k2 |grep -v total|uniq|tail -%d|cut -d: -f1|tr '\\n' ,|sed 's/.$/\\n/'" % (log, num))
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.58
+__version__ = 1.59
 
 import argparse, math, os.path, sys
 import common as C
@@ -55,7 +55,8 @@ do = {'run':        RUN_DEF,
   'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
-  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles,branches,branch-misses', # ,cycles:G
+  'perf-stat-add':  1, # additional events using general counters
+  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles', # ,cycles:G
   'perf-stat-ipc':  '-- perf stat -e instructions,cycles',
   'pin':            'taskset 0x4',
   'pmu':            pmu.name(),
@@ -119,7 +120,7 @@ def version(): return str(round(__version__, 3 if args.tune else 2))
 def app_name(): return args.app != RUN_DEF
 
 def uniq_name():
-  return C.command_basename(args.app, iterations=(args.app_iterations if args.gen_args else None))
+  return C.command_basename(args.app, iterations=(args.app_iterations if args.gen_args else None))[:200]
 
 def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=[]):
   pkg_name = {'msr': 'msr-tools'}
@@ -269,7 +270,7 @@ def profile(log=False, out='run'):
         perf_args += ' --td-level=2'
       else: events += '}'
       if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
-      events += append(pmu.basic_events(), events)
+      if do['perf-stat-add']: events += append(pmu.basic_events(), events)
     if args.events: events += append(pmu.perf_format(args.events), events)
     if args.events or args.metrics: grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
@@ -564,7 +565,6 @@ def main():
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
-  if do['repeat'] > 1: do['perf-stat-def'] += ',cycles:k'
   if args.print_only and args.verbose == 0: args.verbose = 1
   do['nodes'] += ("," + args.nodes)
   if args.tune:
@@ -575,6 +575,10 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
+  if do['perf-stat-add']:
+    x = ',branches,branch-misses'
+    if do['repeat'] > 1: x += ',cycles:k'
+    do['perf-stat-def'] += x
   if args.mode == 'process':
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1

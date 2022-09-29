@@ -110,9 +110,12 @@ def cpu(what):
 # cpu.state = None
 
 def cpu_msrs():
-  msrs = ['0x48', '0x8b', '0x1a4']
+  msrs = ['0x048', '0x08b', '0x1a4']
   if goldencove(): msrs += ['0x6a0', '0x6a2']
-  if server() and v5p(): msrs += ['0x6d']
+  if server():
+    msrs += ['0x610']  # RAPL. TODO: assert SNB-EP onwards
+    msrs += ['0x1b1', '0x19c'] # Thermal status-prochot for package/core.
+    if v5p(): msrs += ['0x06d']
   return msrs
 
 def cpu_TLA():

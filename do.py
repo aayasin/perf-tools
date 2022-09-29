@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.57
+__version__ = 1.58
 
 import argparse, math, os.path, sys
 import common as C
@@ -216,7 +216,9 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
-    for m in do['msrs']: exe('echo "MSR %5s:\t%16s" >> '%(m, read_msr(m)) + out)
+    for m in do['msrs']:
+      v = read_msr(m)
+      exe('echo "MSR %s: %s" >> ' % (m, '0'*(16 - len(v)) + v) + out)
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
   exe("dmesg -T | tee %s | %s >> %s && %s | tail -1 >> %s" % (d, C.grep('Performance E|micro'), out, C.grep('BIOS ', d), out))
   exe("perf record true 2> /dev/null && perf report -I --header-only > setup-cpu-toplogy.log".replace('perf', get_perf_toplev()[0]))
@@ -408,7 +410,7 @@ def profile(log=False, out='run'):
       if do['size']: static_stats()
       exe(perf + " report -i %s | grep -A13 'Branch Statistics:' | tee %s %s | egrep -v ':\s+0\.0%%|CROSS'" %
           (data, '-a' if do['size'] else '', info), None if do['size'] else "@stats")
-      if isfile(perf_stat_log): exe("egrep '  branches|instructions' %s >> %s" % (perf_stat_log, info))
+      if isfile(perf_stat_log): exe("egrep '  branches|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))
       sort2uf = "%s | egrep -v '\s+[1-9]\s+' | ./ptage" % sort2u
       perf_script("-i %s -F ip -c %s | %s | tee %s.samples.log | %s" %
         (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')))
@@ -634,10 +636,11 @@ def main():
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
     elif c.startswith('backup'):
-      r, to = '../perf-tools-%s.tar.gz' % version(), 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
+      r = '../perf-tools-%s.tar.gz' % version()
       if os.path.isfile(r): C.warn('file exists: %s' % r)
       fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + param if param else [])
-      exe('tar -czvf %s %s && scp %s %s' % (r, fs, r, to), redir_out=None)
+      scp = 'scp %s %s' % (r, 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools')
+      exe('tar -czvf %s %s && %s ; echo %s' % (r, fs, scp, scp), redir_out=None)
     else:
       C.error("Unknown command: '%s' !" % c)
       return -1

@@ -79,7 +79,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, backgro
   if not do['tee'] and redir_out: x = x.split('|')[0]
   x = x.replace('| ./', '| %s/' % C.dirname())
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
-  if 'tee >(' in x: x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
+  x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
   x = x.replace('  ', ' ').strip()
   if timeit and not export: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
   if len(vars(args)):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance analysis on Linux
 # Author: Ahmad Yasin
-# edited: Sep 2022
+# edited: Oct 2022
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.59
+__version__ = 1.60
 
 import argparse, math, os.path, sys
 import common as C
@@ -33,6 +33,7 @@ do = {'run':        RUN_DEF,
   'cpuid':          0 if C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
+  'flameg':         0,
   'forgive':        0,
   'gen-kernel':     1,
   'imix':           0xf,
@@ -145,8 +146,11 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   if do['xed']:
     if do['xed'] < 2 and os.path.isfile('/usr/local/bin/xed'): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
-    exe('%s install numpy' % ('pip3' if python_version().startswith('3') else 'pip'), 'installing numpy')
+    pip = 'pip3' if python_version().startswith('3') else 'pip'
+    for x in ('numpy', 'xlswriter'): exe('%s install %s' % (pip, x), '@installing %s' % x)
+    if 'Red Hat' in C.file2str('/etc/os-release', 1): exe('sudo yum install python3-xlsxwriter.noarch', '@patching xlsx')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
+  if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
 
 def tools_update(kernels=[], level=3):
   ks = [''] + C.exe2list("git status | grep 'modified.*kernels' | cut -d/ -f2") + kernels
@@ -322,7 +326,7 @@ def profile(log=False, out='run'):
       do['perf-record'] += ' '
       base += C.chop(do['perf-record'], ' :/,=')
     data = '%s.perf.data'%record_name(do['perf-record'])
-    exe(perf + ' record -c 1000003 -g -o %s '%data+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
+    exe(perf + ' record -c %d -g -o %s ' % (pmu.period(), data)+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
     exe(perf_report + " --header-only -i %s | grep duration" % data)
     print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_report, data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
@@ -434,8 +438,9 @@ def profile(log=False, out='run'):
       lbr_hdr = '# LBR-based Statistics:'
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       if not os.path.isfile(hits) or do['reprocess']:
-        lbr_env = "LBR_LOOPS_LOG=%s PTOOLS_CYCLES=%s" % (loops, exe_1line("egrep '(\s\s|e/)cycles' %s | tail -1" %
-                                                                          C.log_stdout, 0).replace(',', ''))
+        lbr_env = "LBR_LOOPS_LOG=%s" % loops
+        cycles = exe_1line("egrep '(\s\s|e/)cycles' %s | tail -1" % C.log_stdout, 0).replace(',', '')
+        if cycles.isdigit(): lbr_env += ' PTOOLS_CYCLES=%s' % cycles
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         misp = ''
@@ -518,6 +523,16 @@ def profile(log=False, out='run'):
     x = '-i %s | cut -d: -f3-4 | cut -d, -f1 | sort | uniq -c' % perf_data
     exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 1))
 
+  if en(17) and do['flameg']:
+    flags = '-ag -c %d' % pmu.period()
+    perf_data = '%s.perf.data' % record_name(flags)
+    exe('%s record %s -o %s -- %s' % (perf, flags, perf_data, r), 'FlameGraph')
+    x = '-i %s %s > %s.svg ' % (perf_data,
+      ' | ./FlameGraph/'.join(['', 'stackcollapse-perf.pl', 'flamegraph.pl']), perf_data)
+    exe(' '.join((perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 1))
+    print('firefox %s.svg &' % perf_data)
+
+
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['', 'csv', 'log'] + ext
   if cmd == 'tar' and len(tag): res = '-'.join((tag, 'results.tar.gz'))
@@ -552,7 +567,6 @@ def parse_args():
   ap.add_argument('-s', '--sys-wide', type=int, default=0, help='profile system-wide for x seconds. disabled by default')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
-  ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS, action='append') # override global variables with python expression
   x = ap.parse_args()
   return x
 
@@ -594,7 +608,7 @@ def main():
     if args.mode != 'process': C.info('container profiling')
     for x in ('record', 'lbr', 'pebs'): do['perf-'+x] += ' --buildid-all --all-cgroup'
   do_cmd = '%s # version %s' % (C.argv2str(), version())
-  C.log_stdout = '%s-out.txt' % ('run-default' if do['run'] == RUN_DEF else uniq_name())
+  C.log_stdout = '%s-out.txt' % ('run-default' if args.app == RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   cmds_file = '.%s.cmd' % uniq_name()
   if os.path.isfile(cmds_file):
@@ -607,9 +621,7 @@ def main():
   for c in args.command:
     param = c.split(':')[1:] if ':' in c else None
     if   c == 'forgive-me':   pass
-    elif c == 'setup-all':
-      tools_install()
-      setup_perf('set')
+    elif c == 'setup-all':    tools_install()
     elif c == 'build-perf':   exe('./do.py setup-all --install-perf build -v%d --tune %s'%(args.verbose,
                                   ' '.join([':%s:0'%x for x in (do['packages']+('xed', 'tee'))])))
     elif c == 'setup-perf':   setup_perf()
@@ -628,6 +640,8 @@ def main():
     elif c == 'enable-fix-freq':    fix_frequency()
     elif c == 'disable-fix-freq':   fix_frequency('undo')
     elif c == 'help':         exe('%s --describe %s' % (get_perf_toplev()[1], args.metrics), redir_out=None)
+    elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
+                                    ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile()
     elif c.startswith('get'): get(param)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # common functions for logging, debug, arg-parsing, strings, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Sep 2022
+# edited: Oct 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -245,6 +245,8 @@ def args_parse(d, args):
 
 import argparse
 RUN_DEF = './run.sh'
+def add_hex_arg(ap, n, fn, d, h):
+  ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
 def argument_parser(usg=None, defs=None, mask=0x317F, fc=argparse.ArgumentDefaultsHelpFormatter):
   def get_def(): return defs.pop(0) if defs else None
   ap = argparse.ArgumentParser(usage=usg, formatter_class=fc) if usg else argparse.ArgumentParser(formatter_class=fc)
@@ -252,11 +254,11 @@ def argument_parser(usg=None, defs=None, mask=0x317F, fc=argparse.ArgumentDefaul
   ap.add_argument('--pmu-tools', default=get_def(), help='use a custom pmu-tools')
   ap.add_argument('--toplev-args', default=get_def(), help='arguments to pass-through to toplev')
   ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
-  ap.add_argument('-pm', '--profile-mask', type=lambda x: int(x, 16), default=mask,
-                  help='mask to control stages in the profile command')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, '
     '2:+verbose-on metrics|build, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, 5:+event-groups, '
     '.. 9:anything')
+  add_hex_arg(ap, '-pm', '--profile-mask', mask, 'stages in the profile command')
+  ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS, action='append') # override global variables with python expression
   return ap
 
 def commands_list():

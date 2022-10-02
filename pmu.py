@@ -25,7 +25,6 @@ def skylake():    return name() == 'skylake'
 def icelake():    return name() == 'icelake'
 def alderlake():  return name() == 'alderlake_hybrid'
 def sapphire():   return name() == 'sapphire_rapids'
-
 # aggregations
 def goldencove():   return alderlake() or sapphire()
 def perfmetrics():  return icelake() or goldencove()
@@ -49,6 +48,8 @@ def lbr_event():
 
 def basic_events():
   return ','.join([event('sentries'), ])
+
+def period(): return 2000003
 
 # perf_events add-ons
 def perf_format(es):

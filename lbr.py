@@ -251,7 +251,7 @@ def inst2pred(i):
   i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
          'ld+test':   '(cmp[^x]|test).*\(',
   }
-  if i is None: return i2p.keys()
+  if i is None: return list(i2p.keys())
   return i2p[i] if i in i2p else i
 insts = inst2pred(None) + ['call', 'push']
 insts_all = insts + ['cond_backward', 'cond_forward', 'all']

@@ -20,4 +20,4 @@ jobs:
         pip install flake8 pytest
     - name: Lint with flake8
       run: |
-        flake8 $(git ls-files '*.py') --ignore=E111,E121,E128,E241,E272,E302,E401,E501,E701,E704
+        flake8 $(git ls-files '*.py') --ignore=E111,E121,E128,E241,E272,E302,E401,E501,E701,E704,E225,E201,E261,E228,E305,E222,E124,E226,E221,E402,E114,E231

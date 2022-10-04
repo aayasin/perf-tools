@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.60
+__version__ = 1.61
 
 import argparse, math, os.path, sys
 import common as C
@@ -20,10 +20,8 @@ import pmu
 from datetime import datetime
 from platform import python_version
 
-RUN_DEF = C.RUN_DEF
-TOPLEV_DEF=' --frequency --metric-group +Summary'
 Find_perf = 'sudo find / -name perf -executable -type f'
-do = {'run':        RUN_DEF,
+do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'cmds_file':      None,
   'comm':           None,
@@ -71,7 +69,7 @@ do = {'run':        RUN_DEF,
   'tma-fx':         '+IPC,+Instructions,+Time,+SLOTS,+CLKS',
   'tma-bot-fe':     ',+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
   'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
-  'toplev':         TOPLEV_DEF,
+  'toplev':         C.TOPLEV_DEF,
   'xed':            1 if pmu.cpu('x86') else 0,
 }
 args = argparse.Namespace()
@@ -85,19 +83,20 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, backgro
   x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
   x = x.replace('  ', ' ').strip()
   if timeit and not export: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
+  debug = args.verbose > 0
   if len(vars(args)):
     run = not args.print_only
     if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
       if args.mode == 'process':
-        x, run = '# ' + x, False
+        x, run, debug = '# ' + x, False, args.verbose > 2
         if not 'perf record ' in x: msg = None
     elif args.mode == 'profile':
-        x, run = '# ' + x, False
+        x, run, debug = '# ' + x, False, args.verbose > 2
     if background: x = x + ' &'
     if not 'loop_stats' in x or args.verbose > 0:
       do['cmds_file'].write(x + '\n')
       do['cmds_file'].flush()
-  return C.exe_cmd(x, msg, redir_out, args.verbose > 0, run, log, background)
+  return C.exe_cmd(x, msg, redir_out, debug, run, log, background)
 def exe1(x, m=None, log=True):
   if args.stdout and '| tee' in x: x, log = x.split('| tee')[0], False
   return exe(x, m, redir_out=None, log=log)
@@ -118,7 +117,7 @@ def warn_file(x):
 def isfile(f): return f and os.path.isfile(f)
 def rp(x): return os.path.join(C.dirname(), x)
 def version(): return str(round(__version__, 3 if args.tune else 2))
-def app_name(): return args.app != RUN_DEF
+def app_name(): return args.app != C.RUN_DEF
 
 def uniq_name():
   return C.command_basename(args.app, iterations=(args.app_iterations if args.gen_args else None))[:200]
@@ -362,7 +361,7 @@ def profile(log=False, out='run'):
   
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
-      tlargs='' if args.toplev_args == TOPLEV_DEF else args.toplev_args)
+      tlargs='' if args.toplev_args == C.TOPLEV_DEF else args.toplev_args)
     exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Add|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
     if do['sample'] > 3:
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
@@ -415,7 +414,8 @@ def profile(log=False, out='run'):
       if do['size']: static_stats()
       exe(perf + " report -i %s | grep -A13 'Branch Statistics:' | tee %s %s | egrep -v ':\s+0\.0%%|CROSS'" %
           (data, '-a' if do['size'] else '', info), None if do['size'] else "@stats")
-      if isfile(perf_stat_log): exe("egrep '  branches|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))
+      if isfile(perf_stat_log):
+        exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))
       sort2uf = "%s | egrep -v '\s+[1-9]\s+' | ./ptage" % sort2u
       perf_script("-i %s -F ip -c %s | %s | tee %s.samples.log | %s" %
         (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')))
@@ -439,6 +439,7 @@ def profile(log=False, out='run'):
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       if not os.path.isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
+        # TODO: replace this with stats lookup
         cycles = exe_1line("egrep '(\s\s|e/)cycles' %s | tail -1" % C.log_stdout, 0).replace(',', '')
         if cycles.isdigit(): lbr_env += ' PTOOLS_CYCLES=%s' % cycles
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
@@ -524,7 +525,7 @@ def profile(log=False, out='run'):
     exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 1))
 
   if en(17) and do['flameg']:
-    flags = '-ag -c %d' % pmu.period()
+    flags = '-ag -F 49' # -c %d' % pmu.period()
     perf_data = '%s.perf.data' % record_name(flags)
     exe('%s record %s -o %s -- %s' % (perf, flags, perf_data, r), 'FlameGraph')
     x = '-i %s %s > %s.svg ' % (perf_data,
@@ -534,7 +535,7 @@ def profile(log=False, out='run'):
 
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', 'csv', 'log'] + ext
+  log_files = ['', 'csv', 'log', 'xlsx', 'svg'] + ext
   if cmd == 'tar' and len(tag): res = '-'.join((tag, 'results.tar.gz'))
   s = (uniq_name() if app_name() else '') + '*'
   if cmd == 'tar': exe('tar -czvf %s run.sh '%res + (' %s.'%s).join(log_files) + ' .%s.cmd'%s)
@@ -608,7 +609,7 @@ def main():
     if args.mode != 'process': C.info('container profiling')
     for x in ('record', 'lbr', 'pebs'): do['perf-'+x] += ' --buildid-all --all-cgroup'
   do_cmd = '%s # version %s' % (C.argv2str(), version())
-  C.log_stdout = '%s-out.txt' % ('run-default' if args.app == RUN_DEF else uniq_name())
+  C.log_stdout = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   cmds_file = '.%s.cmd' % uniq_name()
   if os.path.isfile(cmds_file):
@@ -675,4 +676,3 @@ def get(param):
 if __name__ == "__main__":
   main()
   do['cmds_file'].close()
-

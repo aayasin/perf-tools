@@ -28,11 +28,11 @@ class color:
 def printc(msg, col=color.DARKCYAN, log_only=False):
   msg = col + msg + color.END
   if not log_only: print(msg)
-  if log_stdout:
-    file1 = open(log_stdout, "a")
+  if log_stdio:
+    file1 = open(log_stdio, "a")
     file1.write(msg+'\n')
     file1.close()
-log_stdout=None
+log_stdio=None
 
 def info(msg, bold=False, col=color.GREY):
   if bold: col += color.BOLD
@@ -87,7 +87,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, backgr
     if run or msg.endswith('..'): printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
-  if log and log_stdout: x = x + ' | tee -a ' + log_stdout
+  if log and log_stdio: x = x + ' 2>&1 | tee -a ' + log_stdio
   if background: return Popen(x.split())
   ret = os.system(x) if run else 0
   if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))

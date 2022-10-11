@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.61
+__version__ = 1.62
 
 import argparse, math, os.path, sys
 import common as C
@@ -440,7 +440,7 @@ def profile(log=False, out='run'):
       if not os.path.isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
         # TODO: replace this with stats lookup
-        cycles = exe_1line("egrep '(\s\s|e/)cycles' %s | tail -1" % C.log_stdout, 0).replace(',', '')
+        cycles = exe_1line("egrep '(\s\s|e/)cycles' %s | tail -1" % C.log_stdio, 0).replace(',', '')
         if cycles.isdigit(): lbr_env += ' PTOOLS_CYCLES=%s' % cycles
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
@@ -609,7 +609,7 @@ def main():
     if args.mode != 'process': C.info('container profiling')
     for x in ('record', 'lbr', 'pebs'): do['perf-'+x] += ' --buildid-all --all-cgroup'
   do_cmd = '%s # version %s' % (C.argv2str(), version())
-  C.log_stdout = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
+  C.log_stdio = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   cmds_file = '.%s.cmd' % uniq_name()
   if os.path.isfile(cmds_file):
@@ -655,7 +655,8 @@ def main():
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
     elif c.startswith('backup'):
-      r = '../perf-tools-%s.tar.gz' % version()
+      import lbr
+      r = '../perf-tools-%s-lbr%.2f.tar.gz' % (version(), round(lbr.__version__, 2))
       if os.path.isfile(r): C.warn('file exists: %s' % r)
       fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + param if param else [])
       scp = 'scp %s %s' % (r, 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools')

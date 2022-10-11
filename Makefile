@@ -54,6 +54,9 @@ help: do-help.txt
 do-help.txt: $(DO)
 	./$^ -h > $@
 
+test-build:
+	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS -n '+Core_Bound*' -pm 22
+
 test-default:
 	$(DO1) -pm 216f
 
@@ -62,6 +65,7 @@ pre-push: help tramp3d-v4
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='" 	# tests sys-wide + topdown tree; MEM_Bandwidth in L5
 	$(DO) profile -m IpCall --stdout -pm 42				# tests perf -M + toplev --drilldown
 	$(DO) profile -a pmu-tools/workloads/BC2s -pm 42	# tests topdown across-tree tagging
+	$(MAKE) test-build                                  # tests build command + perf -e + toplev --nodes; Ports_Utilized_1
 	$(MAKE) test-default                                # tests default non-MUX sensitive commands
 	$(DO1) --toplev-args ' --no-multiplex' -pm 1010     # carefully tests MUX sensitive commands
-	$(DO1) > .log 2>&1 || (echo "failed! $$?"; exit 1)  # tests default commands (errors only)
+	$(DO1) > .log 2>&1 || (echo "failed! $$?"; exit 1)  # tests default profile-steps (errors only)

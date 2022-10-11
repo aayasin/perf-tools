@@ -241,25 +241,26 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   if do['dmidecode']: exe('sudo dmidecode > setup-memory.log')
 
 def get_perf_toplev():
-  perf, toplev = args.perf, ''
+  perf, env, ptools = args.perf, '', {}
   if perf != 'perf':
     C.check_executable(perf)
-    toplev = 'PERF=%s ' % perf
-  C.check_executable(args.pmu_tools.split()[-1] + '/toplev.py')
-  toplev += (args.pmu_tools + '/toplev.py')
+    env = 'PERF=%s ' % perf
+  for x in ('toplev.py', 'ocperf'):
+    C.check_executable('/'.join((args.pmu_tools.split()[-1], x)))
+    ptools[x] = env + args.pmu_tools + '/' + x
   if do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
-    if pmu.hybrid():      toplev += ' --cputype=core'
-  return (perf, toplev)
+    if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
+  return (perf, ptools['toplev.py'], ptools['ocperf'])
 
 def profile(log=False, out='run'):
   out = uniq_name()
-  perf, toplev = get_perf_toplev()
+  perf, toplev, ocperf = get_perf_toplev()
   def en(n): return args.profile_mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
-  def perf_stat(flags, events='',
+  def perf_stat(flags, msg, events='',
     grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
     perf_args = [flags, '--log-fd=1', do['perf-stat'] ]
@@ -278,7 +279,10 @@ def profile(log=False, out='run'):
     if args.events or args.metrics: grep = '' #keep output unfiltered with user-defined events
     if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
     log = '%s.perf_stat%s.log' % (out, flags.strip())
-    return '%s stat %s -- %s | tee %s %s' % (perf, perf_args, r, log, grep), log
+    stat = ' stat %s -- %s | tee %s %s' % (perf_args, r, log, grep)
+    exe1(perf + stat, msg)
+    if os.path.getsize(log) == 0: exe1(ocperf + stat, '@retry w/ ocperf')
+    return log
   def perf_script(x, msg=None, export=''):
     if do['perf-scr']:
       samples = 1e4 * do['perf-scr']
@@ -310,14 +314,9 @@ def profile(log=False, out='run'):
   sort2up = sort2u + ' | ./ptage'
   r = args.app
   if en(0) or log: log_setup()
-  
   if args.profile_mask & ~0x1: C.info('App: %s %s' % (r, args.app_iterations if args.gen_args else ''))
-  if en(1):
-    x = perf_stat(flags='-r%d' % do['repeat'])
-    exe1(x[0], 'per-app counting %d runs' % do['repeat'])
-    perf_stat_log = x[1]
-  
-  if en(2): exe1(perf_stat('-a', a_events(), grep='| egrep "seconds|insn|topdown|pkg"')[0], 'system-wide counting')
+  if en(1): perf_stat_log = perf_stat('-r%d' % do['repeat'], 'per-app counting %d runs' % do['repeat'])
+  if en(2): perf_stat('-a', 'system-wide counting', a_events(), grep='| egrep "seconds|insn|topdown|pkg"')
   
   if en(3) and do['sample']:
     base = out+'.perf'
@@ -548,7 +547,8 @@ def build_kernel(dir='./kernels/'):
     exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app, redir_out=None)
     if args.verbose > 1: exe(fixup('grep instructions ./%s.c'%app))
   exe(fixup('%s -g -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
-  do['run'] = fixup('%s ./%s %d'%(do['pin'], app, int(float(args.app_iterations))))
+  args.app = fixup('%s ./%s %d' % (do['pin'], app, int(float(args.app_iterations))))
+  args.toplev_args += ' --single-thread'
   if args.verbose > 2: exe(fixup("%s -dw ./%s | grep -A%d pause | egrep '[ 0-9a-f]+:'" % (do['objdump'], app, do['asm-dump'])), '@kernel ASM')
 
 def parse_args():
@@ -575,7 +575,7 @@ def main():
   global args
   args = parse_args()
   #args sanity checks
-  if (args.gen_args or 'build' in args.command) and app_name():
+  if (args.gen_args or 'build' in args.command) and not app_name():
     C.error('must specify --app-name with any of: --gen-args, build')
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'

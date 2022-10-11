@@ -6,8 +6,8 @@ positional arguments:
                         atom disable-fix-freq disable-hugepages disable-
                         prefetches disable-smt enable-atom enable-fix-freq
                         enable-hugepages enable-prefetches enable-smt find-
-                        perf help log profile reboot setup-all setup-perf tar
-                        tools-update
+                        perf help install-python log profile reboot setup-all
+                        setup-perf tar tools-update
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -19,14 +19,14 @@ optional arguments:
                         arguments to pass-through to toplev (default: )
   -a APP, --app APP     name of user-application/kernel/command to profile
                         (default: ./run.sh)
-  -pm PROFILE_MASK, --profile-mask PROFILE_MASK
-                        mask to control stages in the profile command
-                        (default: 12671)
   -v VERBOSE, --verbose VERBOSE
                         verbose level; 0:none, 1:commands, 2:+verbose-on
                         metrics|build, 3:+toplev --perf|ASM on kernel build,
                         4:+args parsing, 5:+event-groups, .. 9:anything
                         (default: 0)
+  -pm PROFILE_MASK, --profile-mask PROFILE_MASK
+                        mask to control stages in the profile command
+                        (default: 12671)
   --mode [{profile,process,both}]
                         analysis mode options: profile-only, (post)process-
                         only or both (default: both)

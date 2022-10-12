@@ -260,28 +260,29 @@ def profile(log=False, out='run'):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
-  def perf_stat(flags, msg, events='',
-    grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
+  def perf_stat(flags, msg, events='', perfmetrics=do['core'],
+                grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
-    perf_args = [flags, '--log-fd=1', do['perf-stat'] ]
+    evts, perf_args = events, [flags, '--log-fd=1', do['perf-stat'] ]
     if args.metrics: perf_args += ['--metric-no-group', '-M', args.metrics] # 1st is workaround bug 4804e0111662 in perf-stat -r2 -M
     perf_args = ' '.join(perf_args)
-    if pmu.perfmetrics() and do['core']:
+    if perfmetrics and pmu.perfmetrics():
       prefix = ',topdown-'
-      events += prefix.join([append('{slots', events),'retiring','bad-spec','fe-bound','be-bound'])
+      evts += prefix.join([append('{slots', evts), 'retiring', 'bad-spec', 'fe-bound', 'be-bound'])
       if pmu.goldencove():
-        events += prefix.join(['', 'heavy-ops','br-mispredict','fetch-lat','mem-bound}'])
+        evts += prefix.join(['', 'heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound}'])
         perf_args += ' --td-level=2'
-      else: events += '}'
-      if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
-      if do['perf-stat-add']: events += append(pmu.basic_events(), events)
-    if args.events: events += append(pmu.perf_format(args.events), events)
+      else: evts += '}'
+      if pmu.hybrid(): evts = evts.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
+      if do['perf-stat-add']: evts += append(pmu.basic_events(), evts)
+    if args.events: evts += append(pmu.perf_format(args.events), evts)
     if args.events or args.metrics: grep = '' #keep output unfiltered with user-defined events
-    if events != '': perf_args += ' -e "%s,%s"'%(do['perf-stat-def'], events)
+    if evts != '': perf_args += ' -e "%s,%s"' % (do['perf-stat-def'], evts)
     log = '%s.perf_stat%s.log' % (out, flags.strip())
     stat = ' stat %s -- %s | tee %s %s' % (perf_args, r, log, grep)
     exe1(perf + stat, msg)
-    if os.path.getsize(log) == 0: exe1(ocperf + stat, '@retry w/ ocperf')
+    if os.path.getsize(log) == 0: exe1(ocperf + stat, msg + '@; retry w/ ocperf')
+    if perfmetrics and int(exe_1line('wc -l ' + log, 0)) < 5: return perf_stat(flags, msg + '@; no PM', events, 0, grep)
     return log
   def perf_script(x, msg=None, export=''):
     if do['perf-scr']:
@@ -312,7 +313,7 @@ def profile(log=False, out='run'):
   perf_report = ' '.join((perf, 'report', '--objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else ''))
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | ./ptage'
-  r = args.app
+  r = do['run'] if args.gen_args else args.app
   if en(0) or log: log_setup()
   if args.profile_mask & ~0x1: C.info('App: %s %s' % (r, args.app_iterations if args.gen_args else ''))
   if en(1): perf_stat_log = perf_stat('-r%d' % do['repeat'], 'per-app counting %d runs' % do['repeat'])
@@ -547,7 +548,7 @@ def build_kernel(dir='./kernels/'):
     exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app, redir_out=None)
     if args.verbose > 1: exe(fixup('grep instructions ./%s.c'%app))
   exe(fixup('%s -g -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
-  args.app = fixup('%s ./%s %d' % (do['pin'], app, int(float(args.app_iterations))))
+  do['run'] = fixup('%s ./%s %d' % (do['pin'], app, int(float(args.app_iterations))))
   args.toplev_args += ' --single-thread'
   if args.verbose > 2: exe(fixup("%s -dw ./%s | grep -A%d pause | egrep '[ 0-9a-f]+:'" % (do['objdump'], app, do['asm-dump'])), '@kernel ASM')
 
@@ -655,12 +656,14 @@ def main():
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
     elif c.startswith('backup'):
-      import lbr
+      import lbr, subprocess
       r = '../perf-tools-%s-lbr%.2f.tar.gz' % (version(), round(lbr.__version__, 2))
+      to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
       if os.path.isfile(r): C.warn('file exists: %s' % r)
       fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + param if param else [])
-      scp = 'scp %s %s' % (r, 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools')
-      exe('tar -czvf %s %s && %s ; echo %s' % (r, fs, scp, scp), redir_out=None)
+      scp = 'scp %s %s' % (r, to)
+      exe('tar -czvf %s %s ; echo %s' % (r, fs, scp), redir_out=None)
+      #subprocess.Popen(['scp', r, to])
     else:
       C.error("Unknown command: '%s' !" % c)
       return -1

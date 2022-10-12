@@ -1,6 +1,7 @@
 DO = ./do.py
 ST = --toplev-args ' --single-thread'
 DO1 = $(DO) profile -a "taskset 0x4 ./CLTRAMP3D" $(ST) --tune :loops:10
+FAIL = (echo "failed! $$?"; exit 1)
 RERUN = -pm 0x80
 MAKE = make --no-print-directory
 MGR = sudo apt
@@ -56,9 +57,10 @@ do-help.txt: $(DO)
 
 test-build:
 	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS -n '+Core_Bound*' -pm 22
-
 test-default:
 	$(DO1) -pm 216f
+test-study:
+	./study.py c1 c2 -a ./run.sh --tune :loops:0 -v1 > .study.log 2>&1 || $(FAIL)
 
 pre-push: help tramp3d-v4
 	$(DO) help -m GFLOPs
@@ -68,4 +70,5 @@ pre-push: help tramp3d-v4
 	$(MAKE) test-build                                  # tests build command + perf -e + toplev --nodes; Ports_Utilized_1
 	$(MAKE) test-default                                # tests default non-MUX sensitive commands
 	$(DO1) --toplev-args ' --no-multiplex' -pm 1010     # carefully tests MUX sensitive commands
-	$(DO1) > .log 2>&1 || (echo "failed! $$?"; exit 1)  # tests default profile-steps (errors only)
+	$(MAKE) test-study                                  # tests study script (errors only)
+	$(DO1) > .do.log 2>&1 || $(FAIL)                    # tests default profile-steps (errors only)

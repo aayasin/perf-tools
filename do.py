@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.62
+__version__ = 1.63
 
 import argparse, math, os.path, sys
 import common as C
@@ -23,6 +23,7 @@ from platform import python_version
 Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
+  'batch':          0,
   'cmds_file':      None,
   'comm':           None,
   'compiler':       'gcc -O2', # ~/tools/llvm-6.0.0/bin/clang',
@@ -76,6 +77,7 @@ args = argparse.Namespace()
 
 def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, background=False, export=None):
   X = x.split()
+  if msg and do['batch']: msg += " for '%s'" % args.app
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee'] and redir_out: x = x.split('|')[0]
   x = x.replace('| ./', '| %s/' % C.dirname())
@@ -282,7 +284,9 @@ def profile(log=False, out='run'):
     stat = ' stat %s -- %s | tee %s %s' % (perf_args, r, log, grep)
     exe1(perf + stat, msg)
     if os.path.getsize(log) == 0: exe1(ocperf + stat, msg + '@; retry w/ ocperf')
-    if perfmetrics and int(exe_1line('wc -l ' + log, 0)) < 5: return perf_stat(flags, msg + '@; no PM', events, 0, grep)
+    if perfmetrics:
+      x = int(exe_1line('wc -l ' + log, 0))
+      if x >= 0 and x < 5: return perf_stat(flags, msg + '@; no PM', events, 0, grep)
     return log
   def perf_script(x, msg=None, export=''):
     if do['perf-scr']:
@@ -315,7 +319,7 @@ def profile(log=False, out='run'):
   sort2up = sort2u + ' | ./ptage'
   r = do['run'] if args.gen_args else args.app
   if en(0) or log: log_setup()
-  if args.profile_mask & ~0x1: C.info('App: %s %s' % (r, args.app_iterations if args.gen_args else ''))
+  if args.profile_mask & ~0x1: C.info('App: ' + r)
   if en(1): perf_stat_log = perf_stat('-r%d' % do['repeat'], 'per-app counting %d runs' % do['repeat'])
   if en(2): perf_stat('-a', 'system-wide counting', a_events(), grep='| egrep "seconds|insn|topdown|pkg"')
   

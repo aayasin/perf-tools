@@ -38,7 +38,10 @@ def info(msg, bold=False, col=color.GREY):
   if bold: col += color.BOLD
   printc('INFO: %s .'%msg, col)
 
-def warn(msg, bold=False, col=color.ORANGE, level=0):
+warn_db = {}
+def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3):
+  inc(warn_db, msg)
+  if suppress_after and warn_db[msg] > suppress_after: return
   WARN = env2int('WARN')
   if bold: col += color.BOLD
   if level <= WARN: printc('WARNING: %s' % msg, col)
@@ -279,6 +282,7 @@ def command_basename(comm, iterations=None):
   return chop_app(namestr.strip('-'))
 
 # stats
+def inc(d, b): d[b] = d.get(b, 0) + 1
 def ratio(x, histo, denom='total'):
   return '%s-ratio: %.1f%%'%(x, 100.0*histo[x]/max(histo[denom], 1))
 

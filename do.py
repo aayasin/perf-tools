@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.63
+__version__ = 1.64
 
 import argparse, math, os.path, sys
 import common as C
@@ -317,6 +317,8 @@ def profile(log=False, out='run'):
       C.info('\tcalibrated: %s' % do[x])
     return record_name(do[x])
   perf_report = ' '.join((perf, 'report', '--objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else ''))
+  perf_report_mods = perf_report + ' --stdio -F sample,overhead,comm,dso'
+  perf_report_syms = perf_report_mods + ',sym'
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | ./ptage'
   r = do['run'] if args.gen_args else args.app
@@ -335,9 +337,8 @@ def profile(log=False, out='run'):
     exe(perf_report + " --header-only -i %s | grep duration" % data)
     print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_report, data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
-    exe(perf_report + " --stdio -F sample,overhead,comm,dso,sym -n --no-call-graph -i %s " \
-      " | tee %s-funcs.log | grep -A7 Overhead | egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//'" %
-      (data, base), '@report functions')
+    exe(perf_report_syms + " -n --no-call-graph -i %s | tee %s-funcs.log | grep -A7 Overhead "
+      "| egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//'" % (data, base), '@report functions')
     exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A22 Overhead", '@report modules')
     exe(perf + " annotate --stdio -n -l -i %s | c++filt | tee %s-code.log " \
@@ -398,6 +399,9 @@ def profile(log=False, out='run'):
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
       comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (perf_data, sort2u), 1)
+      if comm == 'perf':
+        exe(' '.join([perf_report_syms, '-i', perf_data, '| grep -A11 Samples']))
+        C.error("Most samples in 'perf' tool. Try run longer")
     return perf_data, comm
   
   if en(8) and do['sample'] > 1:
@@ -450,11 +454,11 @@ def profile(log=False, out='run'):
         if cycles.isdigit(): lbr_env += ' PTOOLS_CYCLES=%s' % cycles
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
-        misp = ''
-        cmd, msg = "-i %s -F +brstackinsn --xed -c %s | tee >(%s %s %s >> %s) %s " % (data, comm,
-                      lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info, misp), '@info'
+        misp, cmd, msg = '', "-i %s -F +brstackinsn --xed -c %s" % (data, comm), '@info'
         if do['imix']:
-          cmd += "| GREP_INST | %s " % clean
+          print_cmd(' '.join(('4debug', perf, 'script', cmd, '| less')), False)
+          cmd += " | tee >(%s %s %s >> %s) %s | GREP_INST | %s " % (
+            lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info, misp, clean)
           if do['imix'] & 0x1:
             cmd += "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
             msg += ', hitcounts'
@@ -489,8 +493,7 @@ def profile(log=False, out='run'):
   
   if en(9) and do['sample'] > 2:
     data, comm = perf_record('pebs', comm, C.flag_value(do['perf-pebs'], '-e'))
-    exe(perf + " report -i %s --stdio -F overhead,comm,dso | tee %s.modules.log | grep -A12 Overhead" %
-      (data, data), "@ top-10 modules")
+    exe(perf_report_mods + " -i %s | tee %s.modules.log | grep -A12 Overhead" % (data, data), "@ top-10 modules")
     perf_script("-i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:

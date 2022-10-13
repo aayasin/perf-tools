@@ -4,12 +4,14 @@ DO1 = $(DO) profile -a "taskset 0x4 ./CLTRAMP3D" $(ST) --tune :loops:10
 FAIL = (echo "failed! $$?"; exit 1)
 RERUN = -pm 0x80
 MAKE = make --no-print-directory
-MGR = sudo apt
+MGR = sudo $(shell python -c 'import common; print(common.os_installer())')
 SHOW = tee
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
 
 all: tramp3d-v4
 	@echo done
+git:
+	$(MGR) -y -q install git
 install: link-python llvm
 	make -s -C workloads/mmm install
 link-python:

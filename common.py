@@ -45,6 +45,8 @@ def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3):
   WARN = env2int('WARN')
   if bold: col += color.BOLD
   if level <= WARN: printc('WARNING: %s' % msg, col)
+def warn_summary():
+  if len(warn_db): print('Top warnings: (%d total unique)\n' % len(warn_db), hist2str(warn_db))
 
 dump_stack_on_error = 0
 def error(msg):
@@ -197,8 +199,10 @@ def dict_load(f):
     fo.close()
     return d
 
-def dict2str(d):
-  return str(sorted(d.items())).replace("', ", ":\t").replace("), ('", ",\n\t").replace("[('", '\t').replace(')]', '\n')
+def iter2str(x): return str(x).replace("', ", ":\t").replace("), ('", ",\n\t").replace("[('", '\t').replace(')]', '\n')
+def dict2str(d): return iter2str(sorted(d.items()))
+def hist2str(h, top=20): return iter2str(hist2slist(h)[-top:])
+def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])
 
 # chop - clean a list of charecters from a string
 # @s:     input string

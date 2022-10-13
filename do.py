@@ -24,6 +24,7 @@ Find_perf = 'sudo find / -name perf -executable -type f'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'batch':          0,
+  'calibrate':      0,
   'cmds_file':      None,
   'comm':           None,
   'compiler':       'gcc -O2', # ~/tools/llvm-6.0.0/bin/clang',
@@ -82,7 +83,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, backgro
   if not do['tee'] and redir_out: x = x.split('|')[0]
   x = x.replace('| ./', '| %s/' % C.dirname())
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
-  x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
+  if 'tee >(' in x or export: x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
   x = x.replace('  ', ' ').strip()
   if timeit and not export: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
   debug = args.verbose > 0
@@ -310,6 +311,7 @@ def profile(log=False, out='run'):
     return default
   def record_calibrate(x):
     factor = int(math.log(get_metric('CPUs', 1), 10))
+    if do['calibrate']: factor = do['calibrate']
     if factor:
       do[x] = do[x].replace('0000', '0' * (4 + factor))
       C.info('\tcalibrated: %s' % do[x])

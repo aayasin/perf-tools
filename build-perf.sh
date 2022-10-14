@@ -30,7 +30,7 @@ sudo apt-get install make
 sudo apt-get install -y libbfd-dev libdwarf-dev libelf-dev libdw-dev libunwind-dev
 make clean
 #make PYTHON=false PYTHON_CONFIG=false
-make
+make NO_JEVENTS=1 # a perf tool overhead bug in Intel event names handling
 ls -l $PWD/perf
 cp perf ../../../../
 cd -

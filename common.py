@@ -142,7 +142,7 @@ def os_installer():
   return installer
 
 def check_executable(x):
-  if not os.access(x, os.X_OK): error("'%s' is not executable" % x)
+  if not (os.path.isfile(x) and os.access(x, os.X_OK)): error("'%s' is not executable" % x)
 
 def dirname(): return os.path.dirname(__file__)
 

@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.64
+__version__ = 1.65
 
 import argparse, math, os.path, sys
 import common as C
@@ -58,7 +58,7 @@ do = {'run':        C.RUN_DEF,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
   'perf-stat-add':  1, # additional events using general counters
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles', # ,cycles:G
-  'perf-stat-ipc':  '-- perf stat -e instructions,cycles',
+  'perf-stat-ipc':  'stat -e instructions,cycles',
   'pin':            'taskset 0x4',
   'pmu':            pmu.name(),
   'python':         sys.executable,
@@ -389,9 +389,11 @@ def profile(log=False, out='run'):
   
   data, comm = None, do['comm']
   def perf_record(tag, comm, msg=''):
-    assert '-b' in do['perf-%s'%tag] or '-j any' in do['perf-%s'%tag] or do['forgive'], 'No unfiltered LBRs! tag=%s'%tag
+    flags = do['perf-%s' % tag]
+    assert C.any_in(('-b', '-j any'), flags) or do['forgive'], 'No unfiltered LBRs! tag=%s' % tag
     perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
-    exe(perf + ' record %s -o %s %s -- %s' % (do['perf-%s'%tag], perf_data, do['perf-stat-ipc'], r), 'sampling-%s %s' % (tag.upper(), msg))
+    perf_ipc = ' %s %s' % (perf, do['perf-stat-ipc']) if len(do['perf-stat-ipc']) else ''
+    exe(perf + ' record %s -o %s%s -- %s' % (flags, perf_data, perf_ipc, r), 'sampling-%s %s' % (tag.upper(), msg))
     warn_file(perf_data)
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:
@@ -399,7 +401,7 @@ def profile(log=False, out='run'):
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
       comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (perf_data, sort2u), 1)
-      if comm == 'perf':
+      if comm == 'perf' or comm.startswith('perf-'): # a perf tool overhead bug in Intel event names handling
         exe(' '.join([perf_report_syms, '-i', perf_data, '| grep -A11 Samples']))
         C.error("Most samples in 'perf' tool. Try run longer")
     return perf_data, comm

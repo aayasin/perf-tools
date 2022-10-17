@@ -5,6 +5,7 @@
 CC=${CC:-gcc -g -O2}
 GEN=${GEN:-1}
 PY=${PY:-python3}
+RF=${RF:-1}
 
 set -xe
 
@@ -24,8 +25,10 @@ $PY ./gen-kernel.py -i NOP#3 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak6wid
 $PY ./gen-kernel.py jumpy-seq -i NOP JMP -a3 -n30 > dsb-jmp.c
 $PY ./gen-kernel.py jumpy-seq -i JG -a 6 -n 20000  > jcc20k.c
 $PY ./gen-kernel.py jumpy-random -a 6 -i JMP -n 1024 > rfetch64k.c
+if [ $RF -eq 1 ]; then
 $PY ./gen-kernel.py jumpy-random -a 5 -i NOP5#30 JMP -n 19661 > rfetch3m.c
 $PY ./gen-kernel.py jumpy-random -a 5 -i NOP5#56 JMP -n 10923 > rfetch3m-ic.c
+fi
 for x in add mul; do
   $PY ./gen-kernel.py -i "v${x}pd %ymm@,%ymm@,%ymm@" -r16 -n1 --reference MGM > fp-$x-bw.c
   $PY ./gen-kernel.py -i "v${x}pd %ymm@-1,%ymm@,%ymm@" -r16 -n10 --reference MGM > fp-$x-lat.c

@@ -47,7 +47,10 @@ def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
 
 def basic_events():
-  return ','.join([event('sentries'), ])
+  events = [event('sentries')]
+  if v5p(): events += ['r2424']
+  if goldencove(): events += ['r0262']
+  return ','.join(events)
 
 def period(): return 2000003
 
@@ -56,11 +59,15 @@ def perf_format(es):
   rs = []
   for e in es.split(','):
     if e.startswith('r') and ':' in e:
-      e, f, n = e.split(':'), None, ':'.join(e.split(':')[1:])
+      e = e.split(':')
+      f, n = None, e[1]
       if len(e[0])==5:   f='%s/event=0x%s,umask=0x%s,name=%s/' % (pmu(), e[0][3:5], e[0][1:3], n)
       elif len(e[0])==7: f='%s/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/' % (pmu(), e[0][5:7], e[0][3:5], e[0][1:3], n)
       elif len(e[0])==9: f='%s/event=0x%s,umask=0x%s,cmask=0x%s,edge=%d,name=%s/' % (pmu(),
         e[0][7:9], e[0][5:7], e[0][3:5], (int(e[0][1:3], 16) >> 2) & 0x1, n)
+      else: C.error("profile:perf-stat: invalid syntax in '%s'" % ':'.join(e))
+      if len(e) == 3: f += e[2]
+      elif len(e) == 2: pass
       else: C.error("profile:perf-stat: invalid syntax in '%s'" % ':'.join(e))
       rs += [ f ]
     else: rs += [ e ]

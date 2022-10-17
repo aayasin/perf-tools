@@ -5,10 +5,10 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.93
+__version__= 0.95
 
-import common as C
-import pmu
+import common as C, pmu
+from common import inc
 import os, re, sys
 try:
   from numpy import average
@@ -20,17 +20,19 @@ FP_SUFFIX = "[sdh]([a-z])"
 INDIRECT  = r"(jmp|call).*%"
 CALL_RET  = '(call|ret)'
 COND_BR   = 'j[^m].*'
+def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('DBG')
-verbose = C.env2int('LBR_VERBOSE', base=16)
+verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings
 use_cands = os.getenv('LBR_USE_CANDS')
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
-def inc(d, b): d[b] = d.get(b, 0) + 1
 def ratio(a, b): return '%.2f%%' % (100.0 * a / b) if b else '-'
 def read_line(): return sys.stdin.readline()
+
+def warn(mask, x): return C.warn(x) if edge_en and (verbose & mask) else None
 
 def exit(x, sample, label):
   C.annotate(x, label)
@@ -73,6 +75,31 @@ def line_timing(line):
   cycles = int(x.group(2))
   return cycles, ipc
 
+vec_size = 3 if pmu.cpu_has_feature('avx512vl') else 2
+def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
+def vec_len(i, t='int'): return 'vec%d-%s' % (128 * (2 ** i), t)
+def line_inst(line):
+  pInsts = ('cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper', 'zcnt')
+  allInsts = ['nop', 'lea', 'prefetch', 'cisc-test', 'store', 'load'] + list(pInsts)
+  if not line: return allInsts
+  if 'nop' in line: return 'nop'
+  elif '(' in line:  # load/store take priority in CISC insts
+    if 'lea' in line: return 'lea'
+    elif 'prefetch' in line: return 'prefetch'
+    elif is_type('cisc-test', line): return 'load'
+    elif re.match(r"\s+\S+\s+[^\(\),]+,", line): return 'store'
+    else: return 'load'
+  else:
+    for x in pInsts:
+      if x in line: return x
+    r = re.match(r"\s+\S+\s+(\S+)", line)
+    if r and re.match(r"^[pv]", r.group(1)):
+      for i in range(vec_size):
+        if re.findall(INT_VEC(i), line): return vec_len(i)
+      warn(0x100, 'vec-int: ' + ' '.join(line.split()[1:]))
+      return 'vecX-int'
+  return None
+
 def tripcount(ip, loop_ipc, state):
   if state == 'new' and loop_ipc in loops:
     if not 'tripcount' in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
@@ -92,8 +119,6 @@ def loop_stats(line, loop_ipc, tc_state):
     if re.findall(regex, line):
       if not loop_stats.atts or not tag in loop_stats.atts:
         loop_stats.atts = ';'.join((loop_stats.atts, tag)) if loop_stats.atts else tag
-  def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
-  def vec_len(i): return 'vec%d' % (128 * (2**i))
   if not line: # update loop attributes & exit
     if len(loop_stats.atts) > len(loops[loop_stats.id]['attributes']):
       loops[loop_stats.id]['attributes'] = loop_stats.atts
@@ -117,13 +142,12 @@ def loop_stats(line, loop_ipc, tc_state):
     else:
       mark(INDIRECT, 'indirect')
       mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % FP_SUFFIX, 'scalar-fp')
-      for i in range(loop_stats_vec):
-        mark(r"[^k]p%s\s+" % FP_SUFFIX + vec_reg(i), vec_len(i) + '-fp')
-        mark(r"\s%sp.*%s" % ('(v)' if i==0 else 'v', vec_reg(i)), vec_len(i) + '-int')
+      for i in range(vec_size):
+        mark(r"[^k]p%s\s+" % FP_SUFFIX + vec_reg(i), vec_len(i, 'fp'))
+        mark(INT_VEC(i), vec_len(i))
   return tripcount(line_ip(line), loop_ipc, tc_state)
 loop_stats.id = None
 loop_stats.atts = ''
-loop_stats_vec = 3 if pmu.cpu_has_feature('avx512vl') else 2
 
 bwd_br_tgts = [] # better make it local to read_sample..
 loop_cands = []
@@ -177,14 +201,8 @@ def detect_loop(ip, lines, loop_ipc,
         size += 1
         if is_taken(lines[x]): cnt['taken'] += 1
         if is_type(COND_BR, lines[x]): conds += [line_ip(lines[x])]
-        if 'nop' in lines[x]: cnt['nop'] += 1
-        elif '(' in lines[x]: # load/store take priority in CISC insts
-          if 'lea' in lines[x]: cnt['lea'] += 1
-          elif 'prefetch' in lines[x]: cnt['prefetch'] += 1
-          elif is_type('cisc-test', lines[x]): cnt['load'] += 1
-          else: cnt['store' if re.match(r"\s+\S+\s+[^\(\),]+,", lines[x]) else 'load'] += 1
-        elif 'cmov' in lines[x]: cnt['cmov'] += 1
-        elif 'zcnt' in lines[x]: cnt['zcnt'] += 1
+        t = line_inst(lines[x])
+        if t and t in types: cnt[t] += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
           loop['size'], loop['Conds'] = size, len(conds)
@@ -232,12 +250,12 @@ def detect_loop(ip, lines, loop_ipc,
     elif use_cands and len(lines) > 2 and ip in bwd_br_tgts and has_ip(len(lines)-2):
       bwd_br_tgts.remove(ip)
       loop_cands += [ip]
-    elif (((xip - ip) < MOLD) and
-        not is_callret(lines[-1]) and # requires --xed
-        not ip in bwd_br_tgts and
-        (use_cands or has_ip(len(lines)-2))):
+    elif is_callret(lines[-1]): pass # requires --xed
+    elif (xip - ip) >= MOLD: warn(0x200, "too large distance in:\t%s" % lines[-1].split('#')[0].strip())
+    elif not ip in bwd_br_tgts and (use_cands or has_ip(len(lines)-2)):
       bwd_br_tgts += [ip]
 
+edge_en = 0
 LBR_Event = pmu.lbr_event()[:-4]
 lbr_events = []
 loops = {}
@@ -251,12 +269,17 @@ def inst2pred(i):
   i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
          'ld+test':   '(cmp[^x]|test).*\(',
   }
-  if i is None: return i2p.keys()
+  if i is None: return list(i2p.keys())
   return i2p[i] if i in i2p else i
-insts = inst2pred(None) + ['call', 'push']
-insts_all = insts + ['cond_backward', 'cond_forward', 'all']
+def is_imix(t):
+  imem = ('load', 'store', 'vzeroupper')
+  if not t: return list(imem) + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
+  return t in imem or t.startswith('vec')
+Insts = inst2pred(None) + ['call', 'push', 'pop']
+Insts_common = is_imix(None) + ['all']
+Insts_all = Insts + ['cond_backward', 'cond_forward'] + Insts_common
 
-glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + insts_all}
+glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + Insts_all}
 hsts = {}
 footprint = set()
 pages = set()
@@ -274,7 +297,7 @@ def count_of(t, lines, x, hist):
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
-  global lbr_events, size_sum, bwd_br_tgts
+  global lbr_events, size_sum, bwd_br_tgts, edge_en
   valid, lines, bwd_br_tgts = 0, [], []
   glob['size_stats_en'] = skip_bad and not labels
   glob['loop_stats_en'] = lp_stats_en
@@ -321,6 +344,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           if len(lbr_events) == 1: x += ' primary= %s %s' % (event, C.env2str('LBR_STOP'))
           if ip_filter: x += ' ip_filter= %s' % ip_filter
           if loop_ipc: x += ' loop= %s' % hex(loop_ipc)
+          if verbose: x += ' verbose= %s' % hex(verbose)
           C.printf(x+'\n')
         inc(stat['events'], ev)
         if debug: timestamp = header.group(1).split()[-1]
@@ -386,8 +410,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       if len(lines) and not is_label(line):
         if edge_en:
           glob['all'] += 1
-          for x in insts:
+          for x in Insts:
             if is_type(x, line): glob[x] += 1
+          t = line_inst(line)
+          if t and is_imix(t): glob[t] += 1
         # a 2nd instruction
         if len(lines) > 1:
           detect_loop(ip, lines, loop_ipc)
@@ -478,10 +504,6 @@ def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   print('')
   return tot
 
-def hist_get_mode(hist):
-  shist = sorted(hist.items(), key=lambda x: x[1])
-  return shist[-1][0]
-
 def print_glob_hist(hist, name):
   d = print_hist((hist, name))
   if not type(d) is dict: return d
@@ -500,7 +522,7 @@ def print_hist(hist_t, Threshold=0.01):
   if not tot: return 0
   d = {}
   d['type'] = 'paths' if 'paths' in name else ('hex' if 'indir' in name else 'number')
-  d['mode'] = str(hist_get_mode(hist))
+  d['mode'] = str(C.hist2slist(hist)[-1][0])
   keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
   d['num-buckets'] = len(hist)
@@ -508,17 +530,20 @@ def print_hist(hist_t, Threshold=0.01):
     C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
     left, threshold = 0, int(Threshold * tot)
     for k in sorted(hist.keys(), key=sorter):
-      if hist[k] >= threshold:
+      if hist[k] >= threshold and hist[k] > 1:
         print('%5s: %7d%6.1f%%' % (hex(k) if d['type'] == 'hex' else k, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
-    if left: print('other: %6d%6.1f%%\t// buckets < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
+    if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
   d['total'] = sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
   return d
 
-def print_hist_sum(name, h): print_stat(name, sum(hsts[h].values()), comment='histogram')
+def print_hist_sum(name, h):
+  s = sum(hsts[h].values())
+  print_stat(name, s, comment='histogram' if s else '')
 def print_stat(name, count, prefix='count', comment=''):
-  if len(comment): comment = '\t(see %s below)' % comment
-  print('%s of %s: %10s%s' % (prefix, '{: >{}}'.format(name, 45 - len(prefix)), str(count), comment))
+  def c(x): return x.replace(':', '-')
+  if len(comment): comment = '\t:(see %s below)' % c(comment)
+  print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(name), 45 - len(prefix)), str(count), comment))
 def print_estimate(name, s): print_stat(name, s, 'estimate')
 
 def print_common(total):
@@ -532,7 +557,7 @@ def print_common(total):
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
   if glob['size_stats_en']:
     for x in ('backward', ' forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x.strip()])
-    for x in insts + ['all', ]: print_stat(x.upper() + ' dynamic instructions', glob[x])
+    for x in Insts + Insts_common: print_stat(x.upper() + ' instructions', glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')
@@ -540,7 +565,8 @@ def print_common(total):
       if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
         print_stat('branch at %s' % hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
                    prefix='misprediction-ratio', comment='paths histogram')
-  print('')
+  print('#Global-stats-end\n')
+  if verbose & 0xf00: C.warn_summary()
 
 def print_all(nloops=10, loop_ipc=0):
   total = stat['IPs'][glob['ip_filter']] if glob['ip_filter'] else stat['total']
@@ -564,7 +590,7 @@ def print_all(nloops=10, loop_ipc=0):
           'Hitcounts & ASM of loop %s' % hex(loop_ipc))
       find_print_loop(loop_ipc, sloops)
     else:
-      C.warn('Loop %s was not observed'%hex(loop_ipc))
+      C.warn('Loop %s was not observed' % hex(loop_ipc))
   if nloops and len(loops):
     if os.getenv("LBR_LOOPS_LOG"):
       log = open(os.getenv("LBR_LOOPS_LOG"), 'w')
@@ -620,7 +646,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   dell = ['hotness', 'FL-cycles%', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
   if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
-  if not verbose: dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
+  if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
   for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex(loop[x])))
   for x, y in (('inn', 'out'), ('out', 'inn')):
     if loop[x + 'er'] > 0: set2str(y + 'er-loops')

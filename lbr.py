@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: Sep 2022
+# edited: Oct 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.95
+__version__= 0.96
 
 import common as C, pmu
 from common import inc
@@ -16,7 +16,7 @@ try:
 except ImportError:
   numpy_imported = False
 
-FP_SUFFIX = "[sdh]([a-z])"
+FP_SUFFIX = "[sdh]([a-z])?"
 INDIRECT  = r"(jmp|call).*%"
 CALL_RET  = '(call|ret)'
 COND_BR   = 'j[^m].*'
@@ -119,6 +119,8 @@ def loop_stats(line, loop_ipc, tc_state):
     if re.findall(regex, line):
       if not loop_stats.atts or not tag in loop_stats.atts:
         loop_stats.atts = ';'.join((loop_stats.atts, tag)) if loop_stats.atts else tag
+      return 1
+    return 0
   if not line: # update loop attributes & exit
     if len(loop_stats.atts) > len(loops[loop_stats.id]['attributes']):
       loops[loop_stats.id]['attributes'] = loop_stats.atts
@@ -143,7 +145,7 @@ def loop_stats(line, loop_ipc, tc_state):
       mark(INDIRECT, 'indirect')
       mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % FP_SUFFIX, 'scalar-fp')
       for i in range(vec_size):
-        mark(r"[^k]p%s\s+" % FP_SUFFIX + vec_reg(i), vec_len(i, 'fp'))
+        if mark(r"[^k]p%s\s+.*%s" % (FP_SUFFIX, vec_reg(i)), vec_len(i, 'fp')): continue
         mark(INT_VEC(i), vec_len(i))
   return tripcount(line_ip(line), loop_ipc, tc_state)
 loop_stats.id = None

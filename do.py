@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.55
+__version__ = 1.56
 
 import argparse, math, os.path, sys
 import common as C
@@ -276,7 +276,7 @@ def profile(log=False, out='run'):
       export += ' LBR_STOP=%d' % samples
       x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (300*samples))
     instline = '^\s+[0-9a-f]+\s'
-    if msg and 'counting takens' in msg: instline += '.*#'
+    if msg and 'ing taken' in msg: instline += '.*#'
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
     perf_script.first = False
     return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 1), export=export)

@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.65
+__version__ = 1.66
 
 import argparse, math, os.path, sys
 import common as C
@@ -21,6 +21,7 @@ from datetime import datetime
 from platform import python_version
 
 Find_perf = 'sudo find / -name perf -executable -type f'
+XED_PATH = '/usr/local/bin/xed'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'batch':          0,
@@ -89,12 +90,14 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, backgro
   debug = args.verbose > 0
   if len(vars(args)):
     run = not args.print_only
-    if 'perf stat' in x or 'perf record' in x or 'toplev.py' in x:
+    if C.any_in(['perf stat', 'perf record', 'toplev.py'], x):
       if args.mode == 'process':
         x, run, debug = '# ' + x, False, args.verbose > 2
         if not 'perf record ' in x: msg = None
     elif args.mode == 'profile':
         x, run, debug = '# ' + x, False, args.verbose > 2
+    elif 'xed' in x and not os.path.isfile(XED_PATH): C.error('!\n'.join(('xed was not installed',
+      "required by '%s' in perf-script of '%s'" % (msg, x), 'try: ./do.py setup-all --tune :xed:1 ')))
     if background: x = x + ' &'
     if not 'loop_stats' in x or args.verbose > 0:
       do['cmds_file'].write(x + '\n')
@@ -146,7 +149,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']:
-    if do['xed'] < 2 and os.path.isfile('/usr/local/bin/xed'): exe_v0(msg='xed is already installed')
+    if do['xed'] < 2 and os.path.isfile(XED_PATH): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
     pip = 'pip3' if python_version().startswith('3') else 'pip'
     for x in ('numpy', 'xlswriter'): exe('%s install %s' % (pip, x), '@installing %s' % x)
@@ -310,7 +313,7 @@ def profile(log=False, out='run'):
         if m in l: return float(l.strip().split()[4])
     return default
   def record_calibrate(x):
-    factor = int(math.log(get_metric('CPUs', 1), 10))
+    factor = 0 if args.sys_wide else int(math.log(get_metric('CPUs', 1), 10))
     if do['calibrate']: factor = do['calibrate']
     if factor:
       do[x] = do[x].replace('0000', '0' * (4 + factor))
@@ -635,8 +638,8 @@ def main():
     param = c.split(':')[1:] if ':' in c else None
     if   c == 'forgive-me':   pass
     elif c == 'setup-all':    tools_install()
-    elif c == 'build-perf':   exe('./do.py setup-all --install-perf build -v%d --tune %s'%(args.verbose,
-                                  ' '.join([':%s:0'%x for x in (do['packages']+('xed', 'tee'))])))
+    elif c == 'build-perf':   exe('%s ./do.py setup-all --install-perf build -v%d --tune %s' % (do['python'],
+      args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+('xed', 'tee'))])))
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()

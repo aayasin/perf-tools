@@ -255,12 +255,21 @@ RUN_DEF = './run.sh'
 TOPLEV_DEF=' --frequency --metric-group +Summary'
 def add_hex_arg(ap, n, fn, d, h):
   ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
-def argument_parser(usg=None, defs=None, mask=0x317F, fc=argparse.ArgumentDefaultsHelpFormatter):
-  def get_def(): return defs.pop(0) if defs else None
+def argument_parser(usg, defs=None, mask=0x317F, fc=argparse.ArgumentDefaultsHelpFormatter):
   ap = argparse.ArgumentParser(usage=usg, formatter_class=fc) if usg else argparse.ArgumentParser(formatter_class=fc)
-  ap.add_argument('--perf', default=get_def(), help='use a custom perf tool')
-  ap.add_argument('--pmu-tools', default=get_def(), help='use a custom pmu-tools')
-  ap.add_argument('--toplev-args', default=get_def(), help='arguments to pass-through to toplev')
+  common_args = []
+  def common_def(a):
+    common_args.append(a)
+    return defs[a] if defs and a in defs else None
+  def add_argument(a, h): ap.add_argument('--' + a, default=common_def(a), help=h)
+  def add_argument2(a, h, b=None): ap.add_argument('--' + a, b if b else '-'+a[0], default=common_def(a), help=h)
+  add_argument('perf', 'use a custom perf tool')
+  add_argument('pmu-tools', 'use a custom pmu-tools')
+  add_argument('toplev-args', 'arguments to pass-through to toplev')
+  add_argument2('events', 'user events to pass to perf-stat\'s -e')
+  add_argument2('metrics', 'user metrics to pass to perf-stat\'s -M')
+  add_argument2('nodes', 'user metrics to pass to toplev\'s --nodes')
+  if not usg: return common_args
   ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, '
     '2:+verbose-on metrics|build, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, 5:+event-groups, '

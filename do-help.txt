@@ -17,6 +17,13 @@ optional arguments:
                         ./pmu-tools)
   --toplev-args TOPLEV_ARGS
                         arguments to pass-through to toplev (default: )
+  --events EVENTS, -e EVENTS
+                        user events to pass to perf-stat's -e (default: None)
+  --metrics METRICS, -m METRICS
+                        user metrics to pass to perf-stat's -M (default: None)
+  --nodes NODES, -n NODES
+                        user metrics to pass to toplev's --nodes (default: +Lo
+                        ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict)
   -a APP, --app APP     name of user-application/kernel/command to profile
                         (default: ./run.sh)
   -v VERBOSE, --verbose VERBOSE
@@ -37,14 +44,7 @@ optional arguments:
                         False)
   --stdout              keep profiling unfiltered results in stdout (default:
                         False)
-  -m METRICS, --metrics METRICS
-                        user metrics to pass to perf-stat's -M (default: None)
-  -e EVENTS, --events EVENTS
-                        user events to pass to perf-stat's -e (default: None)
   --power               collect power metrics/events as well (default: False)
-  -n NODES, --nodes NODES
-                        user metrics to pass to toplev's --nodes (default: +Lo
-                        ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict)
   -s SYS_WIDE, --sys-wide SYS_WIDE
                         profile system-wide for x seconds. disabled by default
                         (default: 0)

@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.70
+__version__ = 1.71
 
 import argparse, math, os.path, sys
 import common as C
@@ -43,7 +43,7 @@ do = {'run':        C.RUN_DEF,
   'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
-  'levels':         3 if pmu.goldencove() else 2,
+  'levels':         2,
   'metrics':        "+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict", # +UPI once ICL mux fixed, +ORO with TMA 4.5
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
@@ -579,17 +579,14 @@ def build_kernel(dir='./kernels/'):
 def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
-         defs={'perf': 'perf', 'pmu-tools': '%s ./pmu-tools' % do['python'], 'toplev-args': ''})
-  ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '\
+    defs={'perf': 'perf', 'pmu-tools': '%s ./pmu-tools' % do['python'], 'toplev-args': '', 'nodes': do['metrics']})
+  ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
   ap.add_argument('--install-perf', nargs='?', default=None, const='install', help='perf tool installation options: [install]|patch|build')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('--stdout', action='store_const', const=True, default=False, help='keep profiling unfiltered results in stdout')
-  ap.add_argument('-m', '--metrics', help='user metrics to pass to perf-stat\'s -M')
-  ap.add_argument('-e', '--events', help='user events to pass to perf-stat\'s -e')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
-  ap.add_argument('-n', '--nodes', default=do['metrics'], help='user metrics to pass to toplev\'s --nodes')
   ap.add_argument('-s', '--sys-wide', type=int, default=0, help='profile system-wide for x seconds. disabled by default')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')

@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.66
+__version__ = 1.67
 
 import argparse, math, os.path, sys
 import common as C
@@ -53,6 +53,7 @@ do = {'run':        C.RUN_DEF,
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
+  'perf-ldlat':     '-e ldlat-loads --ldlat 3 -c 1001',
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003' % pmu.pmu(),
   'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-scr':       0,
@@ -90,7 +91,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, backgro
   debug = args.verbose > 0
   if len(vars(args)):
     run = not args.print_only
-    if C.any_in(['perf stat', 'perf record', 'toplev.py'], x):
+    if C.any_in(['perf stat', ' record', 'toplev.py'], x):
       if args.mode == 'process':
         x, run, debug = '# ' + x, False, args.verbose > 2
         if not 'perf record ' in x: msg = None
@@ -292,14 +293,14 @@ def profile(log=False, out='run'):
       x = int(exe_1line('wc -l ' + log, 0))
       if x >= 0 and x < 5: return perf_stat(flags, msg + '@; no PM', events, 0, grep)
     return log
-  def perf_script(x, msg=None, export=''):
+  def perf_script(x, msg=None, export='', takens=False):
     if do['perf-scr']:
       samples = 1e4 * do['perf-scr']
       if perf_script.first: C.info('processing first %d samples only' % samples)
       export += ' LBR_STOP=%d' % samples
       x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (300*samples))
     instline = '^\s+[0-9a-f]+\s'
-    if msg and 'counting takens' in msg: instline += '.*#'
+    if takens: instline += '.*#'
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
     perf_script.first = False
     return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 2), export=export)
@@ -391,12 +392,12 @@ def profile(log=False, out='run'):
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
   
   data, comm = None, do['comm']
-  def perf_record(tag, comm, msg=''):
+  def perf_record(tag, comm, msg='', record='record', track_ipc=do['perf-stat-ipc']):
     flags = do['perf-%s' % tag]
-    assert C.any_in(('-b', '-j any'), flags) or do['forgive'], 'No unfiltered LBRs! tag=%s' % tag
+    assert C.any_in(('-b', '-j any', '--ldlat'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
-    perf_ipc = ' %s %s' % (perf, do['perf-stat-ipc']) if len(do['perf-stat-ipc']) else ''
-    exe(perf + ' record %s -o %s%s -- %s' % (flags, perf_data, perf_ipc, r), 'sampling-%s %s' % (tag.upper(), msg))
+    if len(track_ipc): track_ipc = ' %s %s' % (perf, track_ipc)
+    exe(perf + ' %s %s -o %s%s -- %s' % (record, flags, perf_data, track_ipc, r), 'sampling-%s %s' % (tag.upper(), msg))
     warn_file(perf_data)
     print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
     if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:
@@ -443,7 +444,8 @@ def profile(log=False, out='run'):
           "| tee >(grep MISPRED | %s | %s > %s.mispreds.log) | %s"
           "| tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) "
           "| grep call | %s > %s.calls.log" %
-          (data, comm, clean, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data), '@processing taken branches')
+          (data, comm, clean, sort2uf, data, clean,
+           sort2uf, data, sort2uf, data, sort2uf, data), '@processing taken branches', takens=True)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
         exe(log_br_count('mispredicted taken', 'mispreds'))
     if do['xed']:
@@ -525,6 +527,11 @@ def profile(log=False, out='run'):
           "| ./lbr_stats %s | tee -a %s.ips.log"%(data, top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
         top -= 1
   
+  if en(10):
+    data, comm = perf_record('ldlat', comm, record='mem record', track_ipc='')
+    exe("%s mem report --stdio -i %s | tee %s.modules.log | grep -A12 Overhead" % (perf, data, data), "@ top-10 modules")
+    perf_script("-i %s -F ip,insn --xed | %s | tee %s.ips.log | tail -11" % (data, sort2up, data), "@ top-10 IPs")
+
   if en(7):
     cmd, log = toplev_V('-mvl6 --no-multiplex', '-nomux', ','.join((do['nodes'], do['extra-metrics'])))
     exe(cmd + " | tee %s | %s"%(log, grep_nz)
@@ -569,7 +576,7 @@ def build_kernel(dir='./kernels/'):
 def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
-         defs=['perf', '%s ./pmu-tools' % do['python'], ''])
+         defs={'perf': 'perf', 'pmu-tools': '%s ./pmu-tools' % do['python'], 'toplev-args': ''})
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '\
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
@@ -613,16 +620,17 @@ def main():
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
     if args.profile_mask & 0x300: args.profile_mask |= 0x2
-  args.toplev_args += do['toplev']
+  args.toplev_args = ' '.join((args.toplev_args, do['toplev']))
+  record_steps = ('record', 'lbr', 'pebs', 'ldlat')
   if args.sys_wide:
     if args.mode != 'process': C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide
-    for x in ('stat', 'record', 'lbr', 'pebs', 'stat-ipc'): do['perf-'+x] += ' -a'
+    for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
     args.profile_mask &= ~0x4 # disable system-wide profile-step
   if do['container']:
     if args.mode != 'process': C.info('container profiling')
-    for x in ('record', 'lbr', 'pebs'): do['perf-'+x] += ' --buildid-all --all-cgroup'
+    for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'
   do_cmd = '%s # version %s' % (C.argv2str(), version())
   C.log_stdio = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)

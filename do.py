@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.67
+__version__ = 1.70
 
 import argparse, math, os.path, sys
 import common as C
@@ -43,7 +43,7 @@ do = {'run':        C.RUN_DEF,
   'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
-  'levels':         2,
+  'levels':         3 if pmu.goldencove() else 2,
   'metrics':        "+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict", # +UPI once ICL mux fixed, +ORO with TMA 4.5
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
@@ -53,7 +53,8 @@ do = {'run':        C.RUN_DEF,
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
-  'perf-ldlat':     '-e ldlat-loads --ldlat 3 -c 1001',
+  'perf-ldlat':     '-e %s -c 1001' % ('"{cpu/mem-loads-aux,period=%d/,cpu/mem-loads,ldlat=7/pp}" -d -W' %
+                                                 1e12 if pmu.goldencove() else 'ldlat-loads --ldlat 7'),
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003' % pmu.pmu(),
   'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-scr':       0,
@@ -288,6 +289,7 @@ def profile(log=False, out='run'):
     log = '%s.perf_stat%s.log' % (out, flags.strip())
     stat = ' stat %s -- %s | tee %s %s' % (perf_args, r, log, grep)
     exe1(perf + stat, msg)
+    if args.stdout: return None
     if os.path.getsize(log) == 0: exe1(ocperf + stat, msg + '@; retry w/ ocperf')
     if perfmetrics:
       x = int(exe_1line('wc -l ' + log, 0))
@@ -306,8 +308,7 @@ def profile(log=False, out='run'):
     return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 2), export=export)
   perf_script.first = True
   perf_stat_log = None
-  def record_name(flags):
-    return '%s%s'%(out, C.chop(flags, (' :/,=', 'cpu_core', 'cpu')))
+  def record_name(flags): return '%s%s' % (out, C.chop(flags, (' :/,={}"', 'cpu_core', 'cpu')))
   def get_metric(m, default=-1):
     if isfile(perf_stat_log):
       for l in C.file2lines(perf_stat_log):
@@ -394,12 +395,12 @@ def profile(log=False, out='run'):
   data, comm = None, do['comm']
   def perf_record(tag, comm, msg='', record='record', track_ipc=do['perf-stat-ipc']):
     flags = do['perf-%s' % tag]
-    assert C.any_in(('-b', '-j any', '--ldlat'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
+    assert C.any_in(('-b', '-j any', 'ldlat'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
     if len(track_ipc): track_ipc = ' %s %s' % (perf, track_ipc)
     exe(perf + ' %s %s -o %s%s -- %s' % (record, flags, perf_data, track_ipc, r), 'sampling-%s %s' % (tag.upper(), msg))
     warn_file(perf_data)
-    print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams"%(perf_report, perf_data))
+    if tag != 'ldlat': print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_report, perf_data))
     if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:
       C.error('No samples collected in %s' % perf_data)
     if not comm:
@@ -528,9 +529,11 @@ def profile(log=False, out='run'):
         top -= 1
   
   if en(10):
-    data, comm = perf_record('ldlat', comm, record='mem record', track_ipc='')
-    exe("%s mem report --stdio -i %s | tee %s.modules.log | grep -A12 Overhead" % (perf, data, data), "@ top-10 modules")
-    perf_script("-i %s -F ip,insn --xed | %s | tee %s.ips.log | tail -11" % (data, sort2up, data), "@ top-10 IPs")
+    data, comm = perf_record('ldlat', comm, record='record' if pmu.goldencove() else 'mem record', track_ipc='')
+    exe("%s mem report --stdio -i %s -w 5,5,5,13,44,18,22,8,7,12 | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
+      "| tee %s.modules.log | grep -A12 -B4 Overhead | tail -17" % (perf, data, data), "@ top-10 modules")
+    perf_script("-i %s -F event,ip,insn --xed | grep -v mem-loads-aux | %s | tee %s.ips.log | tail -11" %
+                (data, sort2up, data), "@ top-10 IPs")
 
   if en(7):
     cmd, log = toplev_V('-mvl6 --no-multiplex', '-nomux', ','.join((do['nodes'], do['extra-metrics'])))

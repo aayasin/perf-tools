@@ -54,7 +54,7 @@ lspmu:
 	@lscpu | grep 'Model name'
 
 help: do-help.txt
-do-help.txt: $(DO)
+do-help.txt: do.py
 	./$^ -h > $@
 
 test-build:
@@ -62,7 +62,8 @@ test-build:
 test-default:
 	$(DO1) -pm 216f
 test-study:
-	./study.py c1 c2 -a ./run.sh --tune :loops:0 -v1 > .study.log 2>&1 || $(FAIL)
+	rm -f run-cfg*
+	./study.py cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > .study.log 2>&1 || $(FAIL)
 
 pre-push: help tramp3d-v4
 	$(DO) help -m GFLOPs
@@ -71,6 +72,7 @@ pre-push: help tramp3d-v4
 	$(DO) profile -a pmu-tools/workloads/BC2s -pm 42	# tests topdown across-tree tagging
 	$(MAKE) test-build                                  # tests build command + perf -e + toplev --nodes; Ports_Utilized_1
 	$(MAKE) test-default                                # tests default non-MUX sensitive commands
+	$(MAKE) test-mem-bw RERUN='-pm 400' 	            # tests load-latency profile-step
 	$(DO1) --toplev-args ' --no-multiplex' -pm 1010     # carefully tests MUX sensitive commands
 	$(MAKE) test-study                                  # tests study script (errors only)
 	$(DO1) > .do.log 2>&1 || $(FAIL)                    # tests default profile-steps (errors only)

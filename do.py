@@ -12,7 +12,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.71
+__version__ = 1.72
 
 import argparse, math, os.path, sys
 import common as C
@@ -374,7 +374,7 @@ def profile(log=False, out='run'):
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
       tlargs='' if args.toplev_args == C.TOPLEV_DEF else args.toplev_args)
-    exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Add|Using|Sampling|perf record)" '%log, 'topdown auto-drilldown')
+    exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Add|Using|Sampling)|perf.* record" ' % log, 'topdown auto-drilldown')
     if do['sample'] > 3:
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
       exe(cmd, '@sampling on bottleneck')
@@ -530,10 +530,13 @@ def profile(log=False, out='run'):
   
   if en(10):
     data, comm = perf_record('ldlat', comm, record='record' if pmu.goldencove() else 'mem record', track_ipc='')
-    exe("%s mem report --stdio -i %s -w 5,5,5,13,44,18,22,8,7,12 | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
-      "| tee %s.modules.log | grep -A12 -B4 Overhead | tail -17" % (perf, data, data), "@ top-10 modules")
-    perf_script("-i %s -F event,ip,insn --xed | grep -v mem-loads-aux | %s | tee %s.ips.log | tail -11" %
-                (data, sort2up, data), "@ top-10 IPs")
+    exe("%s mem report --stdio -i %s -F+symbol_iaddr -v -w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null "
+        "| sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' | tee %s.ldlat.log | grep -A12 -B4 Overhead | tail -17"
+        % (perf, data, data), "@ top-10 samples", redir_out=None)
+    def perf_script_ldlat(fields, tag): return perf_script("-i %s -F %s | grep -v mem-loads-aux | %s "
+      "| tee %s.%s.log | tail -11" % (data, fields, sort2up, data, tag.lower()), "@ top-10 %s" % tag)
+    perf_script_ldlat('event,ip,insn --xed', 'IPs')
+    perf_script_ldlat('ip,addr', 'IPs-DLAs')
 
   if en(7):
     cmd, log = toplev_V('-mvl6 --no-multiplex', '-nomux', ','.join((do['nodes'], do['extra-metrics'])))
@@ -559,7 +562,7 @@ def profile(log=False, out='run'):
 
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', 'csv', 'log', 'xlsx', 'svg'] + ext
+  log_files = ['', 'csv', 'log', 'txt', 'xlsx', 'svg'] + ext
   if cmd == 'tar' and len(tag): res = '-'.join((tag, 'results.tar.gz'))
   s = (uniq_name() if app_name() else '') + '*'
   if cmd == 'tar': exe('tar -czvf %s run.sh '%res + (' %s.'%s).join(log_files) + ' .%s.cmd'%s)

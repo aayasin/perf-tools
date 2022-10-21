@@ -5,14 +5,12 @@
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
-#   toplev 3-levels default Icelake onwards
 #   quiet mode
 #   convert verbose to a bitmask
-#   add test command to gate commits to this file
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.72
+__version__ = 1.73
 
 import argparse, math, os.path, sys
 import common as C
@@ -44,7 +42,8 @@ do = {'run':        C.RUN_DEF,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
   'levels':         2,
-  'metrics':        "+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict", # +UPI once ICL mux fixed, +ORO with TMA 4.5
+  'metrics':        '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict' +
+                    ',+Memory_Bound*/3' if pmu.goldencove() else '', # +UPI once ICL mux fixed, +ORO with TMA 4.5
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,-CPU_Utilization",
@@ -530,9 +529,9 @@ def profile(log=False, out='run'):
   
   if en(10):
     data, comm = perf_record('ldlat', comm, record='record' if pmu.goldencove() else 'mem record', track_ipc='')
-    exe("%s mem report --stdio -i %s -F+symbol_iaddr -v -w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null "
-        "| sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' | tee %s.ldlat.log | grep -A12 -B4 Overhead | tail -17"
-        % (perf, data, data), "@ top-10 samples", redir_out=None)
+    exe("%s mem report --stdio -i %s -F+symbol_iaddr -v " # workaround: missing -F+ip in perf-mem-report
+        "-w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
+        "| tee %s.ldlat.log | grep -A12 -B4 Overhead | tail -17" % (perf, data, data), "@ top-10 samples", redir_out=None)
     def perf_script_ldlat(fields, tag): return perf_script("-i %s -F %s | grep -v mem-loads-aux | %s "
       "| tee %s.%s.log | tail -11" % (data, fields, sort2up, data, tag.lower()), "@ top-10 %s" % tag)
     perf_script_ldlat('event,ip,insn --xed', 'IPs')
@@ -562,7 +561,7 @@ def profile(log=False, out='run'):
 
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', 'csv', 'log', 'txt', 'xlsx', 'svg'] + ext
+  log_files = ['', 'csv', 'log', 'txt', 'stat', 'xlsx', 'svg'] + ext
   if cmd == 'tar' and len(tag): res = '-'.join((tag, 'results.tar.gz'))
   s = (uniq_name() if app_name() else '') + '*'
   if cmd == 'tar': exe('tar -czvf %s run.sh '%res + (' %s.'%s).join(log_files) + ' .%s.cmd'%s)
@@ -682,7 +681,7 @@ def main():
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
     elif c.startswith('backup'):
       import lbr, subprocess
-      r = '../perf-tools-%s-lbr%.2f.tar.gz' % (version(), round(lbr.__version__, 2))
+      r = '../perf-tools-%s-lbr%.2f-e%d.tar.gz' % (version(), round(lbr.__version__, 2), len(param))
       to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
       if os.path.isfile(r): C.warn('file exists: %s' % r)
       fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + param if param else [])

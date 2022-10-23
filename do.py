@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Misc utilities for CPU performance analysis on Linux
+# Misc utilities for CPU performance profiling on Linux
 # Author: Ahmad Yasin
 # edited: Oct 2022
 # TODO list:
@@ -10,12 +10,12 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.73
+__version__ = 1.74
 
-import argparse, math, os.path, sys
-import common as C
-import pmu
+import argparse, os.path, sys
+import common as C, pmu, stats
 from datetime import datetime
+from math import log10
 from platform import python_version
 
 Find_perf = 'sudo find / -name perf -executable -type f'
@@ -308,13 +308,9 @@ def profile(log=False, out='run'):
   perf_script.first = True
   perf_stat_log = None
   def record_name(flags): return '%s%s' % (out, C.chop(flags, (' :/,={}"', 'cpu_core', 'cpu')))
-  def get_metric(m, default=-1):
-    if isfile(perf_stat_log):
-      for l in C.file2lines(perf_stat_log):
-        if m in l: return float(l.strip().split()[4])
-    return default
+  def get_stat(s, default): return stats.get_stat_log(s, perf_stat_log) if isfile(perf_stat_log) else default
   def record_calibrate(x):
-    factor = 0 if args.sys_wide else int(math.log(get_metric('CPUs', 1), 10))
+    factor = 0 if args.sys_wide else int(log10(get_stat('CPUs-utilized', 1)))
     if do['calibrate']: factor = do['calibrate']
     if factor:
       do[x] = do[x].replace('0000', '0' * (4 + factor))
@@ -643,7 +639,8 @@ def main():
   do['cmds_file'].write('# %s\n' % do_cmd)
   if args.verbose > 5: C.printc(str(args))
   if args.verbose > 6: C.printc(C.dict2str(do))
-  
+  if args.verbose > 9: C.dump_stack_on_error = 1
+
   for c in args.command:
     param = c.split(':')[1:] if ':' in c else None
     if   c == 'forgive-me':   pass

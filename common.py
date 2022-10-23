@@ -287,7 +287,7 @@ def command_basename(comm, iterations=None):
   for x in ('taskset', 'bash', 'omp-bin', 'n-copies', 'n-loop'):
     if x in name[0]: name = name[(4 if name[2].startswith('-') else 2):]
   if '/' in name[0]:
-    check_executable(name[0])
+    check_executable(name[0].replace("'", ''))
     name[0] = name[0].split('/')[-1].replace('.sh', '')
   if len(name) == 1 and ('kernels' in comm or iterations): name.append(iterations)
   namestr = name.pop(0)

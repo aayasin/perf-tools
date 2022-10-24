@@ -30,17 +30,17 @@ def get_stat_int(s, c, val=-1):
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([0-9]+).log', perf_stat_file)[0]
-  print(perf_stat_file, repeat)
   return get_stat_int(s, perf_stat_file.replace('.perf_stat-r%s.log' % repeat, ''))
 
 def get(s, app):
-  print('get::', s, app, C.command_basename(app))
   return get_stat_int(s, C.command_basename(app))
 
 def read_perf(f):
   d = {}
   if debug: print(f)
-  for l in C.file2lines(f, fail=True):
+  lines = C.file2lines(f)
+  if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
+  for l in lines:
     try:
       name, val, var, met, mval = parse(l)
       if name:
@@ -59,7 +59,13 @@ def parse(l):
   def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if '+-' in l else None
   items = l.strip().split()
   name, val, var, met, mval = None, -1, -1, None, -1
-  if 'time elapsed' in l:
+  if not re.match(r'^[1-9 ]', l): pass
+  elif 'Performance counter stats for' in l:
+    name = 'App'
+    val = l.split("'")[1]
+    met = '#-runs'
+    mval = int(l.split("(")[1].split(' ')[0])
+  elif 'time elapsed' in l:
     name = 'time'
     val = float(items[0])
     var = get_var(2)

@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.74
+__version__ = 1.75
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -97,7 +97,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, backgro
         if not 'perf record ' in x: msg = None
     elif args.mode == 'profile':
         x, run, debug = '# ' + x, False, args.verbose > 2
-    elif 'xed' in x and not os.path.isfile(XED_PATH): C.error('!\n'.join(('xed was not installed',
+    elif '--xed' in x and not os.path.isfile(XED_PATH): C.error('!\n'.join(('xed was not installed',
       "required by '%s' in perf-script of '%s'" % (msg, x), 'try: ./do.py setup-all --tune :xed:1 ')))
     if background: x = x + ' &'
     if not 'loop_stats' in x or args.verbose > 0:
@@ -111,7 +111,7 @@ def exe_to_null(x): return exe1(x + ' > /dev/null')
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) # don't append to cmds_file
 def prn_line(f): exe_v0('echo >> %s' % f)
 
-def print_cmd(x, show=True):
+def print_cmd(x, show=not do['batch']):
   if show: C.printc(x)
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
 
@@ -292,7 +292,7 @@ def profile(log=False, out='run'):
     if os.path.getsize(log) == 0: exe1(ocperf + stat, msg + '@; retry w/ ocperf')
     if perfmetrics:
       x = int(exe_1line('wc -l ' + log, 0))
-      if x >= 0 and x < 5: return perf_stat(flags, msg + '@; no PM', events, 0, grep)
+      if x >= 0 and x < 5: return perf_stat(flags, msg + '@; no PM', events=events, perfmetrics=0, grep=grep)
     return log
   def perf_script(x, msg=None, export='', takens=False):
     if do['perf-scr']:
@@ -614,6 +614,8 @@ def main():
     x = ',branches,branch-misses'
     if do['repeat'] > 1: x += ',cycles:k'
     do['perf-stat-def'] += x
+  if do['super']:
+    do['perf-stat-def'] += ',syscalls:sys_enter_sched_yield'
   if args.mode == 'process':
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1

@@ -7,7 +7,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 import common as C, os, sys
 
-# usage: [OMPBIN_{V,DR}=1] [--taskset-arg its-val] omp-bin <N> <app> [<and its args>]
+# usage: [OMPBIN_{V,DR}=1] omp-bin <N> [--taskset-arg its-val] <app> [<and its args>]
 
 verbose = os.getenv('OMPBIN_V')
 dontrun = os.getenv('OMPBIN_DR')

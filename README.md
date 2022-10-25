@@ -22,6 +22,7 @@ A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
   * There are more kernels produced by **build.sh** though not uploaded to git
 * **lbr.py** -- A module for processing Last Branch Record (LBR) streams
 * **pmu.py** -- A module for interface to the Performance Monitoring Unit (PMU)
+* **stats.py** --  A module for processing counters and profiling logs
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools
   * **toplev** -- profiler featuring the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method on Intel processors
   * **ocperf** -- perf wrapper that converts Intel event names to perf-events syntax

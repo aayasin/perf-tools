@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.75
+__version__ = 1.76
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -41,9 +41,10 @@ do = {'run':        C.RUN_DEF,
   'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
+  'ldlat':          7,
   'levels':         2,
   'metrics':        '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict' +
-                    ',+Memory_Bound*/3' if pmu.goldencove() else '', # +UPI once ICL mux fixed, +ORO with TMA 4.5
+                    (',+Memory_Bound*/3' if pmu.goldencove() else ''), # +UPI once ICL mux fixed, +ORO with TMA 4.5
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,-CPU_Utilization",
@@ -82,7 +83,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, backgro
   X = x.split()
   if msg and do['batch']: msg += " for '%s'" % args.app
   if redir_out: redir_out=' %s' % redir_out
-  if not do['tee'] and redir_out: x = x.split('|')[0]
+  if not do['tee']: x = x.split('|')[0]
   x = x.replace('| ./', '| %s/' % C.dirname())
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
   if 'tee >(' in x or export: x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
@@ -524,7 +525,7 @@ def profile(log=False, out='run'):
         top -= 1
   
   if en(10):
-    data, comm = perf_record('ldlat', comm, record='record' if pmu.goldencove() else 'mem record', track_ipc='')
+    data, comm = perf_record('ldlat', comm, record='record' if pmu.goldencove() else 'mem record')
     exe("%s mem report --stdio -i %s -F+symbol_iaddr -v " # workaround: missing -F+ip in perf-mem-report
         "-w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
         "| tee %s.ldlat.log | grep -A12 -B4 Overhead | tail -17" % (perf, data, data), "@ top-10 samples", redir_out=None)
@@ -610,6 +611,7 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
+  do['perf-ldlat'] = do['perf-ldlat'].replace('7', str(do['ldlat']))
   if do['perf-stat-add']:
     x = ',branches,branch-misses'
     if do['repeat'] > 1: x += ',cycles:k'

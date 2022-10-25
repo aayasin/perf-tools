@@ -18,7 +18,7 @@ def rollup(c, perf_stat_file=None):
   # TODO: call do.profile to get file names
   sDB[c] = read_perf(perf_stat_file)
   sDB[c].update(read_toplev(c + '.toplev-vl6.log'))
-  if debug: print(c, sDB[c])
+  if debug: print(c, C.dict2str(sDB[c]))
 
 def get_stat_int(s, c, val=-1):
   rollup(c)
@@ -42,12 +42,13 @@ def read_perf(f):
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
   for l in lines:
     try:
-      name, val, var, met, mval = parse(l)
+      name, val, var, name2, val2, name3, val3 = parse(l)
       if name:
         d[name] = val
         d[name+':var'] = var
         if name == 'r2424': d['L2MPKI_Code'] = 1000 * val / d['instructions']
-      if met: d[met] = mval
+      if name2: d[name2] = val2
+      if name3: d[name3] = val3
     except ValueError:
       C.warn("cannot parse: '%s' in %s" % (l, f))
   if debug > 2: print(d)
@@ -58,13 +59,13 @@ def parse(l):
              'GHz': 'Frequency'}
   def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if '+-' in l else None
   items = l.strip().split()
-  name, val, var, met, mval = None, -1, -1, None, -1
+  name, val, var, name2, val2, name3, val3 = None, -1, -1, None, -1, None, -1
   if not re.match(r'^[1-9 ]', l): pass
   elif 'Performance counter stats for' in l:
     name = 'App'
     val = l.split("'")[1]
-    met = '#-runs'
-    mval = int(l.split("(")[1].split(' ')[0])
+    name2 = '#-runs'
+    val2 = int(l.split("(")[1].split(' ')[0])
   elif 'time elapsed' in l:
     name = 'time'
     val = float(items[0])
@@ -77,15 +78,20 @@ def parse(l):
     var = get_var()
     metric_idx = name_idx + 3
     if name == 'cycles:k': pass
+    elif l.count('#') == 2: # TMA-L2 metrics of Golden Cove
+      val2 = float(items[name_idx+2].replace('%', ''))
+      val3 = float(items[name_idx+6].replace('%', ''))
+      name2 = ' '.join(items[metric_idx:metric_idx+2]).title()
+      name3 = ' '.join(items[metric_idx+4:metric_idx+6]).title()
     elif not C.any_in(('/sec', 'of'), items[metric_idx]):
-      mval = items[name_idx + 2]
-      met = '-'.join(items[metric_idx:]).split('(')[0][:-1]
-      if '%' in mval:
-        mval = mval.replace('%', '')
-        met = met.replace('-', ' ').title()
-      elif met in Renames: met = Renames[met]
-      mval = float(mval)
-  return name, val, var, met, mval
+      val2 = items[name_idx + 2]
+      name2 = '-'.join(items[metric_idx:]).split('(')[0][:-1]
+      if '%' in val2:
+        val2 = val2.replace('%', '')
+        name2 = name2.replace('-', ' ').title()
+      elif name2 in Renames: name2 = Renames[name2]
+      val2 = float(val2)
+  return name, val, var, name2, val2, name3, val3
 
 def read_toplev(f):
   d = {}

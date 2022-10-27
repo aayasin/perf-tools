@@ -10,6 +10,31 @@ __author__ = 'ayasin'
 import common as C
 import re
 
+# exposed methods
+#
+def get_stat_log(s, perf_stat_file):
+  repeat = re.findall('.perf_stat-r([0-9]+).log', perf_stat_file)[0]
+  return get_stat_int(s, perf_stat_file.replace('.perf_stat-r%s.log' % repeat, ''))
+
+def get(s, app):
+  return get_stat_int(s, C.command_basename(app))
+
+def print_metrics(app):
+  c = C.command_basename(app)
+  rollup(c)
+  return print_DB(c)
+
+# internal methods
+#
+
+def get_stat_int(s, c, val=-1):
+  rollup(c)
+  try:
+    val = sDB[c][s]
+  except KeyError:
+    C.warn('KeyError for stat: %s, in config: %s' % (s, c))
+  return val
+
 debug = 0
 sDB = {}
 def rollup(c, perf_stat_file=None):
@@ -26,26 +51,11 @@ def print_DB(c):
     if x.endswith(':var') or x.startswith('topdown-') or '.' in x or x in ['branch-misses']: continue
     v = sDB[c][x]
     if x in read_perf(None): v = '%.2f' % v
-    val = '%13s' % str(v)
-    if x+':var' in sDB[c] and sDB[c][x+':var']: val += ' +- %s' % sDB[c][x+':var']
+    val = '%18s' % C.float2str(v) if C.is_float(v) else v
+    if x+':var' in sDB[c] and sDB[c][x+':var']: val += ' +- %s%%' % sDB[c][x+':var']
     d['%30s' % x] = val
-  print(c, '::\n', C.dict2str(d).replace("'", ""))
+  print(c, '::\n', C.dict2str(d, '\t\n').replace("'", ""))
   return d
-
-def get_stat_int(s, c, val=-1):
-  rollup(c)
-  try:
-    val = sDB[c][s]
-  except KeyError:
-    C.warn('KeyError for stat: %s, in config: %s' % (s, c))
-  return val
-
-def get_stat_log(s, perf_stat_file):
-  repeat = re.findall('.perf_stat-r([0-9]+).log', perf_stat_file)[0]
-  return get_stat_int(s, perf_stat_file.replace('.perf_stat-r%s.log' % repeat, ''))
-
-def get(s, app):
-  return get_stat_int(s, C.command_basename(app))
 
 def read_perf(f):
   d = {}

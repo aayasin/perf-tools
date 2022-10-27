@@ -199,8 +199,9 @@ def dict_load(f):
     fo.close()
     return d
 
-def iter2str(x): return str(x).replace("', ", ":\t").replace("), ('", ",\n\t").replace("[('", '\t').replace(')]', '\n')
-def dict2str(d): return iter2str(sorted(d.items()))
+def iter2str(x, sep=",\n\t"):
+  return str(x).replace("', ", ":\t").replace("), ('", sep).replace("[('", '').replace(')]', '\n')
+def dict2str(d, sep=",\n\t"): return iter2str(sorted(d.items()), sep)
 def hist2str(h, top=20): return iter2str(hist2slist(h)[-top:])
 def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])
 
@@ -222,6 +223,17 @@ def any_in(l, s):
   for i in l:
     if i in s: return 1
   return 0
+
+def is_float(x):
+  try:
+    float(x)
+    return True
+  except ValueError:
+    return False
+
+def float2str(f):
+  if not is_float(f): return f
+  return '{:,}'.format(f)
 
 def flag_value(s, f, v='', sep=' '):
   if f in s: v = s.split(f)[1].split(sep)[1]

@@ -19,6 +19,7 @@ from math import log10
 from platform import python_version
 
 Find_perf = 'sudo find / -name perf -executable -type f'
+LDLAT_DEF = '7'
 XED_PATH = '/usr/local/bin/xed'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
@@ -41,7 +42,7 @@ do = {'run':        C.RUN_DEF,
   'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
-  'ldlat':          7,
+  'ldlat':          int(LDLAT_DEF),
   'levels':         2,
   'metrics':        '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict' +
                     (',+Memory_Bound*/3' if pmu.goldencove() else ''), # +UPI once ICL mux fixed, +ORO with TMA 4.5
@@ -53,8 +54,8 @@ do = {'run':        C.RUN_DEF,
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
-  'perf-ldlat':     '-e %s -c 1001' % ('"{cpu/mem-loads-aux,period=%d/,cpu/mem-loads,ldlat=7/pp}" -d -W' %
-                                                 1e12 if pmu.goldencove() else 'ldlat-loads --ldlat 7'),
+  'perf-ldlat':     '-e %s -c 1001' % ('"{cpu/mem-loads-aux,period=%d/,cpu/mem-loads,ldlat=%s/pp}" -d -W' %
+                    (1e12, LDLAT_DEF) if pmu.goldencove() else 'ldlat-loads --ldlat %s' % LDLAT_DEF),
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003' % pmu.pmu(),
   'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-scr':       0,
@@ -335,6 +336,11 @@ def profile(log=False, out='run'):
       base += C.chop(do['perf-record'], ' :/,=')
     data = '%s.perf.data'%record_name(do['perf-record'])
     exe(perf + ' record -c %d -g -o %s ' % (pmu.period(), data)+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
+    if args.mode != 'process' and not args.forgive:
+      record_out = C.file2lines(C.log_stdio)
+      for l in reversed(record_out):
+        if 'sampling ' in l: break
+        if 'WARNING: Kernel address maps' in l: C.error("perf tool is missing permissions. Try './do.py setup-perf'")
     exe(perf_report + " --header-only -i %s | grep duration" % data)
     print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_report, data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
@@ -390,15 +396,15 @@ def profile(log=False, out='run'):
   
   data, comm = None, do['comm']
   def perf_record(tag, comm, msg='', record='record', track_ipc=do['perf-stat-ipc']):
+    perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
     flags = do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
-    perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
     if len(track_ipc): track_ipc = ' %s %s' % (perf, track_ipc)
     exe(perf + ' %s %s -o %s%s -- %s' % (record, flags, perf_data, track_ipc, r), 'sampling-%s %s' % (tag.upper(), msg))
     warn_file(perf_data)
     if tag != 'ldlat': print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_report, perf_data))
     if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:
-      C.error('No samples collected in %s' % perf_data)
+      C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
     if not comm:
       # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
       comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (perf_data, sort2u), 1)
@@ -611,7 +617,7 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
-  do['perf-ldlat'] = do['perf-ldlat'].replace('7', str(do['ldlat']))
+  do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
   if do['perf-stat-add']:
     x = ',branches,branch-misses'
     if do['repeat'] > 1: x += ',cycles:k'
@@ -685,7 +691,7 @@ def main():
       r = '../perf-tools-%s-lbr%.2f-e%d.tar.gz' % (version(), round(lbr.__version__, 2), len(param))
       to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
       if os.path.isfile(r): C.warn('file exists: %s' % r)
-      fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + param if param else [])
+      fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + ['.git'] + param if param else [])
       scp = 'scp %s %s' % (r, to)
       exe('tar -czvf %s %s ; echo %s' % (r, fs, scp), redir_out=None)
       #subprocess.Popen(['scp', r, to])

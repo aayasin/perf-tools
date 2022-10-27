@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Abstraction of Intel Architecture and its Performance Monitoring Unit (PMU)
 # Author: Ahmad Yasin
-# edited: Sep 2022
+# edited: Oct 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -25,13 +25,15 @@ def skylake():    return name() == 'skylake'
 def icelake():    return name() == 'icelake'
 def alderlake():  return name() == 'alderlake_hybrid'
 def sapphire():   return name() == 'sapphire_rapids'
+def meteorlake(): return name() == 'meteorlake_hybrid'
 # aggregations
-def goldencove():   return alderlake() or sapphire()
+def goldencove(): return alderlake() or sapphire() or meteorlake()
 def perfmetrics():  return icelake() or goldencove()
 # Icelake onward PMU, e.g. Intel PerfMon Version 5+
 def v5p(): return perfmetrics()
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
+def ldlat_aux():  return alderlake() or sapphire()
 
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'

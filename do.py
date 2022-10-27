@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.76
+__version__ = 1.77
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -55,7 +55,7 @@ do = {'run':        C.RUN_DEF,
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-ldlat':     '-e %s -c 1001' % ('"{cpu/mem-loads-aux,period=%d/,cpu/mem-loads,ldlat=%s/pp}" -d -W' %
-                    (1e12, LDLAT_DEF) if pmu.goldencove() else 'ldlat-loads --ldlat %s' % LDLAT_DEF),
+                    (1e12, LDLAT_DEF) if pmu.ldlat_aux() else 'ldlat-loads --ldlat %s' % LDLAT_DEF),
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003' % pmu.pmu(),
   'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-scr':       0,
@@ -259,6 +259,7 @@ def get_perf_toplev():
     ptools[x] = env + args.pmu_tools + '/' + x
   if do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
+    if pmu.meteorlake(): ptools['toplev.py'] += ' --force-cpu=adl'
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
   return (perf, ptools['toplev.py'], ptools['ocperf'])
 
@@ -531,7 +532,7 @@ def profile(log=False, out='run'):
         top -= 1
   
   if en(10):
-    data, comm = perf_record('ldlat', comm, record='record' if pmu.goldencove() else 'mem record')
+    data, comm = perf_record('ldlat', comm, record='record' if pmu.ldlat_aux() else 'mem record')
     exe("%s mem report --stdio -i %s -F+symbol_iaddr -v " # workaround: missing -F+ip in perf-mem-report
         "-w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
         "| tee %s.ldlat.log | grep -A12 -B4 Overhead | tail -17" % (perf, data, data), "@ top-10 samples", redir_out=None)

@@ -18,7 +18,19 @@ def rollup(c, perf_stat_file=None):
   # TODO: call do.profile to get file names
   sDB[c] = read_perf(perf_stat_file)
   sDB[c].update(read_toplev(c + '.toplev-vl6.log'))
-  if debug: print(c, C.dict2str(sDB[c]))
+  if debug: print_DB(c)
+
+def print_DB(c):
+  d = {}
+  for x in sDB[c].keys():
+    if x.endswith(':var') or x.startswith('topdown-') or '.' in x or x in ['branch-misses']: continue
+    v = sDB[c][x]
+    if x in read_perf(None): v = '%.2f' % v
+    val = '%13s' % str(v)
+    if x+':var' in sDB[c] and sDB[c][x+':var']: val += ' +- %s' % sDB[c][x+':var']
+    d['%30s' % x] = val
+  print(c, '::\n', C.dict2str(d).replace("'", ""))
+  return d
 
 def get_stat_int(s, c, val=-1):
   rollup(c)
@@ -37,7 +49,13 @@ def get(s, app):
 
 def read_perf(f):
   d = {}
-  if debug: print(f)
+  def calc_metric(e, v=None):
+    if e == None: return ['IpMispredict', 'IpUnknown_Branch', 'L2MPKI_Code']
+    if e == 'branch-misses': d['IpMispredict'] = d['instructions'] / v
+    if e == 'r0160': d['IpUnknown_Branch'] = d['instructions'] / v
+    if e == 'r2424': d['L2MPKI_Code'] = 1000 * val / d['instructions']
+  if f == None: return calc_metric(None) # a hack!
+  if debug > 3: print(f)
   lines = C.file2lines(f)
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
   for l in lines:
@@ -46,7 +64,7 @@ def read_perf(f):
       if name:
         d[name] = val
         d[name+':var'] = var
-        if name == 'r2424': d['L2MPKI_Code'] = 1000 * val / d['instructions']
+        calc_metric(name, val)
       if name2: d[name2] = val2
       if name3: d[name3] = val3
     except ValueError:
@@ -59,7 +77,7 @@ def parse(l):
              'GHz': 'Frequency'}
   def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if '+-' in l else None
   items = l.strip().split()
-  name, val, var, name2, val2, name3, val3 = None, -1, -1, None, -1, None, -1
+  name, val, var, name2, val2, name3, val3 = None, -1, None, None, -1, None, -1
   if not re.match(r'^[1-9 ]', l): pass
   elif 'Performance counter stats for' in l:
     name = 'App'
@@ -95,7 +113,7 @@ def parse(l):
 
 def read_toplev(f):
   d = {}
-  if debug: print(f)
+  if debug > 4: print(f)
   try:
     for l in C.file2lines(f):
       items = l.strip().split()
@@ -105,5 +123,5 @@ def read_toplev(f):
     C.warn("cannot parse: '%s'" % l)
   except AttributeError:
     C.warn("empty file: '%s'" % f)
-  if debug > 1: print(d)
+  if debug > 5: print(d)
   return d

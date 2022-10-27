@@ -337,7 +337,7 @@ def profile(log=False, out='run'):
       base += C.chop(do['perf-record'], ' :/,=')
     data = '%s.perf.data'%record_name(do['perf-record'])
     exe(perf + ' record -c %d -g -o %s ' % (pmu.period(), data)+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
-    if args.mode != 'process' and not args.forgive:
+    if args.mode != 'process' and not do['forgive']:
       record_out = C.file2lines(C.log_stdio)
       for l in reversed(record_out):
         if 'sampling ' in l: break

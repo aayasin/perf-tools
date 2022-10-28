@@ -126,6 +126,9 @@ def warn_file(x):
 def isfile(f): return f and os.path.isfile(f)
 def rp(x): return os.path.join(C.dirname(), x)
 def version(): return str(round(__version__, 3 if args.tune else 2))
+def lbr_version():
+  import lbr
+  return str(round(lbr.__version__, 2))
 def app_name(): return args.app != C.RUN_DEF
 def toplev_describe(m, msg=None, mod='^'): exe('%s --describe %s%s' % (get_perf_toplev()[1], m, mod), msg, redir_out=None)
 
@@ -697,9 +700,9 @@ def main():
       do_logs('tar')
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
+    elif c == 'version':      print(os.path.basename(__file__), 'version =', version(), '; lbr =', lbr_version())
     elif c.startswith('backup'):
-      import lbr, subprocess
-      r = '../perf-tools-%s-lbr%.2f-e%d.tar.gz' % (version(), round(lbr.__version__, 2), len(param))
+      r = '../perf-tools-%s-lbr%s-e%d.tar.gz' % (version(), lbr_version(), len(param))
       to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
       if os.path.isfile(r): C.warn('file exists: %s' % r)
       fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + ['.git'] + param if param else [])

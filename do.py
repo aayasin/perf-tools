@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.79
+__version__ = 1.80
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -36,8 +36,9 @@ do = {'run':        C.RUN_DEF,
   'flameg':         0,
   'forgive':        0,
   'gen-kernel':     1,
-  'imix':           0xf,
+  'imix':           0x1f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens
   'loops':          int(pmu.cpu('cpucount') / 2),
+  'log_stdio':      1,
   'lbr-verbose':    0,
   'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
@@ -115,7 +116,8 @@ def print_cmd(x, show=not do['batch']):
   if show: C.printc(x)
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
 
-def exe_1line(x, f=None): return "-1" if args.mode == 'profile' or args.print_only else C.exe_one_line(x, f, args.verbose > 1)
+def exe_1line(x, f=None, heavy=True):
+  return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(x, f, args.verbose > 1)
 def exe2list(x, f=None): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, args.verbose > 1)
 
 def warn_file(x):
@@ -292,9 +294,9 @@ def profile(log=False, out='run'):
     exe1(perf + stat, msg)
     if args.stdout: return None
     if os.path.getsize(log) == 0: exe1(ocperf + stat, msg + '@; retry w/ ocperf')
-    if perfmetrics:
-      x = int(exe_1line('wc -l ' + log, 0))
-      if x >= 0 and x < 5: return perf_stat(flags, msg + '@; no PM', events=events, perfmetrics=0, grep=grep)
+    if int(exe_1line('wc -l ' + log, 0, False)) < 5:
+      if perfmetrics: return perf_stat(flags, msg + '@; no PM', events=events, perfmetrics=0, grep=grep)
+      else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
     return log
   def perf_script(x, msg=None, export='', takens=False):
     if do['perf-scr']:
@@ -336,7 +338,7 @@ def profile(log=False, out='run'):
       base += C.chop(do['perf-record'], ' :/,=')
     data = '%s.perf.data'%record_name(do['perf-record'])
     exe(perf + ' record -c %d -g -o %s ' % (pmu.period(), data)+do['perf-record']+r, 'sampling %sw/ stacks'%do['perf-record'])
-    if args.mode != 'process' and not do['forgive']:
+    if do['log_stdio'] and args.mode != 'process' and not do['forgive']:
       record_out = C.file2lines(C.log_stdio)
       for l in reversed(record_out):
         if 'sampling ' in l: break
@@ -351,7 +353,8 @@ def profile(log=False, out='run'):
     exe(perf + " annotate --stdio -n -l -i %s | c++filt | tee %s-code.log " \
       "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" %
       (data, base, base), '@annotate code', redir_out='2>/dev/null')
-    exe("egrep -w -5 '%s :' %s-code.log" % (exe_1line("sort -n %s-code.log | tail -1" % base, 0), base), '@hottest block')
+    exe("grep -w -5 '%s :' %s-code.log" % (exe_1line("egrep '\s+[0-9]+ :' %s-code.log | sort -n | tail -1" %
+                                                      base, 0), base), '@hottest block(s)')
     if do['xed']: perf_script("-i %s -F insn --xed | %s " \
       "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
   
@@ -435,7 +438,8 @@ def profile(log=False, out='run'):
       exe_v0('printf "# %s:\n#\n" > %s' % ('Static Statistics', info))
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
       exe_v0('echo >> %s' % info)
-    def log_count(x, l): return "printf 'Count of unique %s: ' >> %s && wc -l < %s >> %s" % (x, info, l, info)
+    def log_count(x, l): return "printf 'Count of unique %s%s: ' >> %s && wc -l < %s >> %s" % (
+      'non-cold ' if do['imix'] & 0x10 else '', x, info, l, info)
     def log_br_count(x, s): return log_count("%s branches" % x, "%s.%s.log" % (data, s))
     def tail(f=''): return "tail %s | grep -v total" % f
     if not os.path.isfile(info) or do['reprocess'] > 1:
@@ -444,7 +448,7 @@ def profile(log=False, out='run'):
           (data, '-a' if do['size'] else '', info), None if do['size'] else "@stats")
       if isfile(perf_stat_log):
         exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))
-      sort2uf = "%s | egrep -v '\s+[1-9]\s+' | ./ptage" % sort2u
+      sort2uf = "%s |%s ./ptage" % (sort2u, " egrep -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
       perf_script("-i %s -F ip -c %s | %s | tee %s.samples.log | %s" %
         (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')))
       if do['xed']:
@@ -453,12 +457,12 @@ def profile(log=False, out='run'):
                       (data, comm, clean, sort2uf, data), '@processing mispredicts')
         else:
           perf_script("-i %s -F +brstackinsn --xed -c %s | GREP_INST"
-          "| tee >(grep MISPRED | %s | %s > %s.mispreds.log) | %s"
-          "| tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) "
-          "| grep call | %s > %s.calls.log" %
-          (data, comm, clean, sort2uf, data, clean,
-           sort2uf, data, sort2uf, data, sort2uf, data), '@processing taken branches', takens=True)
+            "| tee >(grep MISPRED | %s | tee >(egrep -v 'call|jmp' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log)"
+            "| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
+            (data, comm, clean, sort2uf, data, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data),
+            '@processing taken branches', takens=True)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
+          exe(log_br_count('mispredicted conditional taken', 'misp_tk_conds'))
         exe(log_br_count('mispredicted taken', 'mispreds'))
     if do['xed']:
       ips = '%s.ips.log'%data
@@ -468,9 +472,8 @@ def profile(log=False, out='run'):
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       if not os.path.isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
-        # TODO: replace this with stats lookup
-        cycles = exe_1line("egrep '(\s\s|e/)cycles' %s | tail -1" % C.log_stdio, 0).replace(',', '')
-        if cycles.isdigit(): lbr_env += ' PTOOLS_CYCLES=%s' % cycles
+        cycles = get_stat('cycles', 0)
+        if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         misp, cmd, msg = '', "-i %s -F +brstackinsn --xed -c %s" % (data, comm), '@info'
@@ -648,7 +651,7 @@ def main():
     if args.mode != 'process': C.info('container profiling')
     for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'
   do_cmd = '%s # version %s' % (C.argv2str(), version())
-  C.log_stdio = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
+  if do['log_stdio']: C.log_stdio = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   cmds_file = '.%s.cmd' % uniq_name()
   if os.path.isfile(cmds_file):

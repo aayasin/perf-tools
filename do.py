@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.78
+__version__ = 1.79
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -323,7 +323,7 @@ def profile(log=False, out='run'):
   perf_report_syms = perf_report_mods + ',sym'
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | ./ptage'
-  r = do['run'] if args.gen_args else args.app
+  r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0) or log: log_setup()
   if args.profile_mask & ~0x1: C.info('App: ' + r)
   if en(1): perf_stat_log = perf_stat('-r%d' % do['repeat'], 'per-app counting %d runs' % do['repeat'])
@@ -408,8 +408,8 @@ def profile(log=False, out='run'):
     perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
     flags = do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
-    if len(track_ipc): track_ipc = ' %s %s' % (perf, track_ipc)
-    exe(perf + ' %s %s -o %s%s -- %s' % (record, flags, perf_data, track_ipc, r), 'sampling-%s %s' % (tag.upper(), msg))
+    cmd = 'bash -c "%s %s %s"' % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
+    exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s %s' % (tag.upper(), msg))
     warn_file(perf_data)
     if tag != 'ldlat': print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_report, perf_data))
     if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:

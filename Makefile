@@ -73,8 +73,8 @@ pre-push: help tramp3d-v4
 	$(DO) profile -m IpCall --stdout -pm 42				# tests perf -M + toplev --drilldown
 	$(DO) profile -a pmu-tools/workloads/BC2s -pm 42	# tests topdown across-tree tagging
 	$(MAKE) test-build                                  # tests build command + perf -e + toplev --nodes; Ports_Utilized_1
-	$(MAKE) test-default                                # tests default non-MUX sensitive commands
 	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'             # tests load-latency profile-step + verbose:1
+	$(MAKE) test-default                                # tests default non-MUX sensitive commands
 	$(DO1) --toplev-args ' --no-multiplex --global --frequency \
 	    --metric-group +Summary' -pm 1010               # carefully tests MUX sensitive commands
 	$(MAKE) test-study                                  # tests study script (errors only)

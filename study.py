@@ -79,6 +79,7 @@ do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
 def exe(c): return C.exe_cmd(c, debug=args.verbose)
 def app(flavor):
+  if args.attempt == -1: return args.app
   return "'%s %s t%d'" % (args.app, flavor, args.attempt)
 
 if args.stages & 0x8: exe(do.replace('profile', 'log').replace('batch:1', 'batch:0'))

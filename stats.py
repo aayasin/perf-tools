@@ -46,7 +46,7 @@ def print_DB(c):
   for x in sDB[c].keys():
     if x.endswith(':var') or x.startswith('topdown-') or '.' in x or x in ['branch-misses']: continue
     v = sDB[c][x]
-    if x in read_perf(None): v = '%.2f' % v
+    if x in read_perf(None): v = float('%.2f' % v)
     val = '%18s' % C.float2str(v) if C.is_float(v) else v
     if x+':var' in sDB[c] and sDB[c][x+':var']: val += ' +- %s%%' % sDB[c][x+':var']
     d['%30s' % x] = val
@@ -57,9 +57,11 @@ def read_perf(f):
   d = {}
   def calc_metric(e, v=None):
     if e == None: return ['IpMispredict', 'IpUnknown_Branch', 'L2MPKI_Code']
-    if e == 'branch-misses': d['IpMispredict'] = d['instructions'] / v
-    if e == 'r0160': d['IpUnknown_Branch'] = d['instructions'] / v
-    if e == 'r2424': d['L2MPKI_Code'] = 1000 * val / d['instructions']
+    if not 'instructions' in d: return None
+    inst = float(d['instructions'])
+    if e == 'branch-misses': d['IpMispredict'] = inst / v
+    if e == 'r0160': d['IpUnknown_Branch'] = inst / v
+    if e == 'r2424': d['L2MPKI_Code'] = 1000 * val / inst
   if f == None: return calc_metric(None) # a hack!
   if debug > 3: print(f)
   lines = C.file2lines(f)

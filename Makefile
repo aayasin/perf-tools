@@ -5,6 +5,7 @@ FAIL = (echo "failed! $$?"; exit 1)
 RERUN = -pm 0x80
 MAKE = make --no-print-directory
 MGR = sudo $(shell python -c 'import common; print(common.os_installer())')
+PERF_M = -m IpCall
 SHELL := /bin/bash
 SHOW = tee
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
@@ -70,7 +71,7 @@ pre-push: help tramp3d-v4
 	rm -f {run,BC2s,datadep,CLTRAMP3D}*{csv,data,old,log,txt}
 	$(DO) help -m GFLOPs
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='" 	# tests sys-wide + topdown tree; MEM_Bandwidth in L5
-	$(DO) profile -m IpCall --stdout -pm 42				# tests perf -M + toplev --drilldown
+	$(DO) profile $(PERF_M) --stdout -pm 42 			# tests perf -M + toplev --drilldown
 	$(DO) profile -a pmu-tools/workloads/BC2s -pm 42	# tests topdown across-tree tagging
 	$(MAKE) test-build                                  # tests build command + perf -e + toplev --nodes; Ports_Utilized_1
 	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'             # tests load-latency profile-step + verbose:1

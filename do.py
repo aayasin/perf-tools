@@ -472,7 +472,7 @@ def profile(log=False, out='run'):
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       if not os.path.isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
-        cycles = get_stat('cycles', 0)
+        cycles = get_stat(pmu.event('cycles'), 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']

@@ -41,6 +41,7 @@ def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 def event(x):
   e = {'lbr':     'r20c4:Taken-branches:ppp',
     'calls-loop': 'r0bc4:callret_loop-overhead',
+    'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
     'sentries':   'r40c4:System-entries:u',
     }[x]
   return perf_format(e) if x == 'lbr' or v5p() else ''
@@ -49,8 +50,8 @@ def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
 
 def ldlat_event(lat):
-  return '"{cpu/mem-loads-aux,period=%d/,cpu/mem-loads,ldlat=%s/pp}" -d -W' %\
-         (1e12, lat) if ldlat_aux() else 'ldlat-loads --ldlat %s' % lat
+  return '"{%s/mem-loads-aux,period=%d/,%s/mem-loads,ldlat=%s/pp}" -d -W' % (pmu(),
+         1e12, pmu(), lat) if ldlat_aux() else 'ldlat-loads --ldlat %s' % lat
 
 def basic_events():
   events = [event('sentries')]

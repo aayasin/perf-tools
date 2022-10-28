@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.77
+__version__ = 1.78
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -127,6 +127,7 @@ def isfile(f): return f and os.path.isfile(f)
 def rp(x): return os.path.join(C.dirname(), x)
 def version(): return str(round(__version__, 3 if args.tune else 2))
 def app_name(): return args.app != C.RUN_DEF
+def toplev_describe(m, msg=None, mod='^'): exe('%s --describe %s%s' % (get_perf_toplev()[1], m, mod), msg, redir_out=None)
 
 def uniq_name():
   return C.command_basename(args.app, iterations=(args.app_iterations if args.gen_args else None))[:200]
@@ -368,7 +369,13 @@ def profile(log=False, out='run'):
   
   # +Info metrics that would not use more counters
   cmd, log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe']+do['tma-bot-rest']))
-  if en(4): exe(cmd + ' | tee %s | %s' % (log, grep_bk), 'topdown full tree + All Bottlenecks')
+  if en(4):
+    exe(cmd + ' | tee %s | %s' % (log, grep_bk), 'topdown full tree + All Bottlenecks')
+    crit = stats.read_toplev(log, 'Critical-Node')
+    if crit:
+      crit = crit.split('.')
+      toplev_describe(crit[0], '@description of nodes in TMA tree path to critical node')
+      for n in crit[1:]: toplev_describe(n)
   
   cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, do['repeat']))
   if en(5): exe(cmd + ' | tee %s | %s' % (log, grep_nz),
@@ -649,7 +656,7 @@ def main():
   do['cmds_file'] = open(cmds_file, 'w')
   do['cmds_file'].write('# %s\n' % do_cmd)
   if args.verbose > 5: C.printc(str(args))
-  if args.verbose > 6: C.printc(C.dict2str(do))
+  if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1
 
   for c in args.command:
@@ -673,7 +680,7 @@ def main():
     elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0 && sudo rdmsr 0x1a4')
     elif c == 'enable-fix-freq':    fix_frequency()
     elif c == 'disable-fix-freq':   fix_frequency('undo')
-    elif c == 'help':         exe('%s --describe %s' % (get_perf_toplev()[1], args.metrics), redir_out=None)
+    elif c == 'help':         toplev_describe(args.metrics, mod='')
     elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
                                     ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))
     elif c == 'log':          log_setup()

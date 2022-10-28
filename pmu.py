@@ -51,7 +51,7 @@ def lbr_event():
 def basic_events():
   events = [event('sentries')]
   if v5p(): events += ['r2424']
-  if goldencove(): events += ['r0262']
+  if goldencove(): events += ['r0160', 'r0262']
   return ','.join(events)
 
 def period(): return 2000003

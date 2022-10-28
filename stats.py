@@ -10,8 +10,6 @@ __author__ = 'ayasin'
 import common as C
 import re
 
-# exposed methods
-#
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([0-9]+).log', perf_stat_file)[0]
   return get_stat_int(s, perf_stat_file.replace('.perf_stat-r%s.log' % repeat, ''))
@@ -24,8 +22,6 @@ def print_metrics(app):
   rollup(c)
   return print_DB(c)
 
-# internal methods
-#
 
 def get_stat_int(s, c, val=-1):
   rollup(c)
@@ -121,17 +117,20 @@ def parse(l):
       val2 = float(val2)
   return name, val, var, name2, val2, name3, val3
 
-def read_toplev(f):
+def read_toplev(filename, metric=None):
   d = {}
-  if debug > 4: print(f)
+  if debug > 4: print(filename)
   try:
-    for l in C.file2lines(f):
+    for l in C.file2lines(filename):
       items = l.strip().split()
-      if items[0].startswith('Info.B'):
+      if items[0].startswith('Info.Bot'):
         d[items[1]] = float(items[3])
+      elif '<==' in l and len(items) < 7:
+        d['Critical-Node'] = items[1]
+    if metric: return d[metric] if metric in d else None
   except ValueError:
     C.warn("cannot parse: '%s'" % l)
   except AttributeError:
-    C.warn("empty file: '%s'" % f)
+    C.warn("empty file: '%s'" % filename)
   if debug > 5: print(d)
   return d

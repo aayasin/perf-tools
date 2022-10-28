@@ -264,7 +264,7 @@ def args_parse(d, args):
 
 import argparse
 RUN_DEF = './run.sh'
-TOPLEV_DEF=' --frequency --metric-group +Summary'
+TOPLEV_DEF=' --global --frequency --metric-group +Summary'
 def add_hex_arg(ap, n, fn, d, h):
   ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
 def argument_parser(usg, defs=None, mask=0x317F, fc=argparse.ArgumentDefaultsHelpFormatter):

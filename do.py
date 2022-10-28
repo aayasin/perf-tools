@@ -54,8 +54,7 @@ do = {'run':        C.RUN_DEF,
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
-  'perf-ldlat':     '-e %s -c 1001' % ('"{cpu/mem-loads-aux,period=%d/,cpu/mem-loads,ldlat=%s/pp}" -d -W' %
-                    (1e12, LDLAT_DEF) if pmu.ldlat_aux() else 'ldlat-loads --ldlat %s' % LDLAT_DEF),
+  'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003' % pmu.pmu(),
   'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-scr':       0,
@@ -75,7 +74,6 @@ do = {'run':        C.RUN_DEF,
   'tma-fx':         '+IPC,+Instructions,+Time,+SLOTS,+CLKS',
   'tma-bot-fe':     ',+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
   'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
-  'toplev':         C.TOPLEV_DEF,
   'xed':            1 if pmu.cpu('x86') else 0,
 }
 args = argparse.Namespace()
@@ -366,17 +364,19 @@ def profile(log=False, out='run'):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
               o.replace('.log', '-perf.csv'), tlargs, r), o
-  
+  def topdown_describe(log):
+    path = stats.read_toplev(log, 'Critical-Node')
+    if path:
+      path = path.split('.')
+      toplev_describe(path[0], '@description of nodes in TMA tree path to critical node')
+      for n in path[1:]: toplev_describe(n)
+
   # +Info metrics that would not use more counters
   cmd, log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe']+do['tma-bot-rest']))
   if en(4):
     exe(cmd + ' | tee %s | %s' % (log, grep_bk), 'topdown full tree + All Bottlenecks')
-    crit = stats.read_toplev(log, 'Critical-Node')
-    if crit:
-      crit = crit.split('.')
-      toplev_describe(crit[0], '@description of nodes in TMA tree path to critical node')
-      for n in crit[1:]: toplev_describe(n)
-  
+    topdown_describe(log)
+
   cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, do['repeat']))
   if en(5): exe(cmd + ' | tee %s | %s' % (log, grep_nz),
               'topdown primary, %d-levels %d runs' % (do['levels'], do['repeat']))
@@ -385,6 +385,7 @@ def profile(log=False, out='run'):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
       tlargs='' if args.toplev_args == C.TOPLEV_DEF else args.toplev_args)
     exe(cmd + ' | tee %s | egrep -v "^(Run toplev|Add|Using|Sampling)|perf.* record" ' % log, 'topdown auto-drilldown')
+    topdown_describe(log)
     if do['sample'] > 3:
       cmd = C.exe_output("grep 'perf record' %s | tail -1"%log)
       exe(cmd, '@sampling on bottleneck')
@@ -592,7 +593,7 @@ def build_kernel(dir='./kernels/'):
 def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
-    defs={'perf': 'perf', 'pmu-tools': '%s ./pmu-tools' % do['python'], 'toplev-args': '', 'nodes': do['metrics']})
+    defs={'perf': 'perf', 'pmu-tools': '%s ./pmu-tools' % do['python'], 'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']})
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
@@ -636,7 +637,6 @@ def main():
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
     if args.profile_mask & 0x300: args.profile_mask |= 0x2
-  args.toplev_args = ' '.join((args.toplev_args, do['toplev']))
   record_steps = ('record', 'lbr', 'pebs', 'ldlat')
   if args.sys_wide:
     if args.mode != 'process': C.info('system-wide profiling')

@@ -48,6 +48,10 @@ def event(x):
 def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
 
+def ldlat_event(lat):
+  return '"{cpu/mem-loads-aux,period=%d/,cpu/mem-loads,ldlat=%s/pp}" -d -W' %\
+         (1e12, lat) if ldlat_aux() else 'ldlat-loads --ldlat %s' % lat
+
 def basic_events():
   events = [event('sentries')]
   if v5p(): events += ['r2424']

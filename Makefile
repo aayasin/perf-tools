@@ -1,10 +1,11 @@
 DO = ./do.py
-ST = --toplev-args ' --single-thread'
-DO1 = $(DO) profile -a "taskset 0x4 ./CLTRAMP3D" $(ST) --tune :loops:10
+ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
+DO1 = $(DO) profile -a "taskset 0x4 ./CLTRAMP3D" --tune :loops:10
 FAIL = (echo "failed! $$?"; exit 1)
 RERUN = -pm 0x80
 MAKE = make --no-print-directory
 MGR = sudo $(shell python -c 'import common; print(common.os_installer())')
+SHELL := /bin/bash
 SHOW = tee
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
 
@@ -30,13 +31,13 @@ run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
 test-mem-bw: run-mem-bw
 	sleep 2s
-	$(DO) profile -s2 $(ST) $(RERUN) | $(SHOW)
+	set -o pipefail; $(DO) profile -s2 $(ST) $(RERUN) | $(SHOW)
 	kill -9 `pidof m0-n8192-u01.llv`
 run-mt:
 	./omp-bin.sh $(NUM_THREADS) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv &
 test-mt: run-mt
 	sleep 2s
-	$(DO) profile -s1 $(RERUN) | $(SHOW)
+	set -o pipefail; $(DO) profile -s1 $(RERUN) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
 
 clean:
@@ -66,13 +67,15 @@ test-study:
 	./study.py cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > .study.log 2>&1 || $(FAIL)
 
 pre-push: help tramp3d-v4
+	rm -f {run,BC2s,datadep,CLTRAMP3D}*{csv,data,old,log,txt}
 	$(DO) help -m GFLOPs
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='" 	# tests sys-wide + topdown tree; MEM_Bandwidth in L5
 	$(DO) profile -m IpCall --stdout -pm 42				# tests perf -M + toplev --drilldown
 	$(DO) profile -a pmu-tools/workloads/BC2s -pm 42	# tests topdown across-tree tagging
 	$(MAKE) test-build                                  # tests build command + perf -e + toplev --nodes; Ports_Utilized_1
 	$(MAKE) test-default                                # tests default non-MUX sensitive commands
-	$(MAKE) test-mem-bw RERUN='-pm 400' 	            # tests load-latency profile-step
-	$(DO1) --toplev-args ' --no-multiplex' -pm 1010     # carefully tests MUX sensitive commands
+	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'             # tests load-latency profile-step + verbose:1
+	$(DO1) --toplev-args ' --no-multiplex --global --frequency \
+	    --metric-group +Summary' -pm 1010               # carefully tests MUX sensitive commands
 	$(MAKE) test-study                                  # tests study script (errors only)
 	$(DO1) > .do.log 2>&1 || $(FAIL)                    # tests default profile-steps (errors only)

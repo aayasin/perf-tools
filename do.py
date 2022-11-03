@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance profiling on Linux
 # Author: Ahmad Yasin
-# edited: Oct 2022
+# edited: Nov 2022
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.80
+__version__ = 1.81
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -159,7 +159,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
     if do['xed'] < 2 and os.path.isfile(XED_PATH): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
     pip = 'pip3' if python_version().startswith('3') else 'pip'
-    for x in ('numpy', 'xlswriter'): exe('%s install %s' % (pip, x), '@installing %s' % x)
+    for x in ('numpy', 'xlsxwriter'): exe('%s install %s' % (pip, x), '@installing %s' % x)
     if 'Red Hat' in C.file2str('/etc/os-release', 1): exe('sudo yum install python3-xlsxwriter.noarch', '@patching xlsx')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
@@ -317,8 +317,8 @@ def profile(log=False, out='run'):
   def record_name(flags): return '%s%s' % (out, C.chop(flags, (' :/,={}"', 'cpu_core', 'cpu')))
   def get_stat(s, default): return stats.get_stat_log(s, perf_stat_log) if isfile(perf_stat_log) else default
   def record_calibrate(x):
-    factor = 0 if args.sys_wide else int(log10(get_stat('CPUs-utilized', 1)))
-    if do['calibrate']: factor = do['calibrate']
+    factor = do['calibrate']
+    if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs-utilized', 1)))
     if factor:
       do[x] = do[x].replace('0000', '0' * (4 + factor))
       C.info('\tcalibrated: %s' % do[x])

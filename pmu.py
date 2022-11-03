@@ -113,7 +113,10 @@ def cpu_has_feature(feature):
 
 def cpu(what):
   if 1:  # not cpu.state:
-    sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools')
+    pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
+    if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
+      'git clone --recurse-submodules https://github.com/aayasin/perf-tools'))
+    sys.path.append(pmutools)
     import tl_cpu
     cs = tl_cpu.CPU((), False, tl_cpu.Env()) # cpu.state
   if what == 'get': return cs

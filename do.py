@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.81
+__version__ = 1.82
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -460,7 +460,7 @@ def profile(log=False, out='run'):
                       (data, comm, clean, sort2uf, data), '@processing mispredicts')
         else:
           perf_script("-i %s -F +brstackinsn --xed -c %s | GREP_INST"
-            "| tee >(grep MISPRED | %s | tee >(egrep -v 'call|jmp' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log)"
+            "| tee >(grep MISPRED | %s | tee >(egrep -v 'call|jmp|ret' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log)"
             "| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
             (data, comm, clean, sort2uf, data, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data),
             '@processing taken branches', takens=True)

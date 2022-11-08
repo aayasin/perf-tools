@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # common functions for logging, debug, arg-parsing, strings, system commands and file I/O.
 # Author: Ahmad Yasin
-# edited: Oct 2022
+# edited: Nov 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 
 import sys, os, re, pickle
-from subprocess import check_output, Popen
+from subprocess import check_output, Popen, call
 
 # logging
 #
@@ -82,7 +82,7 @@ def annotate(stuff, label=''):
 # @debug: print the command before its execution
 # @redir_out:  redirect output of the (first non-piped) command as specified
 # @run:   do run the specified command
-# @log:   log the commands's output into log_stdout (if any)
+# @log:   log the commands's output into log_stdio (if any)
 # @background: run the specified command in background (do not block)
 def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
@@ -92,9 +92,15 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, backgr
     if run or msg.endswith('..'): printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
-  if log and log_stdio: x = x + ' 2>&1 | tee -a ' + log_stdio
   if background: return Popen(x.split())
-  ret = os.system(x) if run else 0
+  ret = 0
+  if run:
+    if log and log_stdio:
+      if not '2>&1' in x: x = x + ' 2>&1'
+      x = x + ' | tee -a ' + log_stdio
+      ret = call(['/bin/bash', '-c', 'set -o pipefail; ' + x])
+    else:
+      ret = os.system(x)
   if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))
 
 def exe_output(x, sep=";"):

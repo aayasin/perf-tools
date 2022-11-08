@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.82
+__version__ = 1.83
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -227,8 +227,9 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   if args.mode == 'process': return
   exe('uname -a > ' + out, 'logging setup')
   exe("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME' >> " + out)
-  for f in ('/sys/kernel/mm/transparent_hugepage/enabled', '/proc/sys/vm/nr_hugepages', '/proc/sys/vm/nr_overcommit_hugepages'):
+  for f in ('/sys/kernel/mm/transparent_hugepage/enabled', ):
     prn_sysfile(f, out)
+  exe("sudo sysctl -a | tee setup-sysctl.log | egrep 'randomize_va_space|hugepages =' >> %s" % out)
   exe("env > setup-env.log")
   new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
@@ -680,6 +681,7 @@ def main():
     elif c == 'enable-smt':   smt('on')
     elif c == 'disable-atom': atom()
     elif c == 'enable-atom':  atom('online')
+    elif c == 'disable-aslr': exe('echo 0 | sudo tee /proc/sys/kernel/randomize_va_space')
     elif c == 'disable-hugepages': exe('echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
     elif c == 'enable-hugepages':  exe('echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
     elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0xf && sudo rdmsr 0x1a4')

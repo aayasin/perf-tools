@@ -262,6 +262,7 @@ def get_perf_toplev():
   for x in ('toplev.py', 'ocperf'):
     C.check_executable('/'.join((args.pmu_tools.split()[-1], x)))
     ptools[x] = env + args.pmu_tools + '/' + x
+  if args.verbose > 2: ptools['toplev.py'] = 'OCVERBOSE=1 %s' % ptools['toplev.py']
   if do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.meteorlake(): ptools['toplev.py'] += ' --force-cpu=adl'

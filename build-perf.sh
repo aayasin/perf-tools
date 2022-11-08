@@ -1,7 +1,7 @@
 #!/bin/sh
 CLONE=${CLONE:-2}
-PERFV=${PERFV:-5.15.0}
-LINUXV=${PERFV:-5.19.3}
+PERFV=${PERFV:-5.15.17}
+LINUXV=${LINUXV:-5.17.15}
 OBJDUMP=${OBJDUMP:-0}
 
 perfdir=linux/tools/perf

@@ -247,6 +247,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   new_line()          #Tools
   exe('echo "python version: %s" >> %s' % (python_version(), out))
   for x in (do['compiler'], 'as'): exe('%s --version | head -1 >> ' % x + out)
+  exe('ldd --version | head -1 >> %s' % out)
   new_line()          #Memory
   if do['numactl']: exe('numactl -H >> ' + out)
   new_line()          #Devices, etc

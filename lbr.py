@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # A module for processing LBR streams
 # Author: Ahmad Yasin
-# edited: Oct 2022
+# edited: Nov 2022
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.96
+__version__= 0.97
 
 import common as C, pmu
 from common import inc
@@ -61,7 +61,7 @@ def header_ip(line):
 
 def line_ip_hex(line):
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
-  assert x, 'expect <address> at left of %s'%line
+  assert x, "expect <address> at left of '%s'" % line
   return x.group(1).lstrip("0")
 
 def line_ip(line, sample=None):
@@ -347,6 +347,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           if ip_filter: x += ' ip_filter= %s' % ip_filter
           if loop_ipc: x += ' loop= %s' % hex(loop_ipc)
           if verbose: x += ' verbose= %s' % hex(verbose)
+          if not header.group(2).isdigit(): C.printf(line)
           C.printf(x+'\n')
         inc(stat['events'], ev)
         if debug: timestamp = header.group(1).split()[-1]
@@ -457,7 +458,15 @@ def is_type(t, l):
   #if t == 'ld+test' and re.match(r"\s+\S+\s+%s" % inst2pred(t), l): C.printf('IS_TYPE:' + l)
   return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
 def is_callret(l):    return is_type(CALL_RET, l)
-def is_header(line):  return re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line)
+
+# TODO: re-design this function to return: event-name, timestamp, etc
+def is_header(line):  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
+#AUX data lost 1 times out of 33!
+                              re.match(r"(\w)([\w\s\d]+)(.)", line) or
+#         python3 105303 [000] 1021657.227299:          cbr:  cbr: 11 freq: 1100 MHz ( 55%)               55e235 PyObject_GetAttr+0x415 (/usr/bin/python3.6)
+                              re.match(r"([^:]*):(\s+)(\w+:)\s", line) or
+# instruction trace error type 1 time 1021983.206228655 cpu 1 pid 105468 tid 105468 ip 0 code 8: Lost trace data
+                              re.match(r"(\s)(\w[\w\s]+\d) time ([\d\.]+)", line))
 
 def is_jmp_next(br, # a hacky implementation for now
   JS=2,             # short direct Jump Size
@@ -550,7 +559,9 @@ def print_estimate(name, s): print_stat(name, s, 'estimate')
 
 def print_common(total):
   def nc(x): return 'non-cold ' + x
-  if glob['size_stats_en']: stat['size']['avg'] = round(size_sum / (total - stat['bad'] - stat['bogus']), 1)
+  if glob['size_stats_en']:
+    totalv = (total - stat['bad'] - stat['bogus'])
+    stat['size']['avg'] = round(size_sum / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
   cycles, scl = os.getenv('PTOOLS_CYCLES'), 1e3
   if cycles: print_estimate('LBR cycles coverage (x%d)' % scl, ratio(scl * stat['total_cycles'], int(cycles)))
@@ -572,7 +583,9 @@ def print_common(total):
 
 def print_all(nloops=10, loop_ipc=0):
   total = stat['IPs'][glob['ip_filter']] if glob['ip_filter'] else stat['total']
-  if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5: C.error('Too many LBR bad/bogus samples in profile')
+  if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5:
+    if verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
+    else: C.error('Too many LBR bad/bogus samples in profile')
   if not loop_ipc: print_common(total)
   for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])

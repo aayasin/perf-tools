@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.83
+__version__ = 1.84
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -57,6 +57,7 @@ do = {'run':        C.RUN_DEF,
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003' % pmu.pmu(),
+  'perf-pt':        "-e '{intel_pt//u,%su}' -c 700001 -m,64M" % pmu.lbr_event(), # noretcomp
   'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
@@ -317,7 +318,7 @@ def profile(log=False, out='run'):
     return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 2), export=export)
   perf_script.first = True
   perf_stat_log = None
-  def record_name(flags): return '%s%s' % (out, C.chop(flags, (' :/,={}"', 'cpu_core', 'cpu')))
+  def record_name(flags): return '%s%s' % (out, C.chop(flags, (' :/,={}\'', 'cpu_core', 'cpu')))
   def get_stat(s, default): return stats.get_stat_log(s, perf_stat_log) if isfile(perf_stat_log) else default
   def record_calibrate(x):
     factor = do['calibrate']
@@ -416,11 +417,11 @@ def profile(log=False, out='run'):
   def perf_record(tag, comm, msg='', record='record', track_ipc=do['perf-stat-ipc']):
     perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
     flags = do['perf-%s' % tag]
-    assert C.any_in(('-b', '-j any', 'ldlat'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
+    assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     cmd = 'bash -c "%s %s %s"' % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
     exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s %s' % (tag.upper(), msg))
     warn_file(perf_data)
-    if tag != 'ldlat': print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_report, perf_data))
+    if not tag in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_report, perf_data))
     if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:
       C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
     if not comm:
@@ -565,6 +566,13 @@ def profile(log=False, out='run'):
       , 'topdown full no multiplexing')
   
   if en(16):
+    data, comm = perf_record('pt', comm)
+    tag, info = 'pt', '%s.info.log' % data
+    exe(perf + " script --no-itrace -F event,comm -i %s | %s | tee %s.modules.log | ./ptage | tail" % (data, sort2u, data))
+    perf_script("--itrace=Le -F +brstackinsn --xed -c %s -i %s | tee >(egrep 'ppp|#' > %s.pt-takens.log) | %s %s > %s" %
+      (comm, data, data, rp('lbr_stats'), do['lbr-stats-tk'], info), "@pt info for '%s'" % comm)
+
+  if en(18):
     assert do['msr']
     perf_data = '%s.perf.data' % record_name('-e msr')
     exe('sudo %s record -e msr:* -o %s -- %s' % (perf, perf_data, r), 'tracing MSRs')
@@ -646,7 +654,7 @@ def main():
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
     if args.profile_mask & 0x300: args.profile_mask |= 0x2
-  record_steps = ('record', 'lbr', 'pebs', 'ldlat')
+  record_steps = ('record', 'lbr', 'pebs', 'ldlat', 'pt')
   if args.sys_wide:
     if args.mode != 'process': C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide

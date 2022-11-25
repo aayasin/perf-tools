@@ -412,7 +412,13 @@ def profile(log=False, out='run'):
     cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
     exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown 2 levels + FE Bottlenecks')
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
-  
+
+  if en(14):
+    flags, model, events = '-W -c 20011', 'MTL', pmu.get_events()
+    data = '%s-tpebs-perf.data' % record_name('-%s%d' % (model, events.count(':p')))
+    exe("%s record %s -e %s -o %s" % (ocperf, flags, events, data), "TMA sampling (%s)" % model)
+    exe("%s script -i %s -F event,retire_lat > %s.retire_lat.txt" % (perf, data, data))
+
   data, comm = None, do['comm']
   def perf_record(tag, comm, msg='', record='record', track_ipc=do['perf-stat-ipc']):
     perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)

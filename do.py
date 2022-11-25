@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.84
+__version__ = 1.85
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -36,6 +36,7 @@ do = {'run':        C.RUN_DEF,
   'flameg':         0,
   'forgive':        0,
   'gen-kernel':     1,
+  'help':           1,
   'imix':           0x1f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens
   'loops':          int(pmu.cpu('cpucount') / 2),
   'log_stdio':      1,
@@ -131,7 +132,9 @@ def lbr_version():
   import lbr
   return str(round(lbr.__version__, 2))
 def app_name(): return args.app != C.RUN_DEF
-def toplev_describe(m, msg=None, mod='^'): exe('%s --describe %s%s' % (get_perf_toplev()[1], m, mod), msg, redir_out=None)
+def toplev_describe(m, msg=None, mod='^'):
+  if not do['help']: return
+  exe('%s --describe %s%s' % (get_perf_toplev()[1], m, mod), msg, redir_out=None)
 
 def uniq_name():
   return C.command_basename(args.app, iterations=(args.app_iterations if args.gen_args else None))[:200]
@@ -264,17 +267,17 @@ def get_perf_toplev():
   for x in ('toplev.py', 'ocperf'):
     C.check_executable('/'.join((args.pmu_tools.split()[-1], x)))
     ptools[x] = env + args.pmu_tools + '/' + x
-  if args.verbose > 2: ptools['toplev.py'] = 'OCVERBOSE=1 %s' % ptools['toplev.py']
+  if args.verbose > 5: ptools['toplev.py'] = 'OCVERBOSE=1 %s' % ptools['toplev.py']
   if do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.meteorlake(): ptools['toplev.py'] += ' --force-cpu=adl'
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
   return (perf, ptools['toplev.py'], ptools['ocperf'])
 
-def profile(log=False, out='run'):
+def profile(mask, toplev_args=['mvl6', None]):
   out = uniq_name()
   perf, toplev, ocperf = get_perf_toplev()
-  def en(n): return args.profile_mask & 2**n
+  def en(n): return mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
@@ -333,7 +336,7 @@ def profile(log=False, out='run'):
   sort2u = 'sort | uniq -c | sort -n'
   sort2up = sort2u + ' | ./ptage'
   r = do['run'] if args.gen_args or args.sys_wide else args.app
-  if en(0) or log: log_setup()
+  if en(0): log_setup()
   if args.profile_mask & ~0x1: C.info('App: ' + r)
   if en(1): perf_stat_log = perf_stat('-r%d' % do['repeat'], 'per-app counting %d runs' % do['repeat'])
   if en(2): perf_stat('-a', 'system-wide counting', a_events(), grep='| egrep "seconds|insn|topdown|pkg"')
@@ -370,7 +373,8 @@ def profile(log=False, out='run'):
   grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add|warning:)|not (found|referenced|supported)|##placeholder##' "
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
-  def toplev_V(v, tag='', nodes=do['nodes'], tlargs=args.toplev_args):
+  def toplev_V(v, tag='', nodes=do['nodes'],
+               tlargs = toplev_args[1] if toplev_args[1] else args.toplev_args):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
               o.replace('.log', '-perf.csv'), tlargs, r), o
@@ -566,10 +570,8 @@ def profile(log=False, out='run'):
     perf_script_ldlat('ip,addr', 'IPs-DLAs')
 
   if en(7):
-    cmd, log = toplev_V('-mvl6 --no-multiplex', '-nomux', ','.join((do['nodes'], do['extra-metrics'])))
-    exe(cmd + " | tee %s | %s"%(log, grep_nz)
-      #'| grep ' + ('RUN ' if args.verbose > 1 else 'Using ') + out +# toplev misses stdout.flush() as of now :(
-      , 'topdown full no multiplexing')
+    cmd, log = toplev_V('-%s --no-multiplex' % toplev_args[0], '-nomux', ','.join((do['nodes'], do['extra-metrics'])))
+    exe(cmd + " | tee %s | %s" % (log, grep_nz), 'topdown-%s no multiplexing' % toplev_args[0])
   
   if en(16):
     data, comm = perf_record('pt', comm)
@@ -686,6 +688,7 @@ def main():
     param = c.split(':')[1:] if ':' in c else None
     if   c == 'forgive-me':   pass
     elif c == 'setup-all':    tools_install()
+    elif c == 'prof-no-mux':  profile(0x80, toplev_args=['vl6', ' --metric-group +Summary --single-thread'])
     elif c == 'build-perf':   exe('%s ./do.py setup-all --install-perf build -v%d --tune %s' % (do['python'],
       args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+('xed', 'tee'))])))
     elif c == 'setup-perf':   setup_perf()
@@ -708,13 +711,13 @@ def main():
     elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
                                     ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))
     elif c == 'log':          log_setup()
-    elif c == 'profile':      profile()
+    elif c == 'profile':      profile(args.profile_mask)
     elif c.startswith('get'): get(param)
     elif c == 'tar':          do_logs(c, tag='.'.join((uniq_name(), pmu.cpu_TLA())) if app_name() else C.error('provide a value for -a'))
     elif c == 'clean':        do_logs(c)
     elif c == 'all':
       setup_perf()
-      profile(True)
+      profile(args.profile_mask | 0x1)
       do_logs('tar')
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)

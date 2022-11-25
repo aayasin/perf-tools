@@ -290,8 +290,8 @@ def argument_parser(usg, defs=None, mask=0x317F, fc=argparse.ArgumentDefaultsHel
   if not usg: return common_args
   ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, '
-    '2:+verbose-on metrics|build, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, 5:+event-groups, '
-    '.. 9:anything')
+    '2:+verbose-on metrics|build|sub-commands, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, '
+    '5:+event-groups, 6:ocperf verbose, .. 9:anything')
   add_hex_arg(ap, '-pm', '--profile-mask', mask, 'stages in the profile command')
   ap.add_argument('--tune', nargs='+', help=argparse.SUPPRESS, action='append') # override global variables with python expression
   return ap

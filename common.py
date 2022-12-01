@@ -101,7 +101,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, backgr
       ret = call(['/bin/bash', '-c', 'set -o pipefail; ' + x])
     else:
       ret = os.system(x)
-  if ret!=0: error("Command failed: " + x.replace("\n", "\\n"))
+  if ret != 0: error("Command \"%s\" failed with '%d'" % (x.replace("\n", "\\n"), ret))
 
 def exe_output(x, sep=";"):
   out = check_output(x, shell=True)

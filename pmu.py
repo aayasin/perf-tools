@@ -64,10 +64,13 @@ TPEBS = {'MTL':
   "FRONTEND_RETIRED.L2_MISS,BR_MISP_RETIRED.RET_COST,BR_MISP_RETIRED.COND_TAKEN_COST,BR_MISP_RETIRED.COND_NTAKEN_COST,"
   "MEM_INST_RETIRED.STLB_MISS_STORES,MEM_INST_RETIRED.STLB_MISS_LOADS,MEM_INST_RETIRED.STLB_HIT_STORES,MEM_INST_RETIRED.STLB_HIT_LOADS,"
   "FRONTEND_RETIRED.STLB_MISS,BR_MISP_RETIRED.INDIRECT_COST,BR_MISP_RETIRED.INDIRECT_CALL_COST,"
-  "MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.SPLIT_LOADS,MEM_INST_RETIRED.LOCK_LOADS,FRONTEND_RETIRED.ANY_DSB_MISS"
+  "MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.SPLIT_LOADS,MEM_INST_RETIRED.LOCK_LOADS,FRONTEND_RETIRED.ANY_DSB_MISS,"
   "FRONTEND_RETIRED.ITLB_MISS,FRONTEND_RETIRED.L1I_MISS,FRONTEND_RETIRED.MS_FLOWS,FRONTEND_RETIRED.UNKNOWN_BRANCH",
 }
 def get_events(tag='MTL'):
+  MTLraw = "cpu_core/event=0xd1,umask=0x4,name=mem_load_retired_l3_hit,period=100021/p,cpu_core/event=0xd2,umask=0x2,name=mem_load_l3_hit_retired_xsnp_no_fwd,period=20011/p,cpu_core/event=0xd2,umask=0x1,name=mem_load_l3_hit_retired_xsnp_miss,period=20011/p,cpu_core/event=0xd2,umask=0x4,name=mem_load_l3_hit_retired_xsnp_fwd,period=20011/p,cpu_core/event=0xc6,umask=0x3,frontend=0x13,name=frontend_retired_l2_miss,period=100007/p,cpu_core/event=0xc5,umask=0x48,name=br_misp_retired_ret_cost,period=100007/p,cpu_core/event=0xc5,umask=0x41,name=br_misp_retired_cond_taken_cost,period=400009/p,cpu_core/event=0xc5,umask=0x50,name=br_misp_retired_cond_ntaken_cost,period=400009/p,cpu_core/event=0xd0,umask=0x12,name=mem_inst_retired_stlb_miss_stores,period=100003/p,cpu_core/event=0xd0,umask=0x11,name=mem_inst_retired_stlb_miss_loads,period=100003/p,cpu_core/event=0xd0,umask=0xa,name=mem_inst_retired_stlb_hit_stores,period=100003/p,cpu_core/event=0xd0,umask=0x9,name=mem_inst_retired_stlb_hit_loads,period=100003/p,cpu_core/event=0xc6,umask=0x3,frontend=0x15,name=frontend_retired_stlb_miss,period=100007/p,cpu_core/event=0xc5,umask=0xc0,name=br_misp_retired_indirect_cost,period=100003/p,cpu_core/event=0xc5,umask=0x42,name=br_misp_retired_indirect_call_cost,period=400009/p,cpu_core/event=0xd0,umask=0x42,name=mem_inst_retired_split_stores,period=100003/p,cpu_core/event=0xd0,umask=0x41,name=mem_inst_retired_split_loads,period=100003/p,cpu_core/event=0xd0,umask=0x21,name=mem_inst_retired_lock_loads,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x1,name=frontend_retired_any_dsb_miss,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x14,name=frontend_retired_itlb_miss,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x12,name=frontend_retired_l1i_miss,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x8,name=frontend_retired_ms_flows,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x17,name=frontend_retired_unknown_branch,period=100007/p"
+  if tag == 'MTL-raw':
+    return MTLraw.replace('000', '00')
   return TPEBS[tag].replace(',', ':p,') + ':p'
 
 def period(): return 2000003

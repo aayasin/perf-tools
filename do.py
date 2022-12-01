@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.85
+__version__ = 1.86
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -27,7 +27,7 @@ do = {'run':        C.RUN_DEF,
   'calibrate':      0,
   'cmds_file':      None,
   'comm':           None,
-  'compiler':       'gcc -O2', # ~/tools/llvm-6.0.0/bin/clang',
+  'compiler':       'gcc -O2 -ffast-math', # ~/tools/llvm-6.0.0/bin/clang',
   'container':      0,
   'core':           1,
   'cpuid':          0 if C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
@@ -48,6 +48,7 @@ do = {'run':        C.RUN_DEF,
   'levels':         2,
   'metrics':        '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict' +
                     (',+Memory_Bound*/3' if pmu.goldencove() else ''), # +UPI once ICL mux fixed, +ORO with TMA 4.5
+  'model':          'MTL',
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,-CPU_Utilization",
@@ -418,10 +419,12 @@ def profile(mask, toplev_args=['mvl6', None]):
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
 
   if en(14):
-    flags, model, events = '-W -c 20011', 'MTL', pmu.get_events()
-    data = '%s-tpebs-perf.data' % record_name('-%s%d' % (model, events.count(':p')))
-    exe("%s record %s -e %s -o %s" % (ocperf, flags, events, data), "TMA sampling (%s)" % model)
+    flags, events = '-W -c 20011', pmu.get_events(do['model'])
+    data = '%s-tpebs-perf.data' % record_name('-%s%d' % (do['model'], events.count(':p')))
+    cmd = "%s record %s -e %s -o %s -- %s" % (ocperf, flags, events, data, r)
+    exe(cmd.replace('20011', '3001') if 'raw' in do['model'] else cmd, "TMA sampling (%s)" % do['model'])
     exe("%s script -i %s -F event,retire_lat > %s.retire_lat.txt" % (perf, data, data))
+    exe("sort %s.retire_lat.txt | uniq -c | sort -n | ./ptage | tail" % (data, ))
 
   data, comm = None, do['comm']
   def perf_record(tag, comm, msg='', record='record', track_ipc=do['perf-stat-ipc']):

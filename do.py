@@ -252,7 +252,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   new_line()          #Tools
   exe('echo "python version: %s" >> %s' % (python_version(), out))
   for x in (do['compiler'], 'as'): exe('%s --version | head -1 >> ' % x + out)
-  exe('ldd --version | head -1 >> %s' % out)
+  exe1('ldd --version | head -1 >> %s' % out, log=False)
   new_line()          #Memory
   if do['numactl']: exe('numactl -H >> ' + out)
   new_line()          #Devices, etc
@@ -469,7 +469,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       if isfile(perf_stat_log):
         exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))
       sort2uf = "%s |%s ./ptage" % (sort2u, " egrep -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      perf_script("-i %s -F ip -c %s | %s | tee %s.samples.log | %s" %
+      perf_script("-i %s -F ip -c %s | %s > %s.samples.log && %s" %
         (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')))
       if do['xed']:
         if (do['imix'] & 0x8) == 0:

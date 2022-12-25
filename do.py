@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Misc utilities for CPU performance profiling on Linux
 # Author: Ahmad Yasin
-# edited: Nov 2022
+# edited: Dec 2022
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
@@ -10,7 +10,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.86
+__version__ = 1.87
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -451,7 +451,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     info = '%s.info.log' % data
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def static_stats():
-      bins = exe2list(perf + " script -i %s | cut -d\( -f2 | cut -d\) -f1 | grep -v '^\[' | %s | tail -5" %
+      bins = exe2list(perf + " script -i %s | cut -d\( -f2 | cut -d\) -f1 | egrep -v '^\[|anonymous' | %s | tail -5" %
                         (data, sort2u))[1:][::2]
       if args.mode == 'profile': return
       assert len(bins)

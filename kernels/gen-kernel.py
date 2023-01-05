@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # generate C-language kernels with ability to incorporate x86 Assembly with certain control-flow constructs
 # Author: Ahmad Yasin
-# edited: December 2022
+# edited: April 2022
 from __future__ import print_function
 __author__ = 'ayasin'
 __version__ = 0.8

@@ -36,9 +36,12 @@ done
 $PY ./gen-kernel.py -i "vdivps %ymm@,%ymm@,%ymm@" -r3 -n1 > fp-divps.c
 $PY ./gen-kernel.py -i 'vfmadd132pd %ymm10,%ymm11,%ymm11' 'vfmadd132ps %ymm12,%ymm13,%ymm13' 'vaddpd %xmm0,%xmm0,%xmm0' 'vaddps %xmm1,%xmm1,%xmm1' 'vsubsd %xmm2,%xmm2,%xmm2' 'vsubss %xmm3,%xmm3,%xmm3' -n1 --reference 'ICL-PMU' > fp-arith-mix.c
 $PY ./gen-kernel.py -i 'xor %eax,%eax' 'xor %ecx,%ecx' cpuid -n1 > cpuid.c
+$PY ./gen-kernel.py -i 'movl 0x0(%rsp),%ecx' 'test %ecx,%ecx' 'jg Lbl_end' -n 1 > ld-test-jcc-3i.c
+$PY ./gen-kernel.py -i 'testq $0x0,0x0(%rsp)' 'jg Lbl_end' -n 1 > ld-test-jcc-2i-imm.c
+$PY ./gen-kernel.py -i 'testq %r12,0x0(%rsp)' 'jg Lbl_end' -n 1 -p 'movq $0x0,%r12' > ld-test-jcc-2i-reg.c
 fi
 
-ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx"
+ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-test-jcc-{3i,2i-{imm,reg}},memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

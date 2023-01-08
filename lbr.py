@@ -5,7 +5,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.97
+__version__= 0.98
 
 import common as C, pmu
 from common import inc
@@ -269,7 +269,7 @@ size_sum=0
 
 def inst2pred(i):
   i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
-         'ld+test':   '(cmp[^x]|test).*\(',
+         'cisc-test':   '(cmp[^x]|test).*\(',
   }
   if i is None: return list(i2p.keys())
   return i2p[i] if i in i2p else i
@@ -454,9 +454,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
     size_sum += size
   return lines
 
-def is_type(t, l):
-  #if t == 'ld+test' and re.match(r"\s+\S+\s+%s" % inst2pred(t), l): C.printf('IS_TYPE:' + l)
-  return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
+def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
 def is_callret(l):    return is_type(CALL_RET, l)
 
 # TODO: re-design this function to return: event-name, timestamp, etc

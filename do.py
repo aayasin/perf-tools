@@ -1,7 +1,14 @@
 #!/usr/bin/env python
-# Misc utilities for CPU performance profiling on Linux
+# Copyright (c) 2020-2023, Intel Corporation
 # Author: Ahmad Yasin
-# edited: Dec 2022
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# Misc utilities for CPU performance profiling on Linux
+#
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
@@ -10,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.87
+__version__ = 1.88
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -72,7 +79,7 @@ do = {'run':        C.RUN_DEF,
   'repeat':         3,
   'reprocess':      2,
   'sample':         2,
-  'size':           1,
+  'size':           0,
   'super':          0,
   'tee':            1,
   'tma-fx':         '+IPC,+Instructions,+Time,+SLOTS,+CLKS',

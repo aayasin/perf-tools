@@ -1,7 +1,14 @@
 #!/usr/bin/env python
-# generate C-language kernels with ability to incorporate x86 Assembly with certain control-flow constructs
+# Copyright (c) 2020-2023, Intel Corporation
 # Author: Ahmad Yasin
-# edited: April 2022
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# generate C-language kernels with ability to incorporate x86 Assembly with certain control-flow constructs
+#
 from __future__ import print_function
 __author__ = 'ayasin'
 __version__ = 0.8

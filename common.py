@@ -1,7 +1,14 @@
 #!/usr/bin/env python
-# common functions for logging, debug, arg-parsing, strings, system commands and file I/O.
+# Copyright (c) 2020-2023, Intel Corporation
 # Author: Ahmad Yasin
-# edited: Nov 2022
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# common functions for logging, debug, arg-parsing, strings, system commands and file I/O.
+#
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -270,7 +277,7 @@ def args_parse(d, args):
 
 import argparse
 RUN_DEF = './run.sh'
-TOPLEV_DEF=' --global --frequency --metric-group +Summary'
+TOPLEV_DEF=' --global --frequency --no-uncore --metric-group +Summary'
 def add_hex_arg(ap, n, fn, d, h):
   ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
 def argument_parser(usg, defs=None, mask=0x317F, fc=argparse.ArgumentDefaultsHelpFormatter):

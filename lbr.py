@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.99
+__version__= 1.00
 
 import common as C, pmu
 from common import inc
@@ -92,8 +92,8 @@ def line_inst(line):
   elif '(' in line:  # load/store take priority in CISC insts
     if 'lea' in line: return 'lea'
     elif 'prefetch' in line: return 'prefetch'
-    elif is_type('cisc-test', line): return 'load'
-    elif re.match(r"\s+\S+\s+[^\(\),]+,", line): return 'store'
+    elif is_type('cisc-test', line) or 'gather' in line: return 'load'
+    elif re.match(r"\s+\S+\s+[^\(\),]+,", line) or 'scatter' in line: return 'store'
     else: return 'load'
   else:
     for x in pInsts:

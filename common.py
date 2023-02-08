@@ -278,9 +278,10 @@ def args_parse(d, args):
 import argparse
 RUN_DEF = './run.sh'
 TOPLEV_DEF=' --global --frequency --no-uncore --metric-group +Summary'
+PROF_MASK_DEF=0x317F
 def add_hex_arg(ap, n, fn, d, h):
   ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
-def argument_parser(usg, defs=None, mask=0x317F, fc=argparse.ArgumentDefaultsHelpFormatter):
+def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefaultsHelpFormatter):
   ap = argparse.ArgumentParser(usage=usg, formatter_class=fc) if usg else argparse.ArgumentParser(formatter_class=fc)
   common_args = []
   def common_def(a):

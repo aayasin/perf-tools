@@ -131,7 +131,8 @@ def read_toplev(filename, metric=None):
   try:
     for l in C.file2lines(filename):
       items = l.strip().split()
-      if items[0].startswith('Info.Bot'):
+      if len(items) < 1: continue
+      if 'Info.Bot' in items[0]:
         d[items[1]] = float(items[3])
       elif '<==' in l and len(items) < 7:
         d['Critical-Node'] = items[1]

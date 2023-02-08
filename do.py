@@ -699,7 +699,8 @@ def main():
     param = c.split(':')[1:] if ':' in c else None
     if   c == 'forgive-me':   pass
     elif c == 'setup-all':    tools_install()
-    elif c == 'prof-no-mux':  profile(0x80, toplev_args=['vl6', ' --metric-group +Summary --single-thread'])
+    elif c == 'prof-no-mux':  profile(args.profile_mask if args.profile_mask != C.PROF_MASK_DEF else 0x80,
+                                      toplev_args=['vl6', ' --metric-group +Summary --single-thread'])
     elif c == 'build-perf':   exe('%s ./do.py setup-all --install-perf build -v%d --tune %s' % (do['python'],
       args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+('xed', 'tee'))])))
     elif c == 'setup-perf':   setup_perf()

@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.00
+__version__= 1.01
 
 import common as C, pmu
 from common import inc
@@ -86,11 +86,12 @@ def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
 def vec_len(i, t='int'): return 'vec%d-%s' % (128 * (2 ** i), t)
 def line_inst(line):
   pInsts = ('cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper', 'zcnt')
-  allInsts = ['nop', 'lea', 'prefetch', 'cisc-test', 'store', 'load'] + list(pInsts)
+  allInsts = ['nop', 'lea', 'lock', 'prefetch', 'cisc-test', 'store', 'load'] + list(pInsts)
   if not line: return allInsts
   if 'nop' in line: return 'nop'
   elif '(' in line:  # load/store take priority in CISC insts
     if 'lea' in line: return 'lea'
+    elif 'lock' in line: return 'lock'
     elif 'prefetch' in line: return 'prefetch'
     elif is_type('cisc-test', line) or 'gather' in line: return 'load'
     elif re.match(r"\s+\S+\s+[^\(\),]+,", line) or 'scatter' in line: return 'store'
@@ -202,7 +203,7 @@ def detect_loop(ip, lines, loop_ipc,
     if is_taken(lines[-1]): iter_update()
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds = 1, {}, []
-      types = ('taken', 'load', 'store', 'prefetch', 'lea', 'nop', 'cmov', 'zcnt')
+      types = ('taken', 'load', 'store', 'lock', 'lea', 'cmov', 'zcnt')
       for i in types: cnt[i] = 0
       x = len(lines)-2
       while x >= 1:

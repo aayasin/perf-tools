@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.01
+__version__= 1.02
 
 import common as C, pmu
 from common import inc
@@ -26,6 +26,7 @@ FP_SUFFIX = "[sdh]([a-z])?"
 INDIRECT  = r"(jmp|call).*%"
 CALL_RET  = '(call|ret)'
 COND_BR   = 'j[^m].*'
+MEM_INSTS = ['load', 'store', 'lock', 'prefetch']
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
 hitcounts = C.envfile('PTOOLS_HITS')
@@ -86,7 +87,7 @@ def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
 def vec_len(i, t='int'): return 'vec%d-%s' % (128 * (2 ** i), t)
 def line_inst(line):
   pInsts = ('cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper', 'zcnt')
-  allInsts = ['nop', 'lea', 'lock', 'prefetch', 'cisc-test', 'store', 'load'] + list(pInsts)
+  allInsts = ['nop', 'lea', 'cisc-test'] + MEM_INSTS + list(pInsts)
   if not line: return allInsts
   if 'nop' in line: return 'nop'
   elif '(' in line:  # load/store take priority in CISC insts
@@ -97,7 +98,7 @@ def line_inst(line):
     elif re.match(r"\s+\S+\s+[^\(\),]+,", line) or 'scatter' in line: return 'store'
     else: return 'load'
   else:
-    for x in pInsts:
+    for x in pInsts: # skip non-vector p/v-prefixed insts
       if x in line: return x
     r = re.match(r"\s+\S+\s+(\S+)", line)
     if r and re.match(r"^[pv]", r.group(1)):
@@ -203,7 +204,7 @@ def detect_loop(ip, lines, loop_ipc,
     if is_taken(lines[-1]): iter_update()
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds = 1, {}, []
-      types = ('taken', 'load', 'store', 'lock', 'lea', 'cmov', 'zcnt')
+      types = ['taken', 'lea', 'cmov'] + MEM_INSTS + ['zcnt']
       for i in types: cnt[i] = 0
       x = len(lines)-2
       while x >= 1:
@@ -280,13 +281,14 @@ def inst2pred(i):
   }
   if i is None: return list(i2p.keys())
   return i2p[i] if i in i2p else i
+
+# determine what is counted globally
 def is_imix(t):
-  imem = ('load', 'store', 'vzeroupper')
-  if not t: return list(imem) + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
-  return t in imem or t.startswith('vec')
-Insts = inst2pred(None) + ['call', 'push', 'pop']
-Insts_common = is_imix(None) + ['all']
-Insts_all = Insts + ['cond_backward', 'cond_forward'] + Insts_common
+  if not t: return MEM_INSTS + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
+  return t in MEM_INSTS or t.startswith('vec')
+Insts = inst2pred(None) + ['call', 'push', 'pop', 'vzeroupper']
+Insts_global = Insts + is_imix(None) + ['all']
+Insts_all = ['cond_backward', 'cond_forward'] + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + Insts_all}
 hsts = {}
@@ -420,6 +422,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       if len(lines) and not is_label(line):
         if edge_en:
           glob['all'] += 1
+          # An instruction may be counted individually and/or per imix class
           for x in Insts:
             if is_type(x, line): glob[x] += 1
           t = line_inst(line)
@@ -556,10 +559,16 @@ def print_hist(hist_t, Threshold=0.01):
 def print_hist_sum(name, h):
   s = sum(hsts[h].values())
   print_stat(name, s, comment='histogram' if s else '')
-def print_stat(name, count, prefix='count', comment=''):
+def print_stat(name, count, prefix='count', comment='', imix=False):
   def c(x): return x.replace(':', '-')
+  def nm(x):
+    if not imix: return x
+    n = x.upper() + ' '
+    if x.startswith('vec'): n += 'comp '
+    n += ('insts-class' if x in is_imix(None) else 'instructions')
+    return n
   if len(comment): comment = '\t:(see %s below)' % c(comment)
-  print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(name), 45 - len(prefix)), str(count), comment))
+  print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 45 - len(prefix)), str(count), comment))
 def print_estimate(name, s): print_stat(name, s, 'estimate')
 
 def print_common(total):
@@ -575,7 +584,7 @@ def print_common(total):
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
   if glob['size_stats_en']:
     for x in ('backward', ' forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x.strip()])
-    for x in Insts + Insts_common: print_stat(x.upper() + ' instructions', glob[x])
+    for x in Insts_global: print_stat(x, glob[x], imix=True)
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')

@@ -166,6 +166,10 @@ def env2str(x):
   y = os.getenv(x)
   return '%s=%s' % (x, y) if y else ''
 
+def env2list(x, default):
+  y = os.getenv(x)
+  return y.split() if y else default
+
 def envfile(x):
   x = os.getenv(x)
   return x if x and os.path.isfile(x) else None

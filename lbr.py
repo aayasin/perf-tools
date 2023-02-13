@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.02
+__version__= 1.04
 
 import common as C, pmu
 from common import inc
@@ -33,6 +33,7 @@ hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('DBG')
 verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings
 use_cands = os.getenv('LBR_USE_CANDS')
+user_imix = C.env2list('LBR_IMIX', ['vpmovmskb'])
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
@@ -204,6 +205,7 @@ def detect_loop(ip, lines, loop_ipc,
     if is_taken(lines[-1]): iter_update()
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds = 1, {}, []
+      # TODO: Add env to generalize zcnt as loop identifier here and in line_inst()
       types = ['taken', 'lea', 'cmov'] + MEM_INSTS + ['zcnt']
       for i in types: cnt[i] = 0
       x = len(lines)-2
@@ -284,9 +286,10 @@ def inst2pred(i):
 
 # determine what is counted globally
 def is_imix(t):
+  # TODO: cover FP vector too
   if not t: return MEM_INSTS + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
   return t in MEM_INSTS or t.startswith('vec')
-Insts = inst2pred(None) + ['call', 'push', 'pop', 'vzeroupper']
+Insts = inst2pred(None) + ['call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
 Insts_global = Insts + is_imix(None) + ['all']
 Insts_all = ['cond_backward', 'cond_forward'] + Insts_global
 
@@ -563,11 +566,14 @@ def print_stat(name, count, prefix='count', comment='', imix=False):
   def c(x): return x.replace(':', '-')
   def nm(x):
     if not imix: return x
-    n = x.upper() + ' '
+    n = (x if 'cond' in name else x.upper()) + ' '
     if x.startswith('vec'): n += 'comp '
-    n += ('insts-class' if x in is_imix(None) else 'instructions')
+    if x in is_imix(None):  n += 'insts-class'
+    elif 'cond' in name:    n += 'branches'
+    else: n += 'instructions'
     return n
   if len(comment): comment = '\t:(see %s below)' % c(comment)
+  elif imix: comment = '\t: %7s of ALL' % ratio(count, glob['all'])
   print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 45 - len(prefix)), str(count), comment))
 def print_estimate(name, s): print_stat(name, s, 'estimate')
 
@@ -583,7 +589,7 @@ def print_common(total):
   if len(pages): print_stat(nc('code 4K-pages'), len(pages))
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
   if glob['size_stats_en']:
-    for x in ('backward', ' forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x.strip()])
+    for x in ('backward', ' forward'): print_stat(x + ' taken conditional', glob['cond_' + x.strip()], imix=True)
     for x in Insts_global: print_stat(x, glob[x], imix=True)
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

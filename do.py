@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.88
+__version__ = 1.89
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -38,6 +38,7 @@ do = {'run':        C.RUN_DEF,
   'container':      0,
   'core':           1,
   'cpuid':          0 if C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
+  'debug':          0,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
   'flameg':         0,
@@ -234,7 +235,7 @@ def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpu
 
 def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   def new_line(): return prn_line(out)
-  def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s'%(args.pmu_tools, m))
+  def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s' % (args.pmu_tools, m))
   C.printc(do['pmu']) #OS
   if args.mode == 'process': return
   exe('uname -a > ' + out, 'logging setup')
@@ -629,7 +630,8 @@ def build_kernel(dir='./kernels/'):
 def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
-    defs={'perf': 'perf', 'pmu-tools': '%s ./pmu-tools' % do['python'], 'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']})
+    defs={'perf': 'perf', 'pmu-tools': '%s %s/pmu-tools' % (do['python'], C.dirname()),
+          'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']})
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
@@ -662,6 +664,7 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
+  if do['debug']: C.dump_stack_on_error = 1
   do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
   if do['perf-stat-add']:
     x = ',branches,branch-misses'

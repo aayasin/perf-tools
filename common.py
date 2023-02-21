@@ -90,8 +90,9 @@ def annotate(stuff, label=''):
 # @redir_out:  redirect output of the (first non-piped) command as specified
 # @run:   do run the specified command
 # @log:   log the commands's output into log_stdio (if any)
+# @fail:  exit with error if command fails
 # @background: run the specified command in background (do not block)
-def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, background=False):
+def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=True, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
   if msg:
     if '@' in msg: msg='\t' + msg.replace('@', '')
@@ -108,7 +109,10 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, backgr
       ret = call(['/bin/bash', '-c', 'set -o pipefail; ' + x])
     else:
       ret = os.system(x)
-  if ret != 0: error("Command \"%s\" failed with '%d'" % (x.replace("\n", "\\n"), ret))
+  if ret != 0:
+    msg = "Command \"%s\" failed with '%d'" % (x.replace("\n", "\\n"), ret)
+    error(msg) if fail else warn(msg)
+  return ret
 
 def exe_output(x, sep=";"):
   out = check_output(x, shell=True)
@@ -281,7 +285,7 @@ def args_parse(d, args):
 
 import argparse
 RUN_DEF = './run.sh'
-TOPLEV_DEF=' --global --frequency --no-uncore --metric-group +Summary'
+TOPLEV_DEF=' --global --frequency --metric-group +Summary'
 PROF_MASK_DEF=0x317F
 def add_hex_arg(ap, n, fn, d, h):
   ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)

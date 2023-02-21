@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.89
+__version__ = 1.90
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -90,7 +90,7 @@ do = {'run':        C.RUN_DEF,
 }
 args = argparse.Namespace()
 
-def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, background=False, export=None):
+def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=True, background=False, export=None):
   X = x.split()
   if msg and do['batch']: msg += " for '%s'" % args.app
   if redir_out: redir_out=' %s' % redir_out
@@ -115,7 +115,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, backgro
     if not 'loop_stats' in x or args.verbose > 0:
       do['cmds_file'].write(x + '\n')
       do['cmds_file'].flush()
-  return C.exe_cmd(x, msg, redir_out, debug, run, log, background)
+  return C.exe_cmd(x, msg, redir_out, debug, run, log, fail, background)
 def exe1(x, m=None, log=True):
   if args.stdout and '| tee' in x: x, log = x.split('| tee')[0], False
   return exe(x, m, redir_out=None, log=log)
@@ -318,7 +318,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', events=events, perfmetrics=0, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
     return log
-  def perf_script(x, msg=None, export='', takens=False):
+  def perf_script(x, msg=None, export='', takens=False, fail=True):
     if do['perf-scr']:
       samples = 1e4 * do['perf-scr']
       if perf_script.first: C.info('processing first %d samples only' % samples)
@@ -328,7 +328,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if takens: instline += '.*#'
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
     perf_script.first = False
-    return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 2), export=export)
+    return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 2), export=export, fail=fail)
   perf_script.first = True
   perf_stat_log = None
   def record_name(flags): return '%s%s' % (out, C.chop(flags, (' :/,={}\'', 'cpu_core', 'cpu')))
@@ -479,7 +479,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))
       sort2uf = "%s |%s ./ptage" % (sort2u, " egrep -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
       perf_script("-i %s -F ip -c %s | %s > %s.samples.log && %s" %
-        (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')))
+        (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')), fail=0)
       if do['xed']:
         if (do['imix'] & 0x8) == 0:
           perf_script("-i %s -F +brstackinsn --xed -c %s | GREP_INST| grep MISPRED | %s | %s > %s.mispreds.log" %

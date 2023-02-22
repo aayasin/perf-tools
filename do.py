@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.91
+__version__ = 1.92
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -40,7 +40,7 @@ do = {'run':        C.RUN_DEF,
   'cpuid':          0 if C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
   'debug':          0,
   'dmidecode':      0,
-  'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UPI",
+  'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UopPI",
   'flameg':         0,
   'forgive':        0,
   'gen-kernel':     1,
@@ -55,7 +55,7 @@ do = {'run':        C.RUN_DEF,
   'ldlat':          int(LDLAT_DEF),
   'levels':         2,
   'metrics':        '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict' +
-                    (',+Memory_Bound*/3' if pmu.goldencove() else ''), # +UPI once ICL mux fixed, +ORO with TMA 4.5
+                    (',+Memory_Bound*/3' if pmu.goldencove() else ''), # +UopPI once ICL mux fixed, +ORO with TMA 4.5
   'model':          'MTL',
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),

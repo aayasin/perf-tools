@@ -80,7 +80,7 @@ for x in C.argument_parser(None):
   if a: do += ' --%s %s' % (x, "'%s'" % a if ' ' in a else a)
 x = 'tune'
 a = getattr(args, x) or []
-a.insert(0, [':loops:10 :batch:1'])
+a.insert(0, [':loops:10 :batch:1 :help:0'])
 do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
 def exe(c): return C.exe_cmd(c, debug=args.verbose)

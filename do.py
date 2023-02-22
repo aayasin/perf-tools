@@ -249,7 +249,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   if do['msr']:
     for m in do['msrs']:
       v = read_msr(m)
-      exe('echo "MSR %s: %s" >> ' % (m, '0'*(16 - len(v)) + v) + out)
+      exe('echo "MSR %s: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
   exe("dmesg -T | tee %s | %s >> %s && %s | tail -1 >> %s" % (d, C.grep('Performance E|micro'), out, C.grep('BIOS ', d), out))
   exe("perf record true 2> /dev/null && perf report -I --header-only > setup-cpu-toplogy.log".replace('perf', get_perf_toplev()[0]))
@@ -380,7 +380,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   
   toplev += ' --no-desc'
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
-  grep_NZ= "egrep -iv '^((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add|warning:)|not (found|referenced|supported)|##placeholder##' "
+  grep_NZ= "egrep -iv '^(all|)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add|warning:)|not (found|referenced|supported)|##placeholder##' "
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
   def toplev_V(v, tag='', nodes=do['nodes'],

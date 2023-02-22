@@ -53,7 +53,7 @@ def print_DB(c):
     if x.endswith(':var') or x.startswith('topdown-') or '.' in x or x in ['branch-misses']: continue
     v = sDB[c][x]
     if x in read_perf(None): v = float('%.2f' % v)
-    val = '%18s' % C.float2str(v) if C.is_float(v) else v
+    val = '%18s' % C.float2str(v) if C.is_num(v) else v
     if x+':var' in sDB[c] and sDB[c][x+':var']: val += ' +- %s%%' % sDB[c][x+':var']
     d['%30s' % x] = val
   print(c, '::\n', C.dict2str(d, '\t\n').replace("'", ""))

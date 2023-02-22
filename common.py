@@ -12,8 +12,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 
-import sys, os, re, pickle
-from subprocess import check_output, Popen, call
+import os, pickle, re, subprocess, sys
 
 # logging
 #
@@ -100,13 +99,13 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=T
     if run or msg.endswith('..'): printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
-  if background: return Popen(x.split())
+  if background: return subprocess.Popen(x.split())
   ret = 0
   if run:
     if log and log_stdio:
       if not '2>&1' in x: x = x + ' 2>&1'
       x = x + ' | tee -a ' + log_stdio
-      ret = call(['/bin/bash', '-c', 'set -o pipefail; ' + x])
+      ret = subprocess.call(['/bin/bash', '-c', 'set -o pipefail; ' + x])
     else:
       ret = os.system(x)
   if ret != 0:
@@ -115,7 +114,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=T
   return ret
 
 def exe_output(x, sep=";"):
-  out = check_output(x, shell=True)
+  out = subprocess.check_output(x, shell=True)
   if isinstance(out, (bytes, bytearray)):
     out = out.decode()
   return out.replace("\n", sep)
@@ -126,9 +125,14 @@ def exe2list(x, debug=False):
   return res
 
 def exe_one_line(x, field=None, debug=False):
-  res = exe_output(x, '')
+  x_str = 'exe_one_line(%s, f=%s)' % (x, str(field))
+  try:
+    res = exe_output(x, '')
+  except subprocess.CalledProcessError:
+    warn('%s failed!' % x_str)
+    res = 'N/A'
   if field is not None: res = str2list(res)[field]
-  if debug: printc('exe_one_line(%s, f=%s) = %s' % (x, str(field), res), color.BLUE)
+  if debug: printc('%s = %s' % (x_str, res), color.BLUE)
   return res
 
 def par_jobs_file(commands, name=None, verbose=False, shell='bash'):
@@ -245,15 +249,15 @@ def any_in(l, s):
     if i in s: return 1
   return 0
 
-def is_float(x):
+def is_num(x, hex=False):
   try:
-    float(x)
+    int(x, 16) if hex else float(x)
     return True
   except ValueError:
     return False
 
 def float2str(f):
-  if not is_float(f): return f
+  if not is_num(f): return f
   return '{:,}'.format(f)
 
 def flag_value(s, f, v='', sep=' '):

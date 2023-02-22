@@ -149,7 +149,9 @@ def cpu(what):
 # cpu.state = None
 
 def cpu_msrs():
-  msrs = ['0x048', '0x08b', '0x1a4']
+  msrs = ['0x048', '0x08b', '0x123', # IA32_SPEC_CTRL, microcode update signature, IA32_MCU_OPT_CTRL
+          '0x1a4', # Prefetch Control
+  ]
   if goldencove(): msrs += ['0x6a0', '0x6a2']
   if server():
     msrs += ['0x610']  # RAPL. TODO: assert SNB-EP onwards

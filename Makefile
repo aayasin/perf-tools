@@ -26,7 +26,7 @@ intel:
 	git clone https://gitlab.devtools.intel.com/micros/dtlb
 	cd dtlb; ./build.sh
 	git clone https://github.com/intel-innersource/applications.benchmarking.cpu-micros.inst-lat-bw
-	wget https://downloadmirror.intel.com/763324/mlc_v3.10.tgz
+	#wget https://downloadmirror.intel.com/763324/mlc_v3.10.tgz
 tramp3d-v4: pmu-tools/workloads/CLTRAMP3D
 	cd pmu-tools/workloads; ./CLTRAMP3D; cp tramp3d-v4.cpp CLTRAMP3D ../..; rm tramp3d-v4.cpp
 	sed -i "s/11 tramp3d-v4.cpp/11 tramp3d-v4.cpp -o $@/" CLTRAMP3D

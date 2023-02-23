@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.04
+__version__= 1.05
 
 import common as C, pmu
 from common import inc
@@ -182,13 +182,13 @@ def detect_loop(ip, lines, loop_ipc,
     if ip != loop_ipc: return
     if not 'IPC' in loop: loop['IPC'] = {}
     if not has_timing(lines[-1]): return
-    cycles = 0
+    cycles, takens = 0, []
     begin, at = find_block_ip()
     while begin:
       if begin == ip:
         if cycles == 0: inc(loop['IPC'], line_timing(lines[-1])[1]) # IPC is supported for loops execution w/ no takens
         if 'Conds' in loop and 'Cond_polarity' in loop:
-          for c in loop['Cond_polarity'].keys(): loop['Cond_polarity'][c]['tk' if cycles else 'nt'] += 1
+          for c in loop['Cond_polarity'].keys(): loop['Cond_polarity'][c]['tk' if c in takens else 'nt'] += 1
         cycles += line_timing(lines[-1])[0]
         glob['loop_cycles'] += cycles
         glob['loop_iters'] += 1
@@ -196,6 +196,7 @@ def detect_loop(ip, lines, loop_ipc,
       else:
         if has_timing(lines[at]):
           cycles += line_timing(lines[at])[0]
+          takens += [ lines[at] ]
           begin, at = find_block_ip(at-1)
         else: break
   
@@ -620,9 +621,10 @@ def print_all(nloops=10, loop_ipc=0):
           lp['%s_taken' % hex(c)] = ratio(lp['Cond_polarity'][c]['tk'], lp['Cond_polarity'][c]['tk'] + lp['Cond_polarity'][c]['nt'])
       tot = print_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0]))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
-      if hitcounts and lp['size'] and lp['taken'] == 0:
-        C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
+      if hitcounts and lp['size']:
+        if lp['taken'] == 0: C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
           'Hitcounts & ASM of loop %s' % hex(loop_ipc))
+        else: lp['attributes'] += ';likely_non-contiguous'
       find_print_loop(loop_ipc, sloops)
     else:
       C.warn('Loop %s was not observed' % hex(loop_ipc))

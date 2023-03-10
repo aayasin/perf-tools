@@ -318,7 +318,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', events=events, perfmetrics=0, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
     return log
-  def perf_script(x, msg=None, export='', takens=False, fail=True):
+  def perf_script(x, msg, export='', takens=False, fail=True):
     if do['perf-scr']:
       samples = 1e4 * do['perf-scr']
       if perf_script.first: C.info('processing first %d samples only' % samples)
@@ -427,7 +427,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown 2 levels + FE Bottlenecks')
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
 
-  if en(14):
+  if en(14) and pmu.meteorlake():
     flags, events = '-W -c 20011', pmu.get_events(do['model'])
     data = '%s-tpebs-perf.data' % record_name('-%s%d' % (do['model'], events.count(':p')))
     cmd = "%s record %s -e %s -o %s -- %s" % (ocperf, flags, events, data, r)
@@ -478,8 +478,8 @@ def profile(mask, toplev_args=['mvl6', None]):
       if isfile(perf_stat_log):
         exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))
       sort2uf = "%s |%s ./ptage" % (sort2u, " egrep -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      perf_script("-i %s -F ip -c %s | %s > %s.samples.log && %s" %
-        (data, comm, sort2uf, data, log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')), fail=0)
+      perf_script("-i %s -F ip -c %s | %s > %s.samples.log && %s" % (data, comm, sort2uf, data,
+        log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')), '@processing samples', fail=0)
       if do['xed']:
         if (do['imix'] & 0x8) == 0:
           perf_script("-i %s -F +brstackinsn --xed -c %s | GREP_INST| grep MISPRED | %s | %s > %s.mispreds.log" %
@@ -722,7 +722,7 @@ def main():
     elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0 && sudo rdmsr 0x1a4')
     elif c == 'enable-fix-freq':    fix_frequency()
     elif c == 'disable-fix-freq':   fix_frequency('undo')
-    elif c == 'help':         toplev_describe(args.metrics, mod='')
+    elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
     elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
                                     ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))
     elif c == 'log':          log_setup()

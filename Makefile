@@ -65,7 +65,7 @@ lspmu:
 
 help: do-help.txt
 do-help.txt: do.py
-	./$^ -h > $@
+	./$^ -h > $@ && sed -i 's|/home/admin1/ayasin/perf-tools|\.|' $@
 
 update:
 	$(DO) tools-update -v1
@@ -80,8 +80,8 @@ test-study:
 
 pre-push: help tramp3d-v4
 	rm -rf {run,BC2s,datadep,CLTRAMP3D}*{csv,data,old,log,txt} test-dir
-	$(DO) help -m GFLOPs --tune :help:1
-	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='" 	    # tests sys-wide + topdown tree; MEM_Bandwidth in L5
+	$(DO) log help -m GFLOPs                                # tests help of metric; prompt for sudo password
+	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
 	$(MAKE) test-metric SHOW="grep --color -E '^|Ret.*<=='" # tests perf -M IpCall, toplev --drilldown
 	$(MAKE) test-bc2 SHOW="grep --color -E '^|Mispredict'"	# tests topdown across-tree tagging; Mispredict
 	$(MAKE) test-build                                      # tests build command, perf -e, toplev --nodes; Ports_Utilized_1

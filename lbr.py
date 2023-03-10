@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.05
+__version__= 1.06
 
 import common as C, pmu
 from common import inc
@@ -82,6 +82,8 @@ def line_timing(line):
   ipc = round(float(x.group(3)), 1)
   cycles = int(x.group(2))
   return cycles, ipc
+
+def num_valid_sample(): return stat['total'] - stat['bad'] - stat['bogus']
 
 vec_size = 3 if pmu.cpu_has_feature('avx512vl') else 2
 def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
@@ -273,10 +275,8 @@ LBR_Event = pmu.lbr_event()[:-4]
 lbr_events = []
 loops = {}
 stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
-stat['IPs'] = {}
-stat['events'] = {}
-stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
-size_sum=0
+for x in ('IPs', 'events', 'takens'): stat[x] = {}
+stat['size'], size_sum = {'min': 0, 'max': 0, 'avg': 0}, 0
 
 def inst2pred(i):
   i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
@@ -300,6 +300,7 @@ footprint = set()
 pages = set()
 indirects = set()
 
+IPTB  = 'inst-per-taken-br'
 FUNCP = 'Params_of_func'
 FUNCR = 'Regs_by_func'
 def count_of(t, lines, x, hist):
@@ -319,6 +320,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   glob['ip_filter'] = ip_filter
   edge_en = event.startswith(LBR_Event) and not ip_filter and not loop_ipc # config good for edge-profile
   if stat['total'] == 0 and edge_en:
+    hsts[IPTB] = {}
     hsts[FUNCR] = {}
     hsts[FUNCP] = {}
     if indirect_en:
@@ -335,7 +337,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
-    xip, timestamp = None, None
+    insts, takens, xip, timestamp = 0, 0, None, None
     tc_state = 'new'
     stat['total'] += 1
     if stat['total'] % tick == 0: C.printf('.')
@@ -431,14 +433,22 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
             if is_type(x, line): glob[x] += 1
           t = line_inst(line)
           if t and is_imix(t): glob[t] += 1
-        # a 2nd instruction
-        if len(lines) > 1:
+        if len(lines) == 1:
+          if is_taken(line): takens += 1
+          # Expect a taken branch in first entry, but for some reason Linux/perf sometimes return <32 entry LBR
+          #else: print('##', num_valid_sample())
+        else: # a 2nd instruction
           detect_loop(ip, lines, loop_ipc)
-          if (verbose & 0x1) and edge_en and is_taken(line): #FUNCR
-            x = get_taken_idx(lines, -1)
-            if x >= 0:
-              if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
-              if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
+          insts += 1
+          if edge_en and is_taken(line):
+            takens += 1
+            inc(hsts[IPTB], insts)
+            insts = 0
+            if (verbose & 0x1): #FUNCR
+              x = get_taken_idx(lines, -1)
+              if x >= 0:
+                if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
+                if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
           if edge_en and is_taken(lines[-1]) and is_type(COND_BR, lines[-1]):
             glob['cond_%sward' % ('for' if ip > xip else 'back')] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
@@ -466,6 +476,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       if stat['size']['min'] > size: stat['size']['min'] = size
       if stat['size']['max'] < size: stat['size']['max'] = size
     size_sum += size
+  inc(stat['takens'], takens)
   return lines
 
 def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
@@ -695,7 +706,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
 def print_sample(sample, n=10):
   if not len(sample): return
   C.printf('\n'.join(('sample#%d size=%d' % (stat['total'], len(sample)-1), sample[0], '\n')))
-  C.printf('\n'.join((sample[-min(n, len(sample)-1):] if n else sample) + ['\n']))
+  if len(sample) > 1: C.printf('\n'.join((sample[-min(n, len(sample)-1):] if n else sample) + ['\n']))
   sys.stderr.flush()
 
 def print_header():

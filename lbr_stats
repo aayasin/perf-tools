@@ -43,6 +43,7 @@ while True:
   c['total'] += 1
   if stop and c['total'] >= int(stop):
     if not loop:
+      print_sample(sample, 0)
       C.info('stopping after %s valid samples' % stop)
       C.printf("run:\t 'kill -9 $(pidof perf)'\t!\n")
     break

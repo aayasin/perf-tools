@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.92
+__version__ = 1.93
 
 import argparse, os.path, sys
 import common as C, pmu, stats

@@ -1,9 +1,11 @@
+.PHONY: clean clean-all help
 DO = ./do.py
 ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 APP = taskset 0x4 ./CLTRAMP3D
 DO1 = $(DO) profile -a "$(APP)" --tune :loops:10 $(DO_ARGS)
 DO2 = $(DO) profile -a pmu-tools/workloads/BC2s $(DO_ARGS)
 FAIL = (echo "failed! $$?"; exit 1)
+PM = -pm 0x317f
 RERUN = -pm 0x80
 MAKE = make --no-print-directory
 MGR = sudo $(shell python -c 'import common; print(common.os_installer())')
@@ -44,12 +46,12 @@ test-mt: run-mt
 	set -o pipefail; $(DO) profile -s1 $(RERUN) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
 test-bc2:
-	$(DO2) -pm 42 | $(SHOW)
+	$(DO2) -pm 40 | $(SHOW)
 test-metric:
 	$(DO) profile -m IpCall --stdout -pm 2
 	$(DO) profile -pm 40 | $(SHOW)
 
-clean:
+clean-all: clean
 	rm tramp3d-v4{,.cpp} CLTRAMP3D
 lint: *.py kernels/*.py
 	grep flake8 .github/workflows/pylint.yml | tail -1 > /tmp/1.sh
@@ -71,25 +73,28 @@ update:
 	$(DO) tools-update -v1
 test-build:
 	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS \
-	-n '+Core_Bound*' -pm 22
+	      -n '+Core_Bound*' -pm 22 | $(SHOW)
 test-default:
-	$(DO1) -pm 0x317f
-test-study:
+	$(DO1) $(PM)
+test-study: study.py run.sh do.py
 	rm -f run-cfg*
-	./study.py cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > .study.log 2>&1 || $(FAIL)
+	./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > $@ 2>&1 || $(FAIL)
 
+clean:
+	rm -rf {run,BC2s,datadep,CLTRAMP3D}*{csv,data,old,log,txt} test-{dir,study}
 pre-push: help tramp3d-v4
-	rm -rf {run,BC2s,datadep,CLTRAMP3D}*{csv,data,old,log,txt} test-dir
-	$(DO) log help -m GFLOPs                                # tests help of metric; prompt for sudo password
+	$(DO) log help -m GFLOPs DO_ARGS=":msr:1"               # tests help of metric; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
-	$(MAKE) test-metric SHOW="grep --color -E '^|Ret.*<=='" # tests perf -M IpCall, toplev --drilldown
+	$(MAKE) test-metric SHOW="grep --color -E '^|Ret.*<=='" # tests perf -M IpCall & colored TMA, then toplev --drilldown
 	$(MAKE) test-bc2 SHOW="grep --color -E '^|Mispredict'"	# tests topdown across-tree tagging; Mispredict
-	$(MAKE) test-build                                      # tests build command, perf -e, toplev --nodes; Ports_Utilized_1
+	$(MAKE) test-build SHOW="grep --color -E '^|build|DSB|Ports'" # tests build command, perf -e, toplev --nodes; Ports_*
 	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'                 # tests load-latency profile-step + verbose:1
-	$(MAKE) test-default                                    # tests default non-MUX sensitive commands
+	$(MAKE) test-default PM="-pm 313e"                      # tests default non-MUX sensitive profile-steps
+	$(DO1) --toplev-args ' --no-multiplex --frequency \
+	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
+	$(MAKE) test-default DO_ARGS=":perf-filter:0 :sample:3" \
+	     APP='taskset 0x4 ./CLTRAMP3D u' PM='-pm 31a'       # tests unfiltered sampling; PEBS profile-step
 	mkdir test-dir; cd test-dir; make -f ../Makefile test-default \
 	    DO=../do.py APP=../pmu-tools/workloads/BC2s         # tests default from another directory, toplev describe
-	$(DO1) --toplev-args ' --no-multiplex --frequency \
-	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive commands
 	$(MAKE) test-study                                      # tests study script (errors only)
-	$(DO1) > .do.log 2>&1 || $(FAIL)                        # tests default profile-steps (errors only)
+	$(DO) profile > .do.log 2>&1 || $(FAIL)                 # tests default profile-steps (errors only)

@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.93
+__version__ = 1.94
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -64,6 +64,7 @@ do = {'run':        C.RUN_DEF,
   'objdump':        'binutils-gdb/binutils/objdump' if os.path.isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
   'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
+  'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
   'perf-pebs':      '-b -e %s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp -c 1000003' % pmu.pmu(),
@@ -286,10 +287,16 @@ def get_perf_toplev():
 def profile(mask, toplev_args=['mvl6', None]):
   out = uniq_name()
   perf, toplev, ocperf = get_perf_toplev()
+  perf_report = ' '.join((perf, 'report', '--objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else ''))
+  perf_report_mods = perf_report + ' --stdio -F sample,overhead,comm,dso'
+  perf_report_syms = perf_report_mods + ',sym'
+  sort2u = 'sort | uniq -c | sort -n'
+  sort2up = sort2u + ' | ./ptage'
   def en(n): return mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
+  def perf_ic(data, comm): return ' '.join(['-i', data, '-c %s' % comm if comm else ''])
   def perf_stat(flags, msg, events='', perfmetrics=do['core'],
                 grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
@@ -318,18 +325,35 @@ def profile(mask, toplev_args=['mvl6', None]):
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', events=events, perfmetrics=0, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
     return log
-  def perf_script(x, msg, export='', takens=False, fail=True):
+
+  def get_comm(data):
+    if not do['perf-filter']: return None
+    if do['comm']: return do['comm']
+    # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
+    comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (data, sort2u), 1)
+    if comm == 'perf' or comm.startswith('perf-'):
+      # e.g. a perf tool overhead bug in Intel event names handling
+      exe(' '.join([perf_report_syms, '-i', perf_data, '| grep -A11 Samples']))
+      C.error("Most samples in 'perf' tool. Try run longer")
+    return comm
+  def perf_script(x, msg, data, export='', fail=True):
     if do['perf-scr']:
       samples = 1e4 * do['perf-scr']
       if perf_script.first: C.info('processing first %d samples only' % samples)
       export += ' LBR_STOP=%d' % samples
       x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (300*samples))
+    if do['perf-filter'] and not perf_script.comm:
+      perf_script.comm = get_comm(data)
+      if perf_script.first: C.info("filtering on command '%s' in next post-processing" % perf_script.comm)
     instline = '^\s+[0-9a-f]+\s'
-    if takens: instline += '.*#'
+    if 'taken branches' in msg: instline += '.*#'
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
+    if perf_script.first and not en(8): C.warn('LBR profile-step is disabled')
     perf_script.first = False
-    return exe(' '.join((perf, 'script', x)), msg, redir_out=None, timeit=(args.verbose > 2), export=export, fail=fail)
+    return exe(' '.join((perf, 'script', perf_ic(data, perf_script.comm), x)), msg, redir_out=None,
+               timeit=(args.verbose > 2), export=export, fail=fail)
   perf_script.first = True
+  perf_script.comm = do['comm']
   perf_stat_log = None
   def record_name(flags): return '%s%s' % (out, C.chop(flags, (' :/,={}\'', 'cpu_core', 'cpu')))
   def get_stat(s, default): return stats.get_stat_log(s, perf_stat_log) if isfile(perf_stat_log) else default
@@ -340,11 +364,6 @@ def profile(mask, toplev_args=['mvl6', None]):
       do[x] = do[x].replace('0000', '0' * (4 + factor))
       C.info('\tcalibrated: %s' % do[x])
     return record_name(do[x])
-  perf_report = ' '.join((perf, 'report', '--objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else ''))
-  perf_report_mods = perf_report + ' --stdio -F sample,overhead,comm,dso'
-  perf_report_syms = perf_report_mods + ',sym'
-  sort2u = 'sort | uniq -c | sort -n'
-  sort2up = sort2u + ' | ./ptage'
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): log_setup()
   if args.profile_mask & ~0x1: C.info('App: ' + r)
@@ -374,9 +393,9 @@ def profile(mask, toplev_args=['mvl6', None]):
       "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" %
       (data, base, base), '@annotate code', redir_out='2>/dev/null')
     exe("grep -w -5 '%s :' %s-code.log" % (exe_1line("egrep '\s+[0-9]+ :' %s-code.log | sort -n | tail -1" %
-                                                      base, 0), base), '@hottest block(s)')
-    if do['xed']: perf_script("-i %s -F insn --xed | %s " \
-      "| tee %s-hot-insts.log | tail"%(data, sort2up, base), '@time-consuming instructions')
+                                                      base, 0), base), '@hottest block(s), all commands')
+    if do['xed']: perf_script("-F insn --xed | %s | tee %s-hot-insts.log | tail" % (sort2up, base),
+                              '@time-consuming instructions', data)
   
   toplev += ' --no-desc'
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
@@ -435,29 +454,22 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe("%s script -i %s -F event,retire_lat > %s.retire_lat.txt" % (perf, data, data))
     exe("sort %s.retire_lat.txt | uniq -c | sort -n | ./ptage | tail" % (data, ))
 
-  data, comm = None, do['comm']
-  def perf_record(tag, comm, msg='', record='record', track_ipc=do['perf-stat-ipc']):
+  def perf_record(tag, msg=None, record='record', track_ipc=do['perf-stat-ipc']):
     perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
     flags = do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     cmd = 'bash -c "%s %s %s"' % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
-    exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s %s' % (tag.upper(), msg))
+    exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), ' ' + msg if msg else ''))
     warn_file(perf_data)
     if not tag in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_report, perf_data))
     if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:
       C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
-    if not comm:
-      # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
-      comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (perf_data, sort2u), 1)
-      if comm == 'perf' or comm.startswith('perf-'): # a perf tool overhead bug in Intel event names handling
-        exe(' '.join([perf_report_syms, '-i', perf_data, '| grep -A11 Samples']))
-        C.error("Most samples in 'perf' tool. Try run longer")
-    return perf_data, comm
+    return perf_data
   
   if en(8) and do['sample'] > 1:
     assert pmu.lbr_event()[:-1] in do['perf-lbr'] or do['forgive'], 'Incorrect event for LBR in: ' + do['perf-lbr']
-    data, comm = perf_record('lbr', comm)
-    info = '%s.info.log' % data
+    data = perf_record('lbr')
+    info, comm = '%s.info.log' % data, get_comm(data)
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def static_stats():
       bins = exe2list(perf + " script -i %s | cut -d\( -f2 | cut -d\) -f1 | egrep -v '^\[|anonymous' | %s | tail -5" %
@@ -473,23 +485,24 @@ def profile(mask, toplev_args=['mvl6', None]):
     def tail(f=''): return "tail %s | grep -v total" % f
     if not os.path.isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()
-      exe(perf + " report -i %s | grep -A13 'Branch Statistics:' | tee %s %s | egrep -v ':\s+0\.0%%|CROSS'" %
-          (data, '-a' if do['size'] else '', info), None if do['size'] else "@stats")
+      exe_v0('printf "# processing %s%s\n"%s %s' % (data, " filtered on '%s'" % comm if comm else '', '>>' if do['size'] else '>', info))
+      exe(perf + " report %s | grep -A13 'Branch Statistics:' | tee -a %s | egrep -v ':\s+0\.0%%|CROSS'" %
+          (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(perf_stat_log):
         exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))
       sort2uf = "%s |%s ./ptage" % (sort2u, " egrep -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      perf_script("-i %s -F ip -c %s | %s > %s.samples.log && %s" % (data, comm, sort2uf, data,
-        log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')), '@processing samples', fail=0)
+      perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data,
+        log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')), '@processing samples', data, fail=0)
       if do['xed']:
         if (do['imix'] & 0x8) == 0:
-          perf_script("-i %s -F +brstackinsn --xed -c %s | GREP_INST| grep MISPRED | %s | %s > %s.mispreds.log" %
-                      (data, comm, clean, sort2uf, data), '@processing mispredicts')
+          perf_script("-F +brstackinsn --xed | GREP_INST| grep MISPRED | %s | %s > %s.mispreds.log" %
+                      (clean, sort2uf, data), '@processing mispredicts', data)
         else:
-          perf_script("-i %s -F +brstackinsn --xed -c %s | GREP_INST"
+          perf_script("-F +brstackinsn --xed | GREP_INST"
             "| tee >(grep MISPRED | %s | tee >(egrep -v 'call|jmp|ret' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log)"
             "| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
-            (data, comm, clean, sort2uf, data, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data),
-            '@processing taken branches', takens=True)
+            (clean, sort2uf, data, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data),
+            '@processing taken branches', data)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'misp_tk_conds'))
         exe(log_br_count('mispredicted taken', 'mispreds'))
@@ -505,7 +518,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
-        misp, cmd, msg = '', "-i %s -F +brstackinsn --xed -c %s" % (data, comm), '@info'
+        misp, cmd, msg = '', "-F +brstackinsn --xed", '@info'
         if do['imix']:
           print_cmd(' '.join(('4debug', perf, 'script', cmd, '| less')), False)
           cmd += " | tee >(%s %s %s >> %s) %s | GREP_INST | %s " % (
@@ -521,10 +534,9 @@ def profile(mask, toplev_args=['mvl6', None]):
             msg += 'es'
         if (do['imix'] & 0x4) == 0:
           cmd += ' > /dev/null'
-        msg += " for '%s'" % comm
-        perf_script(cmd, msg)
+        perf_script(cmd, msg, data)
         if do['imix'] & 0x4: exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
-            "@instruction-mix no operands for '%s'" % comm)
+            "@instruction-mix no operands")
         if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
         exe("%s && tail %s | grep -v unique" % (C.grep('code footprint', info), info), "@top loops & more stats in " + info)
       else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
@@ -538,46 +550,45 @@ def profile(mask, toplev_args=['mvl6', None]):
         cmd += ' | ./loop_stats %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], info)
         print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, rp('loop_stats'),
           exe_1line('tail -1 %s' % loops, 2)[:-1], info))
-        perf_script("-i %s -F +brstackinsn --xed -c %s %s && %s" % (data, comm, cmd, C.grep('FL-cycles...[1-9][0-9]?', info, color=1)),
-          "@detailed stats for hot loops", export='PTOOLS_HITS=%s' % (hits,))
+        perf_script("-F +brstackinsn --xed %s && %s" % (cmd, C.grep('FL-cycles...[1-9][0-9]?', info, color=1)),
+          "@detailed stats for hot loops", data, export='PTOOLS_HITS=%s' % (hits,))
       else: warn_file(loops)
   
   if en(9) and do['sample'] > 2:
-    data, comm = perf_record('pebs', comm, C.flag_value(do['perf-pebs'], '-e'))
-    exe(perf_report_mods + " -i %s | tee %s.modules.log | grep -A12 Overhead" % (data, data), "@ top-10 modules")
-    perf_script("-i %s -F ip | %s | tee %s.ips.log | tail -11"%(data, sort2up, data), "@ top-10 IPs")
+    data = perf_record('pebs', C.flag_value(do['perf-pebs'], '-e'))
+    exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
+    perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
       if pmu.cpu('smt-on') and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')
       else:
         is_dsb = 1
-        perf_script("-i %s -F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
-                    (data, pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets")
+        perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
+                    (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
     top = 0
     if not is_dsb: pass
     elif top == 1:
       top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
-      perf_script("-i %s -F +brstackinsn --xed "
-        "| tee >(%s %s | tee -a %s.ips.log) " # asserts in skip_sample() only if piped!!
-        "| ./lbr_stats %s | tee -a %s.ips.log"%(data, rp('lbr_stats'), top_ip, data,
-            do['lbr-stats'], data), "@ stats on PEBS event")
+      # asserts in skip_sample() only if piped!!
+      perf_script("-F +brstackinsn --xed | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
+        rp('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
     else:
-      perf_script("-i %s -F +brstackinsn --xed "
-        "| ./lbr_stats %s | tee -a %s.ips.log"%(data, do['lbr-stats'], data), "@ stats on PEBS event")
+      perf_script("-F +brstackinsn --xed | ./lbr_stats %s | tee -a %s.ips.log" % (do['lbr-stats'], data),
+                  "@ stats on PEBS event", data)
     if top > 1:
       while top > 0:
         top_ip = exe_1line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
-        perf_script("-i %s -F +brstackinsn --xed "
-          "| ./lbr_stats %s | tee -a %s.ips.log"%(data, top_ip, data), "@ stats on PEBS ip=%s"%top_ip)
+        perf_script("-F +brstackinsn --xed | ./lbr_stats %s | tee -a %s.ips.log" % (top_ip, data),
+                    "@ stats on PEBS ip=%s" % top_ip, data)
         top -= 1
   
   if en(10):
-    data, comm = perf_record('ldlat', comm, record='record' if pmu.ldlat_aux() else 'mem record')
+    data = perf_record('ldlat', record='record' if pmu.ldlat_aux() else 'mem record')
     exe("%s mem report --stdio -i %s -F+symbol_iaddr -v " # workaround: missing -F+ip in perf-mem-report
         "-w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
         "| tee %s.ldlat.log | grep -A12 -B4 Overhead | tail -17" % (perf, data, data), "@ top-10 samples", redir_out=None)
-    def perf_script_ldlat(fields, tag): return perf_script("-i %s -F %s | grep -v mem-loads-aux | %s "
-      "| tee %s.%s.log | tail -11" % (data, fields, sort2up, data, tag.lower()), "@ top-10 %s" % tag)
+    def perf_script_ldlat(fields, tag): return perf_script("-F %s | grep -v mem-loads-aux | %s "
+      "| tee %s.%s.log | tail -11" % (fields, sort2up, data, tag.lower()), "@ top-10 %s" % tag, data)
     perf_script_ldlat('event,ip,insn --xed', 'IPs')
     perf_script_ldlat('ip,addr', 'IPs-DLAs')
 
@@ -586,18 +597,18 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe(cmd + " | tee %s | %s" % (log, grep_nz), 'topdown-%s no multiplexing' % toplev_args[0])
   
   if en(16):
-    data, comm = perf_record('pt', comm)
+    data = perf_record('pt')
     tag, info = 'pt', '%s.info.log' % data
     exe(perf + " script --no-itrace -F event,comm -i %s | %s | tee %s.modules.log | ./ptage | tail" % (data, sort2u, data))
-    perf_script("--itrace=Le -F +brstackinsn --xed -c %s -i %s | tee >(egrep 'ppp|#' > %s.pt-takens.log) | %s %s > %s" %
-      (comm, data, data, rp('lbr_stats'), do['lbr-stats-tk'], info), "@pt info for '%s'" % comm)
+    perf_script("--itrace=Le -F +brstackinsn --xed | tee >(egrep 'ppp|#' > %s.pt-takens.log) | %s %s > %s" %
+      (data, rp('lbr_stats'), do['lbr-stats-tk'], info), "@pt info", data)
 
   if en(18):
     assert do['msr']
     perf_data = '%s.perf.data' % record_name('-e msr')
     exe('sudo %s record -e msr:* -o %s -- %s' % (perf, perf_data, r), 'tracing MSRs')
     x = '-i %s | cut -d: -f3-4 | cut -d, -f1 | sort | uniq -c' % perf_data
-    exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 1))
+    exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None)
 
   if en(17) and do['flameg']:
     flags = '-ag -F 49' # -c %d' % pmu.period()

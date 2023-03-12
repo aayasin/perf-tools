@@ -300,7 +300,7 @@ footprint = set()
 pages = set()
 indirects = set()
 
-IPTB  = 'inst-per-taken-br'
+IPTB  = 'inst-per-taken-br--IpTB'
 FUNCP = 'Params_of_func'
 FUNCR = 'Regs_by_func'
 def count_of(t, lines, x, hist):
@@ -589,12 +589,8 @@ def print_stat(name, count, prefix='count', comment='', imix=False):
   print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 45 - len(prefix)), str(count), comment))
 def print_estimate(name, s): print_stat(name, s, 'estimate')
 
-def print_common(total):
+def print_global_stats():
   def nc(x): return 'non-cold ' + x
-  if glob['size_stats_en']:
-    totalv = (total - stat['bad'] - stat['bogus'])
-    stat['size']['avg'] = round(size_sum / totalv, 1) if totalv else -1
-  print('LBR samples:', hist_fmt(stat))
   cycles, scl = os.getenv('PTOOLS_CYCLES'), 1e3
   if cycles: print_estimate('LBR cycles coverage (x%d)' % scl, ratio(scl * stat['total_cycles'], int(cycles)))
   if len(footprint): print_estimate(nc('code footprint [KB]'), '%.2f' % (len(footprint) / 16.0))
@@ -610,6 +606,13 @@ def print_common(total):
       if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
         print_stat('branch at %s' % hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
                    prefix='misprediction-ratio', comment='paths histogram')
+
+def print_common(total):
+  if glob['size_stats_en']:
+    totalv = (total - stat['bad'] - stat['bogus'])
+    stat['size']['avg'] = round(size_sum / totalv, 1) if totalv else -1
+  print('LBR samples:', hist_fmt(stat))
+  if edge_en: print_global_stats()
   print('#Global-stats-end\n')
   if verbose & 0xf00: C.warn_summary()
 

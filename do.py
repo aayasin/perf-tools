@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.94
+__version__ = 1.95
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -48,6 +48,7 @@ do = {'run':        C.RUN_DEF,
   'imix':           0x1f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens
   'loops':          int(pmu.cpu('cpucount') / 2),
   'log_stdio':      1,
+  'lbr-branch-stats': 1,
   'lbr-verbose':    0,
   'lbr-indirects':  None,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
@@ -113,6 +114,8 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
     elif '--xed' in x and not os.path.isfile(XED_PATH): C.error('!\n'.join(('xed was not installed',
       "required by '%s' in perf-script of '%s'" % (msg, x), 'try: ./do.py setup-all --tune :xed:1 ')))
     if background: x = x + ' &'
+    if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], do['pmu']):
+      C.warn('CPU model is unrecognized; consider Linux kernel update (https://intelpedia.intel.com/IntelNext#Intel_Next_OS)', suppress_after=1)
     if not 'loop_stats' in x or args.verbose > 0:
       do['cmds_file'].write(x + '\n')
       do['cmds_file'].flush()
@@ -449,7 +452,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(14) and pmu.meteorlake():
     flags, events = '-W -c 20011', pmu.get_events(do['model'])
     data = '%s-tpebs-perf.data' % record_name('-%s%d' % (do['model'], events.count(':p')))
-    cmd = "%s record %s -e %s -o %s -- %s" % (ocperf, flags, events, data, r)
+    cmd = "%s record %s -e %s -o %s -- %s" % (perf if 'raw' in do['model'] else ocperf, flags, events, data, r)
     exe(cmd.replace('20011', '3001') if 'raw' in do['model'] else cmd, "TMA sampling (%s)" % do['model'])
     exe("%s script -i %s -F event,retire_lat > %s.retire_lat.txt" % (perf, data, data))
     exe("sort %s.retire_lat.txt | uniq -c | sort -n | ./ptage | tail" % (data, ))
@@ -486,7 +489,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if not os.path.isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()
       exe_v0('printf "# processing %s%s\n"%s %s' % (data, " filtered on '%s'" % comm if comm else '', '>>' if do['size'] else '>', info))
-      exe(perf + " report %s | grep -A13 'Branch Statistics:' | tee -a %s | egrep -v ':\s+0\.0%%|CROSS'" %
+      if do['lbr-branch-stats']: exe(perf + " report %s | grep -A13 'Branch Statistics:' | tee -a %s | egrep -v ':\s+0\.0%%|CROSS'" %
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(perf_stat_log):
         exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))

@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.95
+__version__ = 1.96
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -408,8 +408,9 @@ def profile(mask, toplev_args=['mvl6', None]):
   def toplev_V(v, tag='', nodes=do['nodes'],
                tlargs = toplev_args[1] if toplev_args[1] else args.toplev_args):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
-    return "%s %s --nodes '%s' -V %s %s -- %s"%(toplev, v, nodes,
-              o.replace('.log', '-perf.csv'), tlargs, r), o
+    c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, o.replace('.log', '-perf.csv'), tlargs, r)
+    if ' --global' in c: C.warn('Global counting is subject to system noise (cpucount=%d)' % pmu.cpu('cpucount'))
+    return c, o
   def topdown_describe(log):
     path = stats.read_toplev(log, 'Critical-Node')
     if path:
@@ -418,14 +419,14 @@ def profile(mask, toplev_args=['mvl6', None]):
       for n in path[1:]: toplev_describe(n)
 
   # +Info metrics that would not use more counters
-  cmd, log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe']+do['tma-bot-rest']))
   if en(4):
+    cmd, log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']))
     exe(cmd + ' | tee %s | %s' % (log, grep_bk), 'topdown full tree + All Bottlenecks')
     topdown_describe(log)
 
-  cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, do['repeat']))
-  if en(5): exe(cmd + ' | tee %s | %s' % (log, grep_nz),
-              'topdown primary, %d-levels %d runs' % (do['levels'], do['repeat']))
+  if en(5):
+    cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, do['repeat']))
+    exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown primary, %d-levels %d runs' % (do['levels'], do['repeat']))
   
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
@@ -560,7 +561,8 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(9) and do['sample'] > 2:
     data = perf_record('pebs', C.flag_value(do['perf-pebs'], '-e'))
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
-    perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
+    if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs, Insts", data)
+    else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
       if pmu.cpu('smt-on') and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')

@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.06
+__version__= 1.07
 
 import common as C, pmu
 from common import inc
@@ -39,6 +39,7 @@ def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 def ratio(a, b): return '%.2f%%' % (100.0 * a / b) if b else '-'
 def read_line(): return sys.stdin.readline()
+def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 4))
 
 def warn(mask, x): return C.warn(x) if edge_en and (verbose & mask) else None
 
@@ -164,8 +165,8 @@ loop_stats.atts = ''
 
 bwd_br_tgts = [] # better make it local to read_sample..
 loop_cands = []
-def detect_loop(ip, lines, loop_ipc,
-  MOLD=4e4): #Max Outer Loop Distance
+def detect_loop(ip, lines, loop_ipc, lbr_takens,
+                MOLD=4e4): #Max Outer Loop Distance
   global bwd_br_tgts, loop_cands # unlike nonlocal, global works in python2 too!
   def find_block_ip(x = len(lines)-2):
     while x>=0:
@@ -201,11 +202,17 @@ def detect_loop(ip, lines, loop_ipc,
           takens += [ lines[at] ]
           begin, at = find_block_ip(at-1)
         else: break
-  
+
   if ip in loops:
     loop = loops[ip]
     loop['hotness'] += 1
-    if is_taken(lines[-1]): iter_update()
+    if is_taken(lines[-1]):
+      iter_update()
+      if ip == loop_ipc:
+        for x in paths_range():
+          if not 'paths-%d'%x in loop: loop['paths-%d'%x] = {}
+          inc(loop['paths-%d'%x], ';'.join([hex(a) for a in lbr_takens[-x:]]))
+    # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds = 1, {}, []
       # TODO: Add env to generalize zcnt as loop identifier here and in line_inst()
@@ -315,7 +322,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
   global lbr_events, size_sum, bwd_br_tgts, edge_en
   valid, lines, bwd_br_tgts = 0, [], []
-  glob['size_stats_en'] = skip_bad and not labels
+  glob['size_stats_en'] = skip_bad and not labels and not loop_ipc
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
   edge_en = event.startswith(LBR_Event) and not ip_filter and not loop_ipc # config good for edge-profile
@@ -337,7 +344,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
-    insts, takens, xip, timestamp = 0, 0, None, None
+    insts, takens, xip, timestamp = 0, [], None, None
     tc_state = 'new'
     stat['total'] += 1
     if stat['total'] % tick == 0: C.printf('.')
@@ -434,21 +441,20 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           t = line_inst(line)
           if t and is_imix(t): glob[t] += 1
         if len(lines) == 1:
-          if is_taken(line): takens += 1
+          if is_taken(line): takens += [ip]
           # Expect a taken branch in first entry, but for some reason Linux/perf sometimes return <32 entry LBR
           #else: print('##', num_valid_sample())
         else: # a 2nd instruction
-          detect_loop(ip, lines, loop_ipc)
           insts += 1
-          if edge_en and is_taken(line):
-            takens += 1
-            inc(hsts[IPTB], insts)
-            insts = 0
-            if (verbose & 0x1): #FUNCR
-              x = get_taken_idx(lines, -1)
-              if x >= 0:
-                if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
-                if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
+          if is_taken(line):
+            takens += [ip]
+            if edge_en:
+              inc(hsts[IPTB], insts); insts = 0
+              if (verbose & 0x1): #FUNCR
+                x = get_taken_idx(lines, -1)
+                if x >= 0:
+                  if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
+                  if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
           if edge_en and is_taken(lines[-1]) and is_type(COND_BR, lines[-1]):
             glob['cond_%sward' % ('for' if ip > xip else 'back')] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
@@ -460,6 +466,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           if xip in indirects:
             inc(hsts['indirect_%s_targets' % hex(xip)], ip)
             inc(hsts['indirect_%s_paths' % hex(xip)], '%s.%s.%s' % (hex(get_taken(lines, -2)['from']), hex(xip), hex(ip)))
+          detect_loop(ip, lines, loop_ipc, takens)
         tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
         line = line.rstrip('\r\n')
@@ -476,7 +483,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       if stat['size']['min'] > size: stat['size']['min'] = size
       if stat['size']['max'] < size: stat['size']['max'] = size
     size_sum += size
-  inc(stat['takens'], takens)
+    inc(stat['takens'], len(takens))
   return lines
 
 def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
@@ -503,6 +510,7 @@ def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else Fal
 def is_label(line):   return line.strip().endswith(':')
 def is_loop(line):    return line_ip(line) in loops
 def is_taken(line):   return '# ' in line
+# FIXME: this does not work for non-contigious loops!
 def is_in_loop(ip, loop): return ip >= loop and ip <= loops[loop]['back']
 def get_inst(l):      return C.str2list(l)[1]
 def get_loop(ip):     return loops[ip] if ip in loops else None
@@ -565,7 +573,8 @@ def print_hist(hist_t, Threshold=0.01):
     left, threshold = 0, int(Threshold * tot)
     for k in sorted(hist.keys(), key=sorter):
       if hist[k] >= threshold and hist[k] > 1:
-        print('%5s: %7d%6.1f%%' % (hex(k) if d['type'] == 'hex' else k, hist[k], 100.0 * hist[k] / tot))
+        bucket = ('%50s' % k) if d['type'] == 'paths' else '%5s' % (hex(k) if d['type'] == 'hex' else k)
+        print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
     if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
   d['total'] = sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
@@ -628,6 +637,7 @@ def print_all(nloops=10, loop_ipc=0):
     if loop_ipc in loops:
       lp = loops[loop_ipc]
       tot = print_loop_hist(loop_ipc, 'IPC')
+      for x in paths_range(): print_loop_hist(loop_ipc, 'paths-%d'%x, sortfunc=lambda x: x[::-1])
       if glob['loop_iters']: lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / glob['loop_iters'])
       lp['FL-cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
       if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1 and lp['taken'] < 2:
@@ -696,6 +706,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   dell = ['hotness', 'FL-cycles%', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
+  for x in paths_range(): dell += ['paths-%d'%x]
   if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
   for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex(loop[x])))

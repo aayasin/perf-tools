@@ -66,7 +66,7 @@ while True:
 
 if not dump_only:
   if not loop: print_header()
-  if not ev.startswith(LBR_Event): print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
+  if 'DSB_MISS' in ev: print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
     C.ratio('loop_jmp2mid', c, 'loop_head'), C.ratio('loop_jmp2head', c, 'loop_head'), sep=', ')
   if filter:
     print_loop(loop)

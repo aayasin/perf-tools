@@ -1,12 +1,18 @@
 #!/usr/bin/env python
-# common functions for logging, debug, arg-parsing, strings, system commands and file I/O.
+# Copyright (c) 2020-2023, Intel Corporation
 # Author: Ahmad Yasin
-# edited: Nov 2022
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# common functions for logging, debug, arg-parsing, strings, system commands and file I/O.
+#
 from __future__ import print_function
 __author__ = 'ayasin'
 
-import sys, os, re, pickle
-from subprocess import check_output, Popen, call
+import os, pickle, re, subprocess, sys
 
 # logging
 #
@@ -83,8 +89,9 @@ def annotate(stuff, label=''):
 # @redir_out:  redirect output of the (first non-piped) command as specified
 # @run:   do run the specified command
 # @log:   log the commands's output into log_stdio (if any)
+# @fail:  exit with error if command fails
 # @background: run the specified command in background (do not block)
-def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, background=False):
+def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=True, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
   if msg:
     if '@' in msg: msg='\t' + msg.replace('@', '')
@@ -92,19 +99,22 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, backgr
     if run or msg.endswith('..'): printc(msg, color.BOLD)
   if debug: printc(x, color.BLUE)
   sys.stdout.flush()
-  if background: return Popen(x.split())
+  if background: return subprocess.Popen(x.split())
   ret = 0
   if run:
     if log and log_stdio:
       if not '2>&1' in x: x = x + ' 2>&1'
       x = x + ' | tee -a ' + log_stdio
-      ret = call(['/bin/bash', '-c', 'set -o pipefail; ' + x])
+      ret = subprocess.call(['/bin/bash', '-c', 'set -o pipefail; ' + x])
     else:
       ret = os.system(x)
-  if ret != 0: error("Command \"%s\" failed with '%d'" % (x.replace("\n", "\\n"), ret))
+  if ret != 0:
+    msg = "Command \"%s\" failed with '%d'" % (x.replace("\n", "\\n"), ret)
+    error(msg) if fail else warn(msg)
+  return ret
 
 def exe_output(x, sep=";"):
-  out = check_output(x, shell=True)
+  out = subprocess.check_output(x, shell=True)
   if isinstance(out, (bytes, bytearray)):
     out = out.decode()
   return out.replace("\n", sep)
@@ -115,9 +125,14 @@ def exe2list(x, debug=False):
   return res
 
 def exe_one_line(x, field=None, debug=False):
-  res = exe_output(x, '')
+  x_str = 'exe_one_line(%s, f=%s)' % (x, str(field))
+  try:
+    res = exe_output(x, '')
+  except subprocess.CalledProcessError:
+    warn('%s failed!' % x_str)
+    res = 'N/A'
   if field is not None: res = str2list(res)[field]
-  if debug: printc('exe_one_line(%s, f=%s) = %s' % (x, str(field), res), color.BLUE)
+  if debug: printc('%s = %s' % (x_str, res), color.BLUE)
   return res
 
 def par_jobs_file(commands, name=None, verbose=False, shell='bash'):
@@ -158,6 +173,10 @@ def env2int(x, default=0, base=10):
 def env2str(x):
   y = os.getenv(x)
   return '%s=%s' % (x, y) if y else ''
+
+def env2list(x, default):
+  y = os.getenv(x)
+  return y.split() if y else default
 
 def envfile(x):
   x = os.getenv(x)
@@ -230,15 +249,15 @@ def any_in(l, s):
     if i in s: return 1
   return 0
 
-def is_float(x):
+def is_num(x, hex=False):
   try:
-    float(x)
+    int(x, 16) if hex else float(x)
     return True
   except ValueError:
     return False
 
 def float2str(f):
-  if not is_float(f): return f
+  if not is_num(f): return f
   return '{:,}'.format(f)
 
 def flag_value(s, f, v='', sep=' '):
@@ -270,10 +289,11 @@ def args_parse(d, args):
 
 import argparse
 RUN_DEF = './run.sh'
-TOPLEV_DEF=' --global --frequency --metric-group +Summary'
+TOPLEV_DEF=' --frequency --metric-group +Summary'
+PROF_MASK_DEF=0x317F
 def add_hex_arg(ap, n, fn, d, h):
   ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
-def argument_parser(usg, defs=None, mask=0x317F, fc=argparse.ArgumentDefaultsHelpFormatter):
+def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefaultsHelpFormatter):
   ap = argparse.ArgumentParser(usage=usg, formatter_class=fc) if usg else argparse.ArgumentParser(formatter_class=fc)
   common_args = []
   def common_def(a):

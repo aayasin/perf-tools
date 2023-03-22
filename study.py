@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-# studies multiple flavors of an application (with parallel post-processing)
+# Copyright (c) 2020-2023, Intel Corporation
 # Author: Ahmad Yasin
-# edited: Oct 2022
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# studies multiple flavors of an application (with parallel post-processing)
 #
 from __future__ import print_function
 __author__ = 'ayasin'
@@ -74,7 +80,7 @@ for x in C.argument_parser(None):
   if a: do += ' --%s %s' % (x, "'%s'" % a if ' ' in a else a)
 x = 'tune'
 a = getattr(args, x) or []
-a.insert(0, [':loops:10 :batch:1'])
+a.insert(0, [':loops:10 :batch:1 :help:0'])
 do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
 def exe(c): return C.exe_cmd(c, debug=args.verbose)

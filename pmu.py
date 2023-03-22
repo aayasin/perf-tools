@@ -1,7 +1,14 @@
 #!/usr/bin/env python
-# Abstraction of Intel Architecture and its Performance Monitoring Unit (PMU)
+# Copyright (c) 2020-2023, Intel Corporation
 # Author: Ahmad Yasin
-# edited: Nov 2022
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# Abstraction of Intel Architecture and its Performance Monitoring Unit (PMU)
+#
 from __future__ import print_function
 __author__ = 'ayasin'
 
@@ -142,7 +149,9 @@ def cpu(what):
 # cpu.state = None
 
 def cpu_msrs():
-  msrs = ['0x048', '0x08b', '0x1a4']
+  msrs = ['0x048', '0x08b', '0x123', # IA32_SPEC_CTRL, microcode update signature, IA32_MCU_OPT_CTRL
+          '0x1a4', # Prefetch Control
+  ]
   if goldencove(): msrs += ['0x6a0', '0x6a2']
   if server():
     msrs += ['0x610']  # RAPL. TODO: assert SNB-EP onwards

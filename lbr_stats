@@ -43,6 +43,7 @@ while True:
   c['total'] += 1
   if stop and c['total'] >= int(stop):
     if not loop:
+      print_sample(sample, 0)
       C.info('stopping after %s valid samples' % stop)
       C.printf("run:\t 'kill -9 $(pidof perf)'\t!\n")
     break
@@ -65,7 +66,7 @@ while True:
 
 if not dump_only:
   if not loop: print_header()
-  if not ev.startswith(LBR_Event): print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
+  if 'DSB_MISS' in ev: print(c, C.ratio('sequential', c), C.ratio('loop_seq', c, 'loop_head'),
     C.ratio('loop_jmp2mid', c, 'loop_head'), C.ratio('loop_jmp2head', c, 'loop_head'), sep=', ')
   if filter:
     print_loop(loop)

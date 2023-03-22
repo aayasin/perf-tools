@@ -1,11 +1,17 @@
 #!/usr/bin/env python
-# A module for processing LBR streams
+# Copyright (c) 2020-2023, Intel Corporation
 # Author: Ahmad Yasin
-# edited: Nov 2022
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# A module for processing LBR streams
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.97
+__version__= 1.07
 
 import common as C, pmu
 from common import inc
@@ -20,17 +26,20 @@ FP_SUFFIX = "[sdh]([a-z])?"
 INDIRECT  = r"(jmp|call).*%"
 CALL_RET  = '(call|ret)'
 COND_BR   = 'j[^m].*'
+MEM_INSTS = ['load', 'store', 'lock', 'prefetch']
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('DBG')
 verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings
 use_cands = os.getenv('LBR_USE_CANDS')
+user_imix = C.env2list('LBR_IMIX', ['vpmovmskb'])
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 def ratio(a, b): return '%.2f%%' % (100.0 * a / b) if b else '-'
 def read_line(): return sys.stdin.readline()
+def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 4))
 
 def warn(mask, x): return C.warn(x) if edge_en and (verbose & mask) else None
 
@@ -75,22 +84,25 @@ def line_timing(line):
   cycles = int(x.group(2))
   return cycles, ipc
 
+def num_valid_sample(): return stat['total'] - stat['bad'] - stat['bogus']
+
 vec_size = 3 if pmu.cpu_has_feature('avx512vl') else 2
 def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
 def vec_len(i, t='int'): return 'vec%d-%s' % (128 * (2 ** i), t)
 def line_inst(line):
   pInsts = ('cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper', 'zcnt')
-  allInsts = ['nop', 'lea', 'prefetch', 'cisc-test', 'store', 'load'] + list(pInsts)
+  allInsts = ['nop', 'lea', 'cisc-test'] + MEM_INSTS + list(pInsts)
   if not line: return allInsts
   if 'nop' in line: return 'nop'
   elif '(' in line:  # load/store take priority in CISC insts
     if 'lea' in line: return 'lea'
+    elif 'lock' in line: return 'lock'
     elif 'prefetch' in line: return 'prefetch'
-    elif is_type('cisc-test', line): return 'load'
-    elif re.match(r"\s+\S+\s+[^\(\),]+,", line): return 'store'
+    elif is_type('cisc-test', line) or 'gather' in line: return 'load'
+    elif re.match(r"\s+\S+\s+[^\(\),]+,", line) or 'scatter' in line: return 'store'
     else: return 'load'
   else:
-    for x in pInsts:
+    for x in pInsts: # skip non-vector p/v-prefixed insts
       if x in line: return x
     r = re.match(r"\s+\S+\s+(\S+)", line)
     if r and re.match(r"^[pv]", r.group(1)):
@@ -153,8 +165,8 @@ loop_stats.atts = ''
 
 bwd_br_tgts = [] # better make it local to read_sample..
 loop_cands = []
-def detect_loop(ip, lines, loop_ipc,
-  MOLD=4e4): #Max Outer Loop Distance
+def detect_loop(ip, lines, loop_ipc, lbr_takens,
+                MOLD=4e4): #Max Outer Loop Distance
   global bwd_br_tgts, loop_cands # unlike nonlocal, global works in python2 too!
   def find_block_ip(x = len(lines)-2):
     while x>=0:
@@ -173,13 +185,13 @@ def detect_loop(ip, lines, loop_ipc,
     if ip != loop_ipc: return
     if not 'IPC' in loop: loop['IPC'] = {}
     if not has_timing(lines[-1]): return
-    cycles = 0
+    cycles, takens = 0, []
     begin, at = find_block_ip()
     while begin:
       if begin == ip:
         if cycles == 0: inc(loop['IPC'], line_timing(lines[-1])[1]) # IPC is supported for loops execution w/ no takens
         if 'Conds' in loop and 'Cond_polarity' in loop:
-          for c in loop['Cond_polarity'].keys(): loop['Cond_polarity'][c]['tk' if cycles else 'nt'] += 1
+          for c in loop['Cond_polarity'].keys(): loop['Cond_polarity'][c]['tk' if c in takens else 'nt'] += 1
         cycles += line_timing(lines[-1])[0]
         glob['loop_cycles'] += cycles
         glob['loop_iters'] += 1
@@ -187,16 +199,24 @@ def detect_loop(ip, lines, loop_ipc,
       else:
         if has_timing(lines[at]):
           cycles += line_timing(lines[at])[0]
+          takens += [ lines[at] ]
           begin, at = find_block_ip(at-1)
         else: break
-  
+
   if ip in loops:
     loop = loops[ip]
     loop['hotness'] += 1
-    if is_taken(lines[-1]): iter_update()
+    if is_taken(lines[-1]):
+      iter_update()
+      if ip == loop_ipc:
+        for x in paths_range():
+          if not 'paths-%d'%x in loop: loop['paths-%d'%x] = {}
+          inc(loop['paths-%d'%x], ';'.join([hex(a) for a in lbr_takens[-x:]]))
+    # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds = 1, {}, []
-      types = ('taken', 'load', 'store', 'prefetch', 'lea', 'nop', 'cmov', 'zcnt')
+      # TODO: Add env to generalize zcnt as loop identifier here and in line_inst()
+      types = ['taken', 'lea', 'cmov'] + MEM_INSTS + ['zcnt']
       for i in types: cnt[i] = 0
       x = len(lines)-2
       while x >= 1:
@@ -262,24 +282,24 @@ LBR_Event = pmu.lbr_event()[:-4]
 lbr_events = []
 loops = {}
 stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
-stat['IPs'] = {}
-stat['events'] = {}
-stat['size'] = {'min': 0, 'max': 0, 'avg': 0}
-size_sum=0
+for x in ('IPs', 'events', 'takens'): stat[x] = {}
+stat['size'], size_sum = {'min': 0, 'max': 0, 'avg': 0}, 0
 
 def inst2pred(i):
   i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
-         'ld+test':   '(cmp[^x]|test).*\(',
+         'cisc-test':   '(cmp[^x]|test).*\(',
   }
   if i is None: return list(i2p.keys())
   return i2p[i] if i in i2p else i
+
+# determine what is counted globally
 def is_imix(t):
-  imem = ('load', 'store', 'vzeroupper')
-  if not t: return list(imem) + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
-  return t in imem or t.startswith('vec')
-Insts = inst2pred(None) + ['call', 'push', 'pop']
-Insts_common = is_imix(None) + ['all']
-Insts_all = Insts + ['cond_backward', 'cond_forward'] + Insts_common
+  # TODO: cover FP vector too
+  if not t: return MEM_INSTS + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
+  return t in MEM_INSTS or t.startswith('vec')
+Insts = inst2pred(None) + ['call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
+Insts_global = Insts + is_imix(None) + ['all']
+Insts_all = ['cond_backward', 'cond_forward'] + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + Insts_all}
 hsts = {}
@@ -287,6 +307,7 @@ footprint = set()
 pages = set()
 indirects = set()
 
+IPTB  = 'inst-per-taken-br--IpTB'
 FUNCP = 'Params_of_func'
 FUNCR = 'Regs_by_func'
 def count_of(t, lines, x, hist):
@@ -301,11 +322,12 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
   global lbr_events, size_sum, bwd_br_tgts, edge_en
   valid, lines, bwd_br_tgts = 0, [], []
-  glob['size_stats_en'] = skip_bad and not labels
+  glob['size_stats_en'] = skip_bad and not labels and not loop_ipc
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
   edge_en = event.startswith(LBR_Event) and not ip_filter and not loop_ipc # config good for edge-profile
   if stat['total'] == 0 and edge_en:
+    hsts[IPTB] = {}
     hsts[FUNCR] = {}
     hsts[FUNCP] = {}
     if indirect_en:
@@ -322,7 +344,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
-    xip, timestamp = None, None
+    insts, takens, xip, timestamp = 0, [], None, None
     tc_state = 'new'
     stat['total'] += 1
     if stat['total'] % tick == 0: C.printf('.')
@@ -413,18 +435,26 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       if len(lines) and not is_label(line):
         if edge_en:
           glob['all'] += 1
+          # An instruction may be counted individually and/or per imix class
           for x in Insts:
             if is_type(x, line): glob[x] += 1
           t = line_inst(line)
           if t and is_imix(t): glob[t] += 1
-        # a 2nd instruction
-        if len(lines) > 1:
-          detect_loop(ip, lines, loop_ipc)
-          if (verbose & 0x1) and edge_en and is_taken(line): #FUNCR
-            x = get_taken_idx(lines, -1)
-            if x >= 0:
-              if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
-              if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
+        if len(lines) == 1:
+          if is_taken(line): takens += [ip]
+          # Expect a taken branch in first entry, but for some reason Linux/perf sometimes return <32 entry LBR
+          #else: print('##', num_valid_sample())
+        else: # a 2nd instruction
+          insts += 1
+          if is_taken(line):
+            takens += [ip]
+            if edge_en:
+              inc(hsts[IPTB], insts); insts = 0
+              if (verbose & 0x1): #FUNCR
+                x = get_taken_idx(lines, -1)
+                if x >= 0:
+                  if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
+                  if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
           if edge_en and is_taken(lines[-1]) and is_type(COND_BR, lines[-1]):
             glob['cond_%sward' % ('for' if ip > xip else 'back')] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
@@ -436,6 +466,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           if xip in indirects:
             inc(hsts['indirect_%s_targets' % hex(xip)], ip)
             inc(hsts['indirect_%s_paths' % hex(xip)], '%s.%s.%s' % (hex(get_taken(lines, -2)['from']), hex(xip), hex(ip)))
+          detect_loop(ip, lines, loop_ipc, takens)
         tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
         line = line.rstrip('\r\n')
@@ -452,11 +483,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       if stat['size']['min'] > size: stat['size']['min'] = size
       if stat['size']['max'] < size: stat['size']['max'] = size
     size_sum += size
+    inc(stat['takens'], len(takens))
   return lines
 
-def is_type(t, l):
-  #if t == 'ld+test' and re.match(r"\s+\S+\s+%s" % inst2pred(t), l): C.printf('IS_TYPE:' + l)
-  return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
+def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
 def is_callret(l):    return is_type(CALL_RET, l)
 
 # TODO: re-design this function to return: event-name, timestamp, etc
@@ -480,6 +510,7 @@ def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else Fal
 def is_label(line):   return line.strip().endswith(':')
 def is_loop(line):    return line_ip(line) in loops
 def is_taken(line):   return '# ' in line
+# FIXME: this does not work for non-contigious loops!
 def is_in_loop(ip, loop): return ip >= loop and ip <= loops[loop]['back']
 def get_inst(l):      return C.str2list(l)[1]
 def get_loop(ip):     return loops[ip] if ip in loops else None
@@ -542,7 +573,8 @@ def print_hist(hist_t, Threshold=0.01):
     left, threshold = 0, int(Threshold * tot)
     for k in sorted(hist.keys(), key=sorter):
       if hist[k] >= threshold and hist[k] > 1:
-        print('%5s: %7d%6.1f%%' % (hex(k) if d['type'] == 'hex' else k, hist[k], 100.0 * hist[k] / tot))
+        bucket = ('%50s' % k) if d['type'] == 'paths' else '%5s' % (hex(k) if d['type'] == 'hex' else k)
+        print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
     if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
   d['total'] = sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
@@ -551,26 +583,31 @@ def print_hist(hist_t, Threshold=0.01):
 def print_hist_sum(name, h):
   s = sum(hsts[h].values())
   print_stat(name, s, comment='histogram' if s else '')
-def print_stat(name, count, prefix='count', comment=''):
+def print_stat(name, count, prefix='count', comment='', imix=False):
   def c(x): return x.replace(':', '-')
+  def nm(x):
+    if not imix: return x
+    n = (x if 'cond' in name else x.upper()) + ' '
+    if x.startswith('vec'): n += 'comp '
+    if x in is_imix(None):  n += 'insts-class'
+    elif 'cond' in name:    n += 'branches'
+    else: n += 'instructions'
+    return n
   if len(comment): comment = '\t:(see %s below)' % c(comment)
-  print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(name), 45 - len(prefix)), str(count), comment))
+  elif imix: comment = '\t: %7s of ALL' % ratio(count, glob['all'])
+  print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 45 - len(prefix)), str(count), comment))
 def print_estimate(name, s): print_stat(name, s, 'estimate')
 
-def print_common(total):
+def print_global_stats():
   def nc(x): return 'non-cold ' + x
-  if glob['size_stats_en']:
-    totalv = (total - stat['bad'] - stat['bogus'])
-    stat['size']['avg'] = round(size_sum / totalv, 1) if totalv else -1
-  print('LBR samples:', hist_fmt(stat))
   cycles, scl = os.getenv('PTOOLS_CYCLES'), 1e3
   if cycles: print_estimate('LBR cycles coverage (x%d)' % scl, ratio(scl * stat['total_cycles'], int(cycles)))
   if len(footprint): print_estimate(nc('code footprint [KB]'), '%.2f' % (len(footprint) / 16.0))
   if len(pages): print_stat(nc('code 4K-pages'), len(pages))
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
   if glob['size_stats_en']:
-    for x in ('backward', ' forward'): print_stat(x + ' taken conditional branches', glob['cond_' + x.strip()])
-    for x in Insts + Insts_common: print_stat(x.upper() + ' instructions', glob[x])
+    for x in ('backward', ' forward'): print_stat(x + ' taken conditional', glob['cond_' + x.strip()], imix=True)
+    for x in Insts_global: print_stat(x, glob[x], imix=True)
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')
@@ -578,6 +615,13 @@ def print_common(total):
       if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
         print_stat('branch at %s' % hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
                    prefix='misprediction-ratio', comment='paths histogram')
+
+def print_common(total):
+  if glob['size_stats_en']:
+    totalv = (total - stat['bad'] - stat['bogus'])
+    stat['size']['avg'] = round(size_sum / totalv, 1) if totalv else -1
+  print('LBR samples:', hist_fmt(stat))
+  if edge_en: print_global_stats()
   print('#Global-stats-end\n')
   if verbose & 0xf00: C.warn_summary()
 
@@ -593,6 +637,7 @@ def print_all(nloops=10, loop_ipc=0):
     if loop_ipc in loops:
       lp = loops[loop_ipc]
       tot = print_loop_hist(loop_ipc, 'IPC')
+      for x in paths_range(): print_loop_hist(loop_ipc, 'paths-%d'%x, sortfunc=lambda x: x[::-1])
       if glob['loop_iters']: lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / glob['loop_iters'])
       lp['FL-cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
       if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1 and lp['taken'] < 2:
@@ -600,9 +645,10 @@ def print_all(nloops=10, loop_ipc=0):
           lp['%s_taken' % hex(c)] = ratio(lp['Cond_polarity'][c]['tk'], lp['Cond_polarity'][c]['tk'] + lp['Cond_polarity'][c]['nt'])
       tot = print_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0]))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
-      if hitcounts and lp['size'] and lp['taken'] == 0:
-        C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
+      if hitcounts and lp['size']:
+        if lp['taken'] == 0: C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
           'Hitcounts & ASM of loop %s' % hex(loop_ipc))
+        else: lp['attributes'] += ';likely_non-contiguous'
       find_print_loop(loop_ipc, sloops)
     else:
       C.warn('Loop %s was not observed' % hex(loop_ipc))
@@ -660,6 +706,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   dell = ['hotness', 'FL-cycles%', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
+  for x in paths_range(): dell += ['paths-%d'%x]
   if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
   for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex(loop[x])))
@@ -673,7 +720,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
 def print_sample(sample, n=10):
   if not len(sample): return
   C.printf('\n'.join(('sample#%d size=%d' % (stat['total'], len(sample)-1), sample[0], '\n')))
-  C.printf('\n'.join((sample[-min(n, len(sample)-1):] if n else sample) + ['\n']))
+  if len(sample) > 1: C.printf('\n'.join((sample[-min(n, len(sample)-1):] if n else sample) + ['\n']))
   sys.stderr.flush()
 
 def print_header():

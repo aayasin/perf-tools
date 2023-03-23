@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.96
+__version__ = 1.97
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -28,6 +28,7 @@ from platform import python_version
 Find_perf = 'sudo find / -name perf -executable -type f'
 LDLAT_DEF = '7'
 XED_PATH = '/usr/local/bin/xed'
+LLVM_MCA_PATH = '/usr/local/bin/llvm-mca'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'batch':          0,
@@ -46,6 +47,7 @@ do = {'run':        C.RUN_DEF,
   'gen-kernel':     1,
   'help':           1,
   'imix':           0x1f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens
+  'loop-ideal-ipc': 1,
   'loops':          int(pmu.cpu('cpucount') / 2),
   'log_stdio':      1,
   'lbr-branch-stats': 1,
@@ -180,6 +182,9 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
     if 'Red Hat' in C.file2str('/etc/os-release', 1): exe('sudo yum install python3-xlsxwriter.noarch', '@patching xlsx')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
+  if do['loop-ideal-ipc']:
+    if os.path.isfile(LLVM_MCA_PATH): exe_v0(msg='llvm is already installed')
+    else: exe('./build-llvm.sh', 'installing llvm')
 
 def tools_update(kernels=[], level=3):
   ks = [''] + C.exe2list("git status | grep 'modified.*kernels' | cut -d/ -f2") + kernels
@@ -514,6 +519,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
       loops = '%s.loops.log' % data
+      llvm_mca = '%s.llvm_mca.log' % data
       lbr_hdr = '# LBR-based Statistics:'
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       if not os.path.isfile(hits) or do['reprocess']:
@@ -546,6 +552,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and os.path.isfile(loops):
         prn_line(info)
+        if do['loop-ideal-ipc']: exe('echo > %s' % llvm_mca)
         cmd, top = '', min(do['loops'], int(exe_1line('wc -l %s' % loops, 0)))
         do['loops'] = top
         while top > 1:
@@ -555,7 +562,8 @@ def profile(mask, toplev_args=['mvl6', None]):
         print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, rp('loop_stats'),
           exe_1line('tail -1 %s' % loops, 2)[:-1], info))
         perf_script("-F +brstackinsn --xed %s && %s" % (cmd, C.grep('FL-cycles...[1-9][0-9]?', info, color=1)),
-          "@detailed stats for hot loops", data, export='PTOOLS_HITS=%s' % (hits,))
+                    "@detailed stats for hot loops", data,
+                    export='PTOOLS_HITS=%s %s' % (hits, ('LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] else ''))
       else: warn_file(loops)
   
   if en(9) and do['sample'] > 2:

@@ -30,12 +30,13 @@ class color:
   UNDERLINE = '\033[4m'
   END = '\033[0m'
 
-# colored printing
-def printc(msg, col=color.DARKCYAN, log_only=False):
+# colored printing, writes to outfile or log_stdio
+def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   msg = col + msg + color.END
   if not log_only: print(msg)
-  if log_stdio:
-    file1 = open(log_stdio, "a")
+  if not outfile: outfile = log_stdio
+  if outfile:
+    file1 = open(outfile, "a")
     file1.write(msg+'\n')
     file1.close()
 log_stdio=None

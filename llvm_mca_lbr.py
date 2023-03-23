@@ -29,9 +29,6 @@ INTRO_MESSAGE = '\
 
 
 LLVM = '/usr/local/bin/llvm-mca'
-if not os.path.exists(LLVM):
-    C.error('llvm-mca is not installed! Please run ./build-llvm.sh to install it.')
-
 
 # handle incompatibilities between xed and LLVM MCinst
 repl = (("movsxd", "movslq"),
@@ -116,6 +113,7 @@ def regsuf(r):
 
 
 def lbrmca(input_file_path, args='', llvm_log=None, loop_ipc=None):
+  if not os.path.exists(LLVM): C.error('llvm-mca is not installed! Please run ./build-llvm.sh to install it.')
   reg = ""
   nasm = 0
   with open(input_file_path, 'r') as input_file:

@@ -333,7 +333,7 @@ def command_basename(comm, iterations=None):
   return chop_app(namestr.strip('-'))
 
 # stats
-def inc(d, b): d[b] = d.get(b, 0) + 1
+def inc(d, b, i=1): d[b] = d.get(b, 0) + i
 def ratio(x, histo, denom='total'):
   return '%s-ratio: %.1f%%'%(x, 100.0*histo[x]/max(histo[denom], 1))
 

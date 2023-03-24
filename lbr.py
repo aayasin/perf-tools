@@ -43,10 +43,10 @@ def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 4))
 
 def warn(mask, x): return C.warn(x) if edge_en and (verbose & mask) else None
 
-def exit(x, sample, label):
+def exit(x, sample, label, n=0):
   C.annotate(x, label)
-  print_sample(sample, 0)
-  C.printf(debug+'\n')
+  print_sample(sample, n)
+  C.printf(str(debug)+'\n')
   sys.exit()
 
 def str2int(ip, plist):
@@ -63,10 +63,22 @@ def skip_sample(s):
     assert line, 'was input truncated? sample:\n%s'%s
   return 0
 
-def header_ip(line):
+def header_ip_str(line):
   x = is_header(line)
   assert x, "Not a head of sample: " + line
-  return str2int(C.str2list(line)[6 if '[' in x.group(1) else 5], (line, None))
+  if header_ip_str.first:
+    if '[' in x.group(1): header_ip_str.position += 1
+    header_ip_str.first = False
+  return C.str2list(line)[header_ip_str.position]
+header_ip_str.first = True
+header_ip_str.position = 5
+def header_ip(line): return str2int(header_ip_str(line), (line, None))
+
+
+def header_cost(line):
+  x = is_header(line)
+  assert x, "Not a head of sample: " + line
+  return str2int(C.str2list(line.split(':')[2])[2], (line, None))
 
 def line_ip_hex(line):
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
@@ -157,7 +169,7 @@ def loop_stats(line, loop_ipc, tc_state):
       mark(INDIRECT, 'indirect')
       mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % FP_SUFFIX, 'scalar-fp')
       for i in range(vec_size):
-        if mark(r"[^k]p%s\s+.*%s" % (FP_SUFFIX, vec_reg(i)), vec_len(i, 'fp')): continue
+        if mark(r"[^aku]p%s\s+.*%s" % (FP_SUFFIX, vec_reg(i)), vec_len(i, 'fp')): continue
         mark(INT_VEC(i), vec_len(i))
   return tripcount(line_ip(line), loop_ipc, tc_state)
 loop_stats.id = None
@@ -318,7 +330,18 @@ def count_of(t, lines, x, hist):
   inc(hsts[hist], r)
   return r
 
-def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
+def edge_en_init(indirect_en):
+  for x in ('IPC', IPTB, FUNCR, FUNCP): hsts[x] = {}
+  if indirect_en:
+    for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
+  if os.getenv('LBR_INDIRECTS'):
+    for x in os.getenv('LBR_INDIRECTS').split(','):
+      indirects.add(int(x, 16))
+      hsts['indirect_%s_targets' % x] = {}
+      hsts['indirect_%s_paths' % x] = {}
+  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'] = {}
+
+def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_latency=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
   global lbr_events, size_sum, bwd_br_tgts, edge_en
   valid, lines, bwd_br_tgts = 0, [], []
@@ -326,19 +349,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
   edge_en = event.startswith(LBR_Event) and not ip_filter and not loop_ipc # config good for edge-profile
-  if stat['total'] == 0 and edge_en:
-    hsts[IPTB] = {}
-    hsts[FUNCR] = {}
-    hsts[FUNCP] = {}
-    if indirect_en:
-      for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
-    if os.getenv('LBR_INDIRECTS'):
-      for x in os.getenv('LBR_INDIRECTS').split(','):
-        indirects.add(int(x, 16))
-        hsts['indirect_%s_targets' % x] = {}
-        hsts['indirect_%s_paths' % x] = {}
-    if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'] = {}
-  if stat['total']==0 and debug: C.printf('DBG=%s\n' % debug)
+  if stat['total'] == 0:
+    if edge_en: edge_en_init(indirect_en)
+    if ret_latency: header_ip_str.position = 8
+    if debug: C.printf('DBG=%s\n' % debug)
   tick = C.env2int('LBR_TICK', 1000)
   if loop_ipc: tick *= 10
   
@@ -366,7 +380,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
           lbr_events += [ev]
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
           if len(lbr_events) == 1: x += ' primary= %s %s' % (event, C.env2str('LBR_STOP'))
-          if ip_filter: x += ' ip_filter= %s' % ip_filter
+          if ip_filter: x += ' ip_filter= %s' % str(ip_filter)
           if loop_ipc: x += ' loop= %s' % hex(loop_ipc)
           if verbose: x += ' verbose= %s' % hex(verbose)
           if not header.group(2).isdigit(): C.printf(line)
@@ -376,12 +390,13 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
       # a new sample started
       # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
         if ip_filter:
-          if not ip_filter in line:
+          if not C.any_in(ip_filter, line):
             valid = skip_sample(line)
             break
-          inc(stat['IPs'], ip_filter)
+          inc(stat['IPs'], header_ip_str(line))
       # a sample ended
       if re.match(r"^$", line):
+        if not skip_bad and (not min_lines or len(lines) > min_lines): break
         len_m1 = 0
         if len(lines): len_m1 = len(lines)-1
         if len_m1 == 0 or\
@@ -427,7 +442,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
         valid = skip_sample(lines[0])
         stat['bogus'] += 1
         break
-      ip = None if header or is_label(line) else line_ip(line, lines)
+      ip = None if header or is_label(line) or 'not reaching sample' in line else line_ip(line, lines)
       new_line = is_line_start(ip, xip)
       if edge_en and new_line:
         footprint.add(ip >> 6)
@@ -450,6 +465,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
             takens += [ip]
             if edge_en:
               inc(hsts[IPTB], insts); insts = 0
+              if 'IPC' in line: inc(hsts['IPC'], line_timing(line)[1])
               if (verbose & 0x1): #FUNCR
                 x = get_taken_idx(lines, -1)
                 if x >= 0:
@@ -467,7 +483,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False,
             inc(hsts['indirect_%s_targets' % hex(xip)], ip)
             inc(hsts['indirect_%s_paths' % hex(xip)], '%s.%s.%s' % (hex(get_taken(lines, -2)['from']), hex(xip), hex(ip)))
           detect_loop(ip, lines, loop_ipc, takens)
-        tc_state = loop_stats(line, loop_ipc, tc_state)
+        if skip_bad: tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
         line = line.rstrip('\r\n')
         if has_timing(line):
@@ -546,22 +562,18 @@ def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   print('')
   return tot
 
-def print_glob_hist(hist, name):
-  d = print_hist((hist, name))
+def print_glob_hist(hist, name, weighted=False, Threshold=0.01):
+  d = print_hist((hist, name, None, None, None, weighted), Threshold)
   if not type(d) is dict: return d
-  if d['type'] == 'hex':
-    d['mode'] = hex(int(d['mode']))
+  if d['type'] == 'hex': d['mode'] = hex(int(d['mode']))
   del d['type']
   print('%s histogram summary: %s' % (name, hist_fmt(d)))
+  return d['total']
 
 def print_hist(hist_t, Threshold=0.01):
-  if not hist_t[0]: return -1
-  hist, name = hist_t[0], hist_t[1]
-  loop, loop_ipc, sorter, weighted = (None, ) * 4
-  if len(hist_t) > 2: (loop, loop_ipc, sorter, weighted) = hist_t[2:]
+  if not len(hist_t[0]): return 0
+  hist, name, loop, loop_ipc, sorter, weighted = hist_t[0:]
   tot = sum(hist.values())
-  if debug: C.printf('%s tot=%d\n' % (name, tot))
-  if not tot: return 0
   d = {}
   d['type'] = 'paths' if 'paths' in name else ('hex' if 'indir' in name else 'number')
   d['mode'] = str(C.hist2slist(hist)[-1][0])
@@ -573,11 +585,11 @@ def print_hist(hist_t, Threshold=0.01):
     left, threshold = 0, int(Threshold * tot)
     for k in sorted(hist.keys(), key=sorter):
       if hist[k] >= threshold and hist[k] > 1:
-        bucket = ('%50s' % k) if d['type'] == 'paths' else '%5s' % (hex(k) if d['type'] == 'hex' else k)
+        bucket = ('%70s' % k) if d['type'] == 'paths' else '%5s' % (hex(k) if d['type'] == 'hex' else k)
         print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
     if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
-  d['total'] = sum(hist[k] * int(k.split('+')[0]) for k in hist.keys()) if weighted else tot
+  d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) == str else k) for k in hist.keys()) if weighted else tot
   return d
 
 def print_hist_sum(name, h):
@@ -621,12 +633,12 @@ def print_common(total):
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(size_sum / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
-  if edge_en: print_global_stats()
+  if edge_en and total: print_global_stats()
   print('#Global-stats-end\n')
   if verbose & 0xf00: C.warn_summary()
 
 def print_all(nloops=10, loop_ipc=0):
-  total = stat['IPs'][glob['ip_filter']] if glob['ip_filter'] else stat['total']
+  total = sum(stat['IPs'].values()) if glob['ip_filter'] else stat['total']
   if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5:
     if verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
     else: C.error('Too many LBR bad/bogus samples in profile')

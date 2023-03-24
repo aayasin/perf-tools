@@ -16,6 +16,7 @@ __version__= 1.07
 import common as C, pmu
 from common import inc
 import os, re, sys
+import llvm_mca_lbr
 try:
   from numpy import average
   numpy_imported = True
@@ -30,6 +31,7 @@ MEM_INSTS = ['load', 'store', 'lock', 'prefetch']
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
 hitcounts = C.envfile('PTOOLS_HITS')
+llvm_log = C.envfile('LLVM_LOG')
 debug = os.getenv('DBG')
 verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings
 use_cands = os.getenv('LBR_USE_CANDS')
@@ -658,8 +660,10 @@ def print_all(nloops=10, loop_ipc=0):
       tot = print_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0]))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
       if hitcounts and lp['size']:
-        if lp['taken'] == 0: C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
+        if lp['taken'] == 0:
+          C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
           'Hitcounts & ASM of loop %s' % hex(loop_ipc))
+          if llvm_log: lp['IPC-ideal'] = llvm_mca_lbr.get_llvm(hitcounts, llvm_log, lp, loop_ipc)
         else: lp['attributes'] += ';likely_non-contiguous'
       find_print_loop(loop_ipc, sloops)
     else:

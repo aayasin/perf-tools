@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.97
+__version__ = 1.98
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -88,6 +88,7 @@ do = {'run':        C.RUN_DEF,
   'size':           0,
   'super':          0,
   'tee':            1,
+  'time':           0,
   'tma-fx':         '+IPC,+Instructions,+Time,+SLOTS,+CLKS',
   'tma-bot-fe':     ',+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
   'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
@@ -96,19 +97,31 @@ do = {'run':        C.RUN_DEF,
 args = argparse.Namespace()
 
 def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=True, background=False, export=None):
-  X = x.split()
+  time = '/usr/bin/time'
+  def get_time_cmd():
+    X, i = x.split(), 0
+    while C.any_in(('=', 'python'), X[i]): i += 1
+    j=i+1
+    while C.any_in(('--no-desc',), X[j]): j += 1
+    kk = C.flag_value(x, '-e') if ' record' in x else C.flag_value(x, '-F') if ' script' in x else X[j+1]
+    cmd_name = C.chop('-'.join((X[i].split('/')[-1], X[j], kk)))
+    time_str = '%s %s' % (time, '-f "\\t%%E time-real:%s"' % cmd_name if do['time'] > 1 else '')
+    X.insert(1 if '=' in X[0] else 0, time_str)
+    return ' '.join(X)
   if msg and do['batch']: msg += " for '%s'" % args.app
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee']: x = x.split('|')[0]
   x = x.replace('| ./', '| %s/' % C.dirname())
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
-  if 'tee >(' in x or export: x = '%s bash -c "%s"' % (export if export else '', x.replace('"', '\\"'))
+  profiling = C.any_in([' stat', ' record', 'toplev.py'], x)
+  if do['time'] and profiling: timeit = True
+  if timeit and not export: x = get_time_cmd()
+  if 'tee >(' in x or export or x.startswith(time): x = '%s bash -c "%s" 2>&1' % (export if export else '', x.replace('"', '\\"'))
   x = x.replace('  ', ' ').strip()
-  if timeit and not export: x = 'time -f "\\t%%E time-real:%s" %s 2>&1' % ('-'.join(X[:2]), x)
   debug = args.verbose > 0
   if len(vars(args)):
     run = not args.print_only
-    if C.any_in(['perf stat', ' record', 'toplev.py'], x):
+    if profiling:
       if args.mode == 'process':
         x, run, debug = '# ' + x, False, args.verbose > 2
         if not 'perf record ' in x: msg = None
@@ -639,7 +652,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe('%s record %s -o %s -- %s' % (perf, flags, perf_data, r), 'FlameGraph')
     x = '-i %s %s > %s.svg ' % (perf_data,
       ' | ./FlameGraph/'.join(['', 'stackcollapse-perf.pl', 'flamegraph.pl']), perf_data)
-    exe(' '.join((perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 1))
+    exe(' '.join((perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 2))
     print('firefox %s.svg &' % perf_data)
 
 

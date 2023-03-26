@@ -645,7 +645,7 @@ def print_all(nloops=10, loop_ipc=0):
     if verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
     else: C.error('Too many LBR bad/bogus samples in profile')
   if not loop_ipc: print_common(total)
-  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x)
+  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x, Threshold=.03)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:
     if loop_ipc in loops:

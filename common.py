@@ -234,7 +234,7 @@ def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])
 # chop - clean a list of charecters from a string
 # @s:     input string
 # @stuff: input charecters as string, or a first item in a tuple of strings
-def chop(source, stuff):
+def chop(source, stuff='./~<>=,;{}|"\':'):
   r, chars = source, stuff
   items = []
   if type(stuff) is tuple:
@@ -243,7 +243,6 @@ def chop(source, stuff):
   for i in range(len(chars)): items += [chars[i]]
   for x in items: r = r.replace(x, '')
   return r.strip()
-def chop_app(a): return chop(a, './~<>=,;{}|"\'')
 
 def any_in(l, s):
   for i in l:
@@ -331,7 +330,7 @@ def command_basename(comm, iterations=None):
   if len(name) == 1 and ('kernels' in comm or iterations): name.append(iterations)
   namestr = name.pop(0)
   for x in name: namestr += "-%s" % x.strip('-')
-  return chop_app(namestr.strip('-'))
+  return chop(namestr.strip('-'))
 
 # stats
 def inc(d, b, i=1): d[b] = d.get(b, 0) + i

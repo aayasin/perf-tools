@@ -22,7 +22,7 @@ reuse = os.getenv('REUSE')
 cpu_count = os.cpu_count()
 if n > cpu_count: C.error('Too large # of copies %d ( > %d )' % (n, cpu_count))
 
-name = './.%s-%03d.cmd' % (C.chop_app(app.split()[0].split('/')[-1]), n)
+name = './.%s-%03d.cmd' % (C.chop(app.split()[0].split('/')[-1]), n)
 
 def gen_cmd():
   cmds = []

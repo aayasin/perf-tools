@@ -27,8 +27,6 @@ from platform import python_version
 
 Find_perf = 'sudo find / -name perf -executable -type f'
 LDLAT_DEF = '7'
-XED_PATH = '/usr/local/bin/xed'
-LLVM_MCA_PATH = '/usr/local/bin/llvm-mca'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'batch':          0,
@@ -128,7 +126,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
         if not 'perf record ' in x: msg = None
     elif args.mode == 'profile':
         x, run, debug = '# ' + x, False, args.verbose > 2
-    elif '--xed' in x and not os.path.isfile(XED_PATH): C.error('!\n'.join(('xed was not installed',
+    elif '--xed' in x and not os.path.isfile(C.GLOBAL_PATHS['xed']): C.error('!\n'.join(('xed was not installed',
       "required by '%s' in perf-script of '%s'" % (msg, x), 'try: ./do.py setup-all --tune :xed:1 ')))
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], do['pmu']):
@@ -191,7 +189,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']:
-    if do['xed'] < 2 and os.path.isfile(XED_PATH): exe_v0(msg='xed is already installed')
+    if do['xed'] < 2 and os.path.isfile(C.GLOBAL_PATHS['xed']): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
     pip = 'pip3' if python_version().startswith('3') else 'pip'
     for x in ('numpy', 'xlsxwriter'): exe('%s install %s' % (pip, x), '@installing %s' % x)
@@ -199,7 +197,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
   if do['loop-ideal-ipc']:
-    if os.path.isfile(LLVM_MCA_PATH): exe_v0(msg='llvm is already installed')
+    if os.path.isfile(C.GLOBAL_PATHS['llvm-mca']): exe_v0(msg='llvm is already installed')
     else: exe('./build-llvm.sh', 'installing llvm')
 
 def tools_update(kernels=[], level=3):

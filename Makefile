@@ -99,4 +99,5 @@ pre-push: help tramp3d-v4
 	    DO=../do.py APP=../pmu-tools/workloads/BC2s         # tests default from another directory, toplev describe
 	$(MAKE) test-study                                      # tests study script (errors only)
 	$(DO) profile > .do.log 2>&1 || $(FAIL)                 # tests default profile-steps (errors only)
+	$(DO) setup-all profile --tune :loop-ideal-ipc:1 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
 	$(DO) profile --tune :time:2 -v3 > .do-time2.log 2>&1 || $(FAIL) # tests default w/ :time (errors only)

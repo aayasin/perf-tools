@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.98
+__version__ = 1.99
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -67,7 +67,7 @@ do = {'run':        C.RUN_DEF,
   'numactl':        1,
   'objdump':        'binutils-gdb/binutils/objdump' if os.path.isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
-  'packages':       ('cpuid', 'dmidecode', 'msr', 'numactl'),
+  'packages':       ['cpuid', 'dmidecode', 'msr', 'numactl'],
   'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
@@ -81,8 +81,10 @@ do = {'run':        C.RUN_DEF,
   'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles', # ,cycles:G
   'perf-stat-ipc':  'stat -e instructions,cycles',
   'pin':            'taskset 0x4',
+  'plot':           0,
   'pmu':            pmu.name(),
   'python':         sys.executable,
+  'python-pkgs':    ['numpy', 'xlsxwriter'],
   'repeat':         3,
   'reprocess':      2,
   'sample':         2,
@@ -194,7 +196,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
     if do['xed'] < 2 and os.path.isfile(XED_PATH): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
     pip = 'pip3' if python_version().startswith('3') else 'pip'
-    for x in ('numpy', 'xlsxwriter'): exe('%s install %s' % (pip, x), '@installing %s' % x)
+    for x in do['python-pkgs']: exe('%s install %s' % (pip, x), '@installing %s' % x)
     if 'Red Hat' in C.file2str('/etc/os-release', 1): exe('sudo yum install python3-xlsxwriter.noarch', '@patching xlsx')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
@@ -425,6 +427,7 @@ def profile(mask, toplev_args=['mvl6', None]):
                               '@time-consuming instructions', data)
   
   toplev += ' --no-desc'
+  if do['plot']: toplev += ' --graph -I%d --no-multiplex' % do['interval']
   grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
   grep_NZ= "egrep -iv '^(all|)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add|warning:)|not (found|referenced|supported)|##placeholder##' "
   grep_nz= grep_NZ
@@ -723,6 +726,9 @@ def main():
     x = ',branches,branch-misses'
     if do['repeat'] > 1: x += ',cycles:k'
     do['perf-stat-def'] += x
+  if do['plot']:
+    do['packages'] += ['feh']
+    do['python-pkgs'] += ['matplotlib', 'brewer2mpl']
   if do['super']:
     do['perf-stat-def'] += ',syscalls:sys_enter_sched_yield'
   if args.mode == 'process':
@@ -758,7 +764,7 @@ def main():
     elif c == 'prof-no-mux':  profile(args.profile_mask if args.profile_mask != C.PROF_MASK_DEF else 0x80,
                                       toplev_args=['vl6', ' --metric-group +Summary --single-thread'])
     elif c == 'build-perf':   exe('%s ./do.py setup-all --install-perf build -v%d --tune %s' % (do['python'],
-      args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+('xed', 'tee', 'loop-ideal-ipc'))])))
+      args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+['xed', 'tee', 'loop-ideal-ipc'])])))
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()

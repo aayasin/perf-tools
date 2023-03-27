@@ -234,7 +234,7 @@ def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])
 # chop - clean a list of charecters from a string
 # @s:     input string
 # @stuff: input charecters as string, or a first item in a tuple of strings
-def chop(source, stuff='./~<>=,;{}|"\':'):
+def chop(source, stuff='./~<>=,;{}|"\': '):
   r, chars = source, stuff
   items = []
   if type(stuff) is tuple:

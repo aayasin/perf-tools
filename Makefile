@@ -86,14 +86,15 @@ pre-push: help tramp3d-v4
 	$(DO) log help -m GFLOPs --tune :msr:1                  # tests help of metric; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
 	$(MAKE) test-metric SHOW="grep --color -E '^|Ret.*<=='" # tests perf -M IpCall & colored TMA, then toplev --drilldown
+	$(DO) log                                               # prompt for sudo soon after
 	$(MAKE) test-bc2 SHOW="grep --color -E '^|Mispredict'"	# tests topdown across-tree tagging; Mispredict
 	$(MAKE) test-build SHOW="grep --color -E '^|build|DSB|Ports'" # tests build command, perf -e, toplev --nodes; Ports_*
 	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'                 # tests load-latency profile-step + verbose:1
 	$(MAKE) test-default PM="-pm 313e"                      # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
-	$(MAKE) test-default DO_ARGS=":perf-filter:0 :sample:3" \
-	     APP='taskset 0x4 ./CLTRAMP3D u' PM='-pm 31a'       # tests unfiltered sampling; PEBS profile-step
+	$(MAKE) test-default DO_ARGS=":perf-filter:0 :sample:3" APP='taskset 0x4 ./CLTRAMP3D u' PM='-pm 1031a' && \
+	    test -f "CLTRAMP3D-u.perf_stat-I10.csv"             # tests unfiltered sampling; PEBS & over-time profile-steps
 	mkdir test-dir; cd test-dir; make -f ../Makefile test-default \
 	    DO=../do.py APP=../pmu-tools/workloads/BC2s         # tests default from another directory, toplev describe
 	$(MAKE) test-study                                      # tests study script (errors only)

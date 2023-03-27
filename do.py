@@ -46,8 +46,9 @@ do = {'run':        C.RUN_DEF,
   'forgive':        0,
   'gen-kernel':     1,
   'help':           1,
+  'interval':       10,
   'imix':           0x1f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens
-  'loop-ideal-ipc': 1,
+  'loop-ideal-ipc': 0,
   'loops':          int(pmu.cpu('cpucount') / 2),
   'log-stdout':     1,
   'lbr-branch-stats': 1,
@@ -324,10 +325,10 @@ def profile(mask, toplev_args=['mvl6', None]):
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
   def perf_ic(data, comm): return ' '.join(['-i', data, '-c %s' % comm if comm else ''])
-  def perf_stat(flags, msg, events='', perfmetrics=do['core'],
+  def perf_stat(flags, msg, events='', perfmetrics=do['core'], csv=False,
                 grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
-    evts, perf_args = events, [flags, '--log-fd=1', do['perf-stat'] ]
+    evts, perf_args = events, [flags, '-x,' if csv else '--log-fd=1', do['perf-stat'] ]
     if args.metrics: perf_args += ['--metric-no-group', '-M', args.metrics] # 1st is workaround bug 4804e0111662 in perf-stat -r2 -M
     perf_args = ' '.join(perf_args)
     if perfmetrics and pmu.perfmetrics():
@@ -342,14 +343,14 @@ def profile(mask, toplev_args=['mvl6', None]):
     if args.events: evts += append(pmu.perf_format(args.events), evts)
     if args.events or args.metrics: grep = '' #keep output unfiltered with user-defined events
     if evts != '': perf_args += ' -e "%s,%s"' % (do['perf-stat-def'], evts)
-    log = '%s.perf_stat%s.log' % (out, flags.strip())
-    stat = ' stat %s -- %s | tee %s %s' % (perf_args, r, log, grep)
+    log = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log')
+    stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
     exe1(perf + stat, msg)
     if args.stdout or do['tee']==0: return None
     if args.mode == 'process': return log
     if isfile(log) and os.path.getsize(log) == 0: exe1(ocperf + stat, msg + '@; retry w/ ocperf')
     if int(exe_1line('wc -l ' + log, 0, False)) < 5:
-      if perfmetrics: return perf_stat(flags, msg + '@; no PM', events=events, perfmetrics=0, grep=grep)
+      if perfmetrics: return perf_stat(flags, msg + '@; no PM', events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
     return log
 
@@ -633,6 +634,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe(cmd + " | tee %s | %s" % (log, grep_nz), 'topdown-%s no multiplexing' % toplev_args[0])
   
   if en(16):
+    csv_file = perf_stat('-I%d' % do['interval'], 'over-time counting at interval of %dms' % do['interval'], csv=True)
+    if args.events:
+      for e in args.events.split(','): exe('grep %s %s > %s' % (e, csv_file, csv_file.replace('.csv', '-%s.csv' % e)))
+
+  if en(19):
     data = perf_record('pt')
     tag, info = 'pt', '%s.info.log' % data
     exe(perf + " script --no-itrace -F event,comm -i %s | %s | tee %s.modules.log | ./ptage | tail" % (data, sort2u, data))

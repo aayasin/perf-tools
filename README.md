@@ -84,6 +84,7 @@ A set of command-line tools to facilitate profiling
 * **n-copies** -- invokes N-copies of an app, with CPU affinity (uses sibling thread N=2, 1 thread/core when N <= nproc)
 * **n-loop** -- run a given app n-times in a loop
 * **ptage** -- computes percentages & sum of number-prefixed input
+* **llvm-mca** -- calculates IPC-ideal for simple loops in LBR profile-step
 
 ### wrappers
 Shortcuts to set-up certain tools

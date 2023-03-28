@@ -13,8 +13,6 @@ import os
 import re
 import argparse
 import sys
-import random
-import string
 
 __author__ = 'akhalil'
 # edited: Mar 2023
@@ -28,7 +26,7 @@ INTRO_MESSAGE = '\
   'llvm-mca output.\n'
 
 
-LLVM = '/usr/local/bin/llvm-mca'
+LLVM = C.GLOBAL_PATHS['llvm-mca']
 
 # handle incompatibilities between xed and LLVM MCinst
 repl = (("movsxd", "movslq"),

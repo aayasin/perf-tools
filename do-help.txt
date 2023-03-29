@@ -33,8 +33,8 @@ optional arguments:
                         kernel build, 4:+args parsing, 5:+event-groups,
                         6:ocperf verbose, .. 9:anything (default: 0)
   -pm PROFILE_MASK, --profile-mask PROFILE_MASK
-                        mask to control stages in the profile command
-                        (default: 12671)
+                        mask to control stages in the profile command. See
+                        profile-mask-help.md for details (default: 12671)
   --mode [{profile,process,both}]
                         analysis mode options: profile-only, (post)process-
                         only or both (default: both)

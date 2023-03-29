@@ -2,7 +2,7 @@
 # VER 1.0
 set -e
 
-LLVMVER=${LLVMVER:-14.0.0}
+LLVMVER=${LLVMVER:-16.0.0}
 OVERRIDE=${OVERRIDE:-false}
 
 while getopts "o" opt; do
@@ -11,7 +11,7 @@ while getopts "o" opt; do
       OVERRIDE=true
       ;;
     \?)
-      exit
+      exit 1
       ;;
   esac
 done
@@ -29,21 +29,16 @@ red_cmd() {
 }
 
 DIST=$(red_cmd lsb_release -i)
-REL=$(red_cmd lsb_release -r)
 case $DIST in
 ubuntu)
-    cmd=gnu-ubuntu-$REL
+    cmd=gnu-ubuntu-18.04
     ;;
 suse)
-    if lsb_release -a | grep -q sles; then
-        cmd=sles$REL
-    else
-        cmd=sled$REL
-    fi
+    cmd=sles12.4
     ;;
 *)
     echo "\033[1;31mLLVM DOESN'T SUPPORT YOUR LINUX DISTRIBUTION, BUILD FAILED!\033[0m"
-    exit
+    exit 1
 esac
 
 LLVM=clang+llvm-$LLVMVER-x86_64-linux-$cmd
@@ -53,7 +48,7 @@ if ! wget -q --spider https://github.com/llvm/llvm-project/releases/download/llv
 You can try one of the following:
     1. Run again without specifying a version, the default version 14.0.0 will be installed.
     2. Try another version, check https://releases.llvm.org/download.html for all available versions.\033[0m"
-    exit
+    exit 1
 fi
 
 LOG=llvm_build.log

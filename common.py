@@ -30,6 +30,11 @@ class color:
   UNDERLINE = '\033[4m'
   END = '\033[0m'
 
+
+GLOBAL_PATHS = {'llvm-mca':      '/usr/local/bin/llvm-mca',
+                'xed':           '/usr/local/bin/xed'
+                }
+
 # colored printing, writes to outfile or log_stdio
 def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   msg = col + msg + color.END

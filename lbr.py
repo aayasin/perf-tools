@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.07
+__version__= 1.08
 
 import common as C, pmu
 from common import inc
@@ -32,7 +32,7 @@ def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
 hitcounts = C.envfile('PTOOLS_HITS')
 llvm_log = C.envfile('LLVM_LOG')
-debug = os.getenv('DBG')
+debug = os.getenv('LBR_DBG')
 verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings
 use_cands = os.getenv('LBR_USE_CANDS')
 user_imix = C.env2list('LBR_IMIX', ['vpmovmskb'])
@@ -45,10 +45,10 @@ def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 4))
 
 def warn(mask, x): return C.warn(x) if edge_en and (verbose & mask) else None
 
-def exit(x, sample, label, n=0):
-  C.annotate(x, label)
+def exit(x, sample, label, n=0, msg=str(debug)):
+  if x: C.annotate(x, label)
   print_sample(sample, n)
-  C.printf(str(debug)+'\n')
+  C.printf(msg+'\n')
   sys.exit()
 
 def str2int(ip, plist):
@@ -354,16 +354,17 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   if stat['total'] == 0:
     if edge_en: edge_en_init(indirect_en)
     if ret_latency: header_ip_str.position = 8
-    if debug: C.printf('DBG=%s\n' % debug)
-  tick = C.env2int('LBR_TICK', 1000)
-  if loop_ipc: tick *= 10
+    if debug: C.printf('LBR_DBG=%s\n' % debug)
+    if loop_ipc:
+      read_sample.tick *= 10
+      read_sample.stop = None
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
     insts, takens, xip, timestamp = 0, [], None, None
     tc_state = 'new'
     stat['total'] += 1
-    if stat['total'] % tick == 0: C.printf('.')
+    if stat['total'] % read_sample.tick == 0: C.printf('.')
     while True:
       line = read_line()
       # input ended
@@ -373,7 +374,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           print_all()
           C.error('No LBR data in profile')
         if not loop_ipc: C.printf(' .\n')
-        return lines if len(lines) and not skip_bad else None
+        return lines if len(lines) > min_lines and not skip_bad else None
       header = is_header(line)
       if header:
         # first sample here (of a given event)
@@ -383,7 +384,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
           if len(lbr_events) == 1: x += ' primary= %s %s' % (event, C.env2str('LBR_STOP'))
           if ip_filter: x += ' ip_filter= %s' % str(ip_filter)
-          if loop_ipc: x += ' loop= %s' % hex(loop_ipc)
+          if loop_ipc: x += ' loop= %s%s' % (hex(loop_ipc), C.flag2str(' history= ', C.env2int('LBR_PATH_HISTORY')))
           if verbose: x += ' verbose= %s' % hex(verbose)
           if not header.group(2).isdigit(): C.printf(line)
           C.printf(x+'\n')
@@ -494,6 +495,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         if mispred_ip and is_taken(line) and mispred_ip == line_ip(line) and 'MISPRED' in line: valid += 1
         lines += [ line ]
       xip = ip
+    if read_sample.dump: print_sample(lines, read_sample.dump)
+    if read_sample.stop and stat['total'] >= int(read_sample.stop):
+      C.info('stopping after %s valid samples' % read_sample.stop)
+      print_common(stat['total'])
+      exit(None, lines, 'stop', msg="run:\t 'kill -9 $(pidof perf)'\t!")
   if glob['size_stats_en']:
     size = len(lines) - 1
     if size_sum == 0: stat['size']['min'] = stat['size']['max'] = size
@@ -503,6 +509,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     size_sum += size
     inc(stat['takens'], len(takens))
   return lines
+read_sample.stop = os.getenv('LBR_STOP')
+read_sample.tick = C.env2int('LBR_TICK', 1000)
+read_sample.dump = C.env2int('LBR_DUMP', 0)
+
 
 def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
 def is_callret(l):    return is_type(CALL_RET, l)
@@ -526,7 +536,8 @@ def is_jmp_next(br, # a hacky implementation for now
 def has_timing(line): return line.endswith('IPC')
 def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else False
 def is_label(line):   return line.strip().endswith(':')
-def is_loop(line):    return line_ip(line) in loops
+def is_loop_by_ip(ip):  return ip in loops
+def is_loop(line):    return is_loop_by_ip(line_ip(line))
 def is_taken(line):   return '# ' in line
 # FIXME: this does not work for non-contigious loops!
 def is_in_loop(ip, loop): return ip >= loop and ip <= loops[loop]['back']

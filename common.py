@@ -125,8 +125,8 @@ def exe_output(x, sep=";"):
     out = out.decode()
   return out.replace("\n", sep)
 
-def exe2list(x, debug=False):
-  res = str2list(exe_output(x, ' '))
+def exe2list(x, sep=' ', debug=False):
+  res = str2list(exe_output(x, sep))
   if debug: printc('exe2list(%s) = %s' % (x, str(res).replace(', u', ', ')), color.BLUE)
   return res
 
@@ -264,6 +264,8 @@ def is_num(x, hex=False):
 def float2str(f):
   if not is_num(f): return f
   return '{:,}'.format(f)
+
+def flag2str(prefix, flag): return '%s%s' % (prefix, str(flag).replace('True', '')) if flag else ''
 
 def flag_value(s, f, v='', sep=' '):
   if f in s: v = s.split(f)[1].split(sep)[1]

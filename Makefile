@@ -94,11 +94,11 @@ pre-push: help tramp3d-v4
 	$(MAKE) test-default PM="-pm 313e"                      # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
-	$(MAKE) test-default DO_ARGS=":perf-filter:0 :sample:3" APP='taskset 0x4 ./CLTRAMP3D u' PM='-pm 1031a' && \
+	$(MAKE) test-default DO_ARGS=":msr:1 :perf-filter:0 :sample:3 :size:1" APP='taskset 0x4 ./CLTRAMP3D u' PM='-pm 1031a' && \
 	    test -f "CLTRAMP3D-u.perf_stat-I10.csv"             # tests unfiltered sampling; PEBS & over-time profile-steps
 	mkdir test-dir; cd test-dir; make -f ../Makefile test-default \
 	    DO=../do.py APP=../pmu-tools/workloads/BC2s         # tests default from another directory, toplev describe
 	$(MAKE) test-study                                      # tests study script (errors only)
 	$(DO) profile > .do.log 2>&1 || $(FAIL)                 # tests default profile-steps (errors only)
-	$(DO) setup-all profile --tune :loop-ideal-ipc:1 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
+	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
 	$(DO) profile --tune :time:2 -v3 > .do-time2.log 2>&1 || $(FAIL) # tests default w/ :time (errors only)

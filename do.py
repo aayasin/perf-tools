@@ -57,7 +57,7 @@ do = {'run':        C.RUN_DEF,
   'ldlat':          int(LDLAT_DEF),
   'levels':         2,
   'metrics':        '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict' +
-                    (',+Memory_Bound*/3' if pmu.goldencove() else ''), # +UopPI once ICL mux fixed, +ORO with TMA 4.5
+                    C.flag2str(',+Memory_Bound*/3', pmu.goldencove()), # +UopPI once ICL mux fixed, +ORO with TMA 4.5
   'model':          'MTL',
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
@@ -71,7 +71,7 @@ do = {'run':        C.RUN_DEF,
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
   'perf-pebs':      '-b -e %s -c 1000003' % pmu.event('dsb-miss'),
   'perf-pt':        "-e '{intel_pt//u,%su}' -c 700001 -m,64M" % pmu.lbr_event(), # noretcomp
-  'perf-record':    '', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
+  'perf-record':    ' -g ', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-report-append': '',
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
@@ -150,7 +150,7 @@ def print_cmd(x, show=not do['batch']):
 
 def exe_1line(x, f=None, heavy=True):
   return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(x, f, args.verbose > 1)
-def exe2list(x, f=None): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, args.verbose > 1)
+def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
 
 def warn_file(x):
   if not args.mode == 'profile' and not args.print_only and not os.path.isfile(x): C.warn('file does not exist: %s' % x)
@@ -214,8 +214,7 @@ def tools_update(kernels=[], level=3):
       exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs
 
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
-def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' %
-  (p, C.file2str(p), (' >> '+out if out else '')))
+def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' % (p, C.file2str(p), C.flag2str(' >> ', out)))
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): set_sysfile(p, str(v))
   TIME_MAX = '/proc/sys/kernel/perf_cpu_time_max_percent'
@@ -344,7 +343,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
-  def perf_ic(data, comm): return ' '.join(['-i', data, '-c %s' % comm if comm else ''])
+  def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'], csv=False,
                 grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
@@ -418,13 +417,10 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(2): perf_stat('-a', 'system-wide counting', 2, a_events(), grep='| egrep "seconds|insn|topdown|pkg"')
   
   if en(3) and do['sample']:
-    base = out+'.perf'
-    if do['perf-record'] and len(do['perf-record']):
-      do['perf-record'] += ' '
-      base += C.chop(do['perf-record'], ' :/,=')
-    data = '%s.perf.data'%record_name(do['perf-record'])
-    profile_exe(perf + ' record -c %d -g -o %s %s -- %s' % (pmu.period(), data, do['perf-record'], r),
-                'sampling %sw/ stacks' % do['perf-record'], 3, tune='sample')
+    base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
+    data = '%s.perf.data' % record_name(do['perf-record'])
+    profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.period(), data, do['perf-record'], r),
+                'sampling %s' % do['perf-record'].replace(' -g ', 'w/ stacks'), 3, tune='sample')
     if do['log-stdout'] and args.mode != 'process' and not do['forgive']:
       record_out = C.file2lines(C.log_stdio)
       for l in reversed(record_out):
@@ -437,8 +433,10 @@ def profile(mask, toplev_args=['mvl6', None]):
       "| egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//'" % (data, base), '@report functions')
     exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A22 Overhead", '@report modules')
-    exe("%s --stdio -n -l -i %s | c++filt | tee %s-code.log | egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" %
-      (perf_view('annotate'), data, base, base), '@annotate code', redir_out='2>/dev/null')
+    exe("%s --stdio -n -l -i %s | c++filt | tee %s-code.log "
+        "| tee >(egrep '^\s+[0-9]+ :' | sort -n | ./ptage > %s-code-ips.log) "
+        "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
+        base, base, base), '@annotate code', redir_out='2>/dev/null', timeit=(args.verbose > 2))
     exe("grep -w -5 '%s :' %s-code.log" % (exe_1line("egrep '\s+[0-9]+ :' %s-code.log | sort -n | tail -1" %
                                                       base, 0), base), '@hottest block(s), all commands')
     if do['xed']: perf_script("-F insn --xed | %s | tee %s-hot-insts.log | tail" % (sort2up, base),
@@ -508,7 +506,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     flags = do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     cmd = 'bash -c "%s %s %s"' % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
-    profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), ' on ' + msg if msg else ''), step)
+    profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
     warn_file(perf_data)
     if not tag in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
     if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:
@@ -527,6 +525,9 @@ def profile(mask, toplev_args=['mvl6', None]):
       assert len(bins)
       exe_v0('printf "# %s:\n#\n" > %s' % ('Static Statistics', info))
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
+      if os.path.isfile(bins[0]):
+        exe_v0('printf "\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n" >> %s' % (bins[0], info))
+        exe("strings %s | %s >> %s" % (bins[0], C.grep('^(GNU |GCC:|clang)'), info))
       exe_v0('echo >> %s' % info)
     def log_count(x, l): return "printf 'Count of unique %s%s: ' >> %s && wc -l < %s >> %s" % (
       'non-cold ' if do['imix'] & 0x10 else '', x, info, l, info)
@@ -538,7 +539,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       exe("%s && tail %s | grep -v unique %s" % (C.grep('code footprint', info), info, hist_cmd), "@top loops & more in " + info)
     if not os.path.isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()
-      exe_v0('printf "# processing %s%s\n"%s %s' % (data, " filtered on '%s'" % comm if comm else '', '>>' if do['size'] else '>', info))
+      exe_v0('printf "# processing %s%s\n"%s %s' % (data, C.flag2str(" filtered on ", comm), '>>' if do['size'] else '>', info))
       if do['lbr-branch-stats']: exe(perf + " report %s | grep -A13 'Branch Statistics:' | tee -a %s | egrep -v ':\s+0\.0%%|CROSS'" %
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(perf_stat_log):
@@ -765,6 +766,7 @@ def main():
   if do['container']:
     if args.mode != 'process': C.info('container profiling')
     for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'
+  if args.verbose > 2: C.info('timing perf tool post-processing')
   do_cmd = '%s # version %s' % (C.argv2str(), version())
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)

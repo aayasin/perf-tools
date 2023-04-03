@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 1.99
+__version__ = 2.00
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -39,7 +39,7 @@ do = {'run':        C.RUN_DEF,
   'cpuid':          0 if C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
   'debug':          0,
   'dmidecode':      0,
-  'extra-metrics':  "+Mispredictions,+IpTB,+BpTkBranch,+IpCall,+IpLoad,+ILP,+UopPI",
+  'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
   'flameg':         0,
   'forgive':        0,
   'gen-kernel':     1,
@@ -56,7 +56,8 @@ do = {'run':        C.RUN_DEF,
   'lbr-stats-tk':   '- 0 20 1',
   'ldlat':          int(LDLAT_DEF),
   'levels':         2,
-  'metrics':        '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict' +
+  'metrics':        '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
+                    C.flag2str(',+IpAssist', pmu.goldencove()) + # Make this one Skylake in TMA 4.6
                     C.flag2str(',+Memory_Bound*/3', pmu.goldencove()), # +UopPI once ICL mux fixed, +ORO with TMA 4.5
   'model':          'MTL',
   'msr':            0,
@@ -489,7 +490,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     profile_exe(cmd + ' | sort | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
 
   if en(13):
-    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
+    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+UopPI,+CoreIPC')
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown 2 levels + FE Bottlenecks', 13)
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
 

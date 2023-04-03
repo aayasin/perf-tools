@@ -24,7 +24,8 @@ optional arguments:
                         user metrics to pass to perf-stat's -M (default: None)
   --nodes NODES, -n NODES
                         user metrics to pass to toplev's --nodes (default: +Lo
-                        ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict)
+                        ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,
+                        +UopPI)
   -a APP, --app APP     name of user-application/kernel/command to profile
                         (default: ./run.sh)
   -v VERBOSE, --verbose VERBOSE

@@ -17,7 +17,7 @@ import common as C
 import re
 
 def get_stat_log(s, perf_stat_file):
-  repeat = re.findall('.perf_stat-r([0-9]+).log', perf_stat_file)[0]
+  repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]
   return get_stat_int(s, perf_stat_file.replace('.perf_stat-r%s.log' % repeat, ''))
 
 def get(s, app):
@@ -28,7 +28,7 @@ def print_metrics(app):
   rollup(c)
   return print_DB(c)
 
-
+# internal methods
 def get_stat_int(s, c, val=-1):
   rollup(c)
   try:

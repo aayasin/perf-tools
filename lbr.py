@@ -382,7 +382,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         if not ev in lbr_events:
           lbr_events += [ev]
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
-          if len(lbr_events) == 1: x += ' primary= %s %s' % (event, C.env2str('LBR_STOP'))
+          if len(lbr_events) == 1: x += ' primary= %s%s%s' % (event, C.flag2str(' ', C.env2str('LBR_STOP')),
+            C.flag2str(' ', C.env2str('LBR_IMIX')))
           if ip_filter: x += ' ip_filter= %s' % str(ip_filter)
           if loop_ipc: x += ' loop= %s%s' % (hex(loop_ipc), C.flag2str(' history= ', C.env2int('LBR_PATH_HISTORY')))
           if verbose: x += ' verbose= %s' % hex(verbose)

@@ -49,9 +49,15 @@ def event(x):
   e = {'lbr':     'r20c4:Taken-branches:ppp',
     'calls-loop': 'r0bc4:callret_loop-overhead',
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
+    'dsb-miss':   '%s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp' % pmu(),
     'sentries':   'r40c4:System-entries:u',
     }[x]
-  return perf_format(e) if x == 'lbr' or v5p() else ''
+  return perf_format(e)
+
+def event_name(x):
+  e = C.flag_value(x, '-e')
+  if 'name=' in e: return e.split('name=')[1].split('/')[0]
+  return e
 
 def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'

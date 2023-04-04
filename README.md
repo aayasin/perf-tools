@@ -54,6 +54,8 @@ System-wide profiling is supported as well.
     Example reports include instruction-mixes, hitcounts (basic-block execution counts), loops,
     as well as stats on hottest loops (identifying loops has some restrictions). 
     Another precise event step is available but is disabled by default.
+  * Additional misc profile-steps are available, e.g. tracing MSRs.
+    Refer to [--profile-mask documentation](profile-mask-help.md) for full list of profile-steps.
 
   A filtered output will be dumped on screen while all logs are saved to the current directory.  
   Use `--profile-mask 42`, as an example, to invoke subset of all steps.  

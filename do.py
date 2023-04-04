@@ -25,6 +25,9 @@ from datetime import datetime
 from math import log10
 from platform import python_version
 
+Uname_a = C.exe_one_line('uname -a')
+if Uname_a.startswith('Darwin'): C.error("Are you on MacOS? it is not supported (uname -a = %s" % Uname_a)
+
 Find_perf = 'sudo find / -name perf -executable -type f'
 LDLAT_DEF = '7'
 do = {'run':        C.RUN_DEF,
@@ -36,7 +39,7 @@ do = {'run':        C.RUN_DEF,
   'compiler':       'gcc -O2 -ffast-math', # ~/tools/llvm-6.0.0/bin/clang',
   'container':      0,
   'core':           1,
-  'cpuid':          0 if C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
+  'cpuid':          0 if not os.path.isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
   'debug':          0,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
@@ -47,7 +50,7 @@ do = {'run':        C.RUN_DEF,
   'interval':       10,
   'imix':           0x1f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens
   'loop-ideal-ipc': 0,
-  'loops':          int(pmu.cpu('cpucount') / 2),
+  'loops':          int(pmu.cpu('cpucount', 20) / 2),
   'log-stdout':     1,
   'lbr-branch-stats': 1,
   'lbr-verbose':    0,
@@ -94,7 +97,7 @@ do = {'run':        C.RUN_DEF,
   'tma-fx':         '+IPC,+Instructions,+Time,+SLOTS,+CLKS',
   'tma-bot-fe':     ',+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
   'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
-  'xed':            1 if pmu.cpu('x86') else 0,
+  'xed':            1 if pmu.cpu('x86', 0) else 0,
 }
 args = argparse.Namespace()
 

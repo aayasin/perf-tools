@@ -138,20 +138,25 @@ def cpu_has_feature(feature):
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags
 
-def cpu(what):
-  if 1:  # not cpu.state:
+def cpu(what, default=None):
+  try:  # not cpu.state:
     pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
     if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
       'git clone --recurse-submodules https://github.com/aayasin/perf-tools'))
     sys.path.append(pmutools)
     import tl_cpu
     cs = tl_cpu.CPU((), False, tl_cpu.Env()) # cpu.state
-  if what == 'get': return cs
-  return {'smt-on': cs.ht,
-    'corecount':    int(len(cs.allcpus) / cs.threads),
-    'cpucount':     cpu_count(),
-    'x86':          int(platform.machine().startswith('x86')),
-  }[what]
+    if what == 'get': return cs
+    return {'smt-on': cs.ht,
+      'corecount':    int(len(cs.allcpus) / cs.threads),
+      'cpucount':     cpu_count(),
+      'x86':          int(platform.machine().startswith('x86')),
+    }[what]
+  except ImportError:
+    C.warn("could not import tl_cpu")
+    if default: return default
+  except KeyError:
+    C.error("pmu:cpu('%s'): unsupported key" % what)
 # cpu.state = None
 
 def cpu_msrs():

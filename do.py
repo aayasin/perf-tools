@@ -28,6 +28,7 @@ from platform import python_version
 Uname_a = C.exe_one_line('uname -a')
 if Uname_a.startswith('Darwin'): C.error("Are you on MacOS? it is not supported (uname -a = %s" % Uname_a)
 
+def isfile(f): return f and os.path.isfile(f)
 Find_perf = 'sudo find / -name perf -executable -type f'
 LDLAT_DEF = '7'
 do = {'run':        C.RUN_DEF,
@@ -39,7 +40,7 @@ do = {'run':        C.RUN_DEF,
   'compiler':       'gcc -O2 -ffast-math', # ~/tools/llvm-6.0.0/bin/clang',
   'container':      0,
   'core':           1,
-  'cpuid':          0 if not os.path.isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
+  'cpuid':          0 if not isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
   'debug':          0,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
@@ -67,7 +68,7 @@ do = {'run':        C.RUN_DEF,
   'msrs':           pmu.cpu_msrs(),
   'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,-CPU_Utilization",
   'numactl':        1,
-  'objdump':        'binutils-gdb/binutils/objdump' if os.path.isfile('./binutils-gdb/binutils/objdump') else 'objdump',
+  'objdump':        'binutils-gdb/binutils/objdump' if isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
   'packages':       ['cpuid', 'dmidecode', 'msr', 'numactl'],
   'perf-filter':    1,
@@ -132,7 +133,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
         if not 'perf record ' in x: msg = None
     elif args.mode == 'profile':
         x, run, debug = '# ' + x, False, args.verbose > 2
-    elif '--xed' in x and not os.path.isfile(C.GLOBAL_PATHS['xed']): C.error('!\n'.join(('xed was not installed',
+    elif '--xed' in x and not isfile(C.GLOBAL_PATHS['xed']): C.error('!\n'.join(('xed was not installed',
       "required by '%s' in perf-script of '%s'" % (msg, x), 'try: ./do.py setup-all --tune :xed:1 ')))
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], do['pmu']):
@@ -148,8 +149,8 @@ def exe_to_null(x): return exe1(x + ' > /dev/null')
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) # don't append to cmds_file
 def prn_line(f): exe_v0('echo >> %s' % f)
 
-def print_cmd(x, show=not do['batch']):
-  if show: C.printc(x)
+def print_cmd(x, show=True):
+  if show and not do['batch']: C.printc(x)
   if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
 
 def exe_1line(x, f=None, heavy=True):
@@ -157,9 +158,8 @@ def exe_1line(x, f=None, heavy=True):
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
 
 def warn_file(x):
-  if not args.mode == 'profile' and not args.print_only and not os.path.isfile(x): C.warn('file does not exist: %s' % x)
+  if not args.mode == 'profile' and not args.print_only and not isfile(x): C.warn('file does not exist: %s' % x)
 
-def isfile(f): return f and os.path.isfile(f)
 def rp(x): return os.path.join(C.dirname(), x)
 def version(): return str(round(__version__, 3 if args.tune else 2))
 def lbr_version():
@@ -195,7 +195,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']:
-    if do['xed'] < 2 and os.path.isfile(C.GLOBAL_PATHS['xed']): exe_v0(msg='xed is already installed')
+    if do['xed'] < 2 and isfile(C.GLOBAL_PATHS['xed']): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
     pip = 'pip3' if python_version().startswith('3') else 'pip'
     for x in do['python-pkgs']: exe('%s install %s' % (pip, x), '@installing %s' % x)
@@ -203,7 +203,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
   if do['loop-ideal-ipc']:
-    if os.path.isfile(C.GLOBAL_PATHS['llvm-mca']): exe_v0(msg='llvm is already installed')
+    if isfile(C.GLOBAL_PATHS['llvm-mca']): exe_v0(msg='llvm is already installed')
     else: exe('./build-llvm.sh', 'installing llvm')
 
 def tools_update(kernels=[], level=3):
@@ -385,7 +385,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (data, sort2u), 1)
     if comm == 'perf' or comm.startswith('perf-'):
       # e.g. a perf tool overhead bug in Intel event names handling
-      exe(' '.join([perf_report_syms, '-i', perf_data, '| grep -A11 Samples']))
+      exe(' '.join([perf_report_syms, '-i', data, '| grep -A11 Samples']))
       C.error("Most samples in 'perf' tool. Try run longer")
     return comm
   def perf_script(x, msg, data, export='', fail=True):
@@ -396,7 +396,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (300*samples))
     if do['perf-filter'] and not perf_script.comm:
       perf_script.comm = get_comm(data)
-      if perf_script.first: C.info("filtering on command '%s' in next post-processing" % perf_script.comm)
+      if perf_script.first and args.mode != 'profile': C.info("filtering on command '%s' in next post-processing" % perf_script.comm)
     instline = '^\s+[0-9a-f]+\s'
     if 'taken branches' in msg: instline += '.*#'
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
@@ -531,7 +531,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       assert len(bins)
       exe_v0('printf "# %s:\n#\n" > %s' % ('Static Statistics', info))
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
-      if os.path.isfile(bins[0]):
+      if isfile(bins[0]):
         exe_v0('printf "\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n" >> %s' % (bins[0], info))
         exe("strings %s | %s >> %s" % (bins[0], C.grep('^(GNU |GCC:|clang)'), info))
       exe_v0('echo >> %s' % info)
@@ -543,7 +543,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       hist_cmd = ''
       for h in hists: hist_cmd += " && grep -A33 '%s histogram:' %s | sed '/%s histogram summary/q'" % (h, info, h)
       exe("%s && tail %s | grep -v unique %s" % (C.grep('code footprint', info), info, hist_cmd), "@top loops & more in " + info)
-    if not os.path.isfile(info) or do['reprocess'] > 1:
+    if not isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()
       exe_v0('printf "# processing %s%s\n"%s %s' % (data, C.flag2str(" filtered on ", comm), '>>' if do['size'] else '>', info))
       if do['lbr-branch-stats']: exe(perf + " report %s | grep -A13 'Branch Statistics:' | tee -a %s | egrep -v ':\s+0\.0%%|CROSS'" %
@@ -573,7 +573,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       llvm_mca = '%s.llvm_mca.log' % data
       lbr_hdr = '# LBR-based Statistics:'
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
-      if not os.path.isfile(hits) or do['reprocess']:
+      if not isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
         cycles = get_stat(pmu.event('cycles'), 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
@@ -601,7 +601,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
         report_info(info)
       else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
-      if do['loops'] and os.path.isfile(loops):
+      if do['loops'] and isfile(loops):
         prn_line(info)
         if do['loop-ideal-ipc']: exe('echo > %s' % llvm_mca)
         cmd, top = '', min(do['loops'], int(exe_1line('wc -l %s' % loops, 0)))
@@ -747,7 +747,7 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
-  if do['debug']: C.dump_stack_on_error = 1
+  if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
   do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
   if do['perf-stat-add']:
     x = ',branches,branch-misses'
@@ -777,7 +777,7 @@ def main():
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   cmds_file = '.%s.cmd' % uniq_name()
-  if os.path.isfile(cmds_file):
+  if isfile(cmds_file):
     C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)
   do['cmds_file'] = open(cmds_file, 'w')
   do['cmds_file'].write('# %s\n' % do_cmd)
@@ -827,7 +827,7 @@ def main():
     elif c.startswith('backup'):
       r = '../perf-tools-%s-lbr%s-e%d.tar.gz' % (version(), lbr_version(), len(param))
       to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
-      if os.path.isfile(r): C.warn('file exists: %s' % r)
+      if isfile(r): C.warn('file exists: %s' % r)
       fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + ['.git'] + param if param else [])
       scp = 'scp %s %s' % (r, to)
       exe('tar -czvf %s %s ; echo %s' % (r, fs, scp), redir_out=None)

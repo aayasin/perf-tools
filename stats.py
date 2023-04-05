@@ -134,9 +134,9 @@ def read_toplev(filename, metric=None):
   if debug > 2: print('reading %s' % filename)
   for l in C.file2lines(filename):
     try:
-      if debug > 3: print('debug:', l)
+      if not re.match(r"^(FE|BE|BAD|RET|Info)", l): continue
       items = l.strip().split()
-      if len(items) < 1: continue
+      if debug > 3: print('debug:', len(items), items, l)
       if 'Info.Bot' in items[0]:
         d[items[1]] = float(items[3])
       elif '<==' in l and len(items) < 7:

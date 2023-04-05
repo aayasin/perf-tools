@@ -67,7 +67,7 @@ lspmu:
 
 help: do-help.txt
 do-help.txt: do.py common.py
-	./$^ -h > $@ && sed -i 's|/home/admin1/ayasin/perf-tools|\.|' $@
+	./$< -h > $@ && sed -i 's|/home/admin1/ayasin/perf-tools|\.|' $@
 	$(DO) profile --tune :sample:3 :flameg:1 :help:-1 :msr:1 --mode profile -pm fffff > /dev/null && cat profile-mask-help.md
 
 update:

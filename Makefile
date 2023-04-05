@@ -84,7 +84,7 @@ test-study: study.py run.sh do.py
 clean:
 	rm -rf {run,BC2s,datadep,CLTRAMP3D}*{csv,data,old,log,txt} test-{dir,study}
 pre-push: help tramp3d-v4
-	$(DO) log help -m GFLOPs --tune :msr:1                  # tests help of metric; prompts for sudo password
+	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
 	$(MAKE) test-metric SHOW="grep --color -E '^|Ret.*<=='" # tests perf -M IpCall & colored TMA, then toplev --drilldown
 	$(DO) log                                               # prompt for sudo soon after

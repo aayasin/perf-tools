@@ -26,6 +26,9 @@ optional arguments:
                         user metrics to pass to toplev's --nodes (default: +Lo
                         ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,
                         +UopPI)
+  -r REPEAT, --repeat REPEAT
+                        times to run per-app counting and topdown-primary
+                        profile steps (default: 3)
   -a APP, --app APP     name of user-application/kernel/command to profile
                         (default: ./run.sh)
   -v VERBOSE, --verbose VERBOSE

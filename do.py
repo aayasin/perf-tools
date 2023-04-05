@@ -17,7 +17,7 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 2.00
+__version__ = 2.01
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -88,7 +88,6 @@ do = {'run':        C.RUN_DEF,
   'pmu':            pmu.name(),
   'python':         sys.executable,
   'python-pkgs':    ['numpy', 'xlsxwriter'],
-  'repeat':         3,
   'reprocess':      2,
   'sample':         2,
   'size':           0,
@@ -162,9 +161,15 @@ def warn_file(x):
 
 def rp(x): return os.path.join(C.dirname(), x)
 def version(): return str(round(__version__, 3 if args.tune else 2))
-def lbr_version():
-  import lbr
-  return str(round(lbr.__version__, 2))
+def module_version(mod_name):
+  if mod_name == 'lbr':
+    import lbr
+    mod = lbr
+  elif mod_name == 'stats':
+    import stats
+    mod = stats
+  else: assert 0, 'Unsupported module: %s' % mod_name
+  return '%s=%.2f' % (mod_name, mod.__version__)
 def app_name(): return args.app != C.RUN_DEF
 def toplev_describe(m, msg=None, mod='^'):
   if do['help'] < 1: return
@@ -319,7 +324,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   perf, toplev, ocperf = get_perf_toplev()
   def profile_exe(cmd, msg, step, mode='redirect', tune=''):
     if do['help'] < 0:
-      if ' -r3' in cmd: tune = '[--tune :repeat:3%s]' % (' :levels:2' if ' -vl2 ' in cmd else '')
+      if ' -r3' in cmd: tune = '[--repeat 3%s]' % (' --tune :levels:2' if ' -vl2 ' in cmd else '')
       elif ' -I10' in cmd: tune = '[--tune :interval:10]'
       elif ' record' in cmd and C.any_in((' -b', ' -j'), cmd): tune = '--tune :sample:3' if 'PEBS' in msg else '[--tune :sample:2]'
       elif len(tune): tune = '[--tune :%s:1]' % tune if 'stacks' in msg else 'setup-all --tune :%s:1' % tune
@@ -419,7 +424,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
   if args.profile_mask & ~0x1: C.info('App: ' + r)
-  if en(1): perf_stat_log = perf_stat('-r%d' % do['repeat'], 'per-app counting %d runs' % do['repeat'], 1)
+  if en(1): perf_stat_log = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
   if en(2): perf_stat('-a', 'system-wide counting', 2, a_events(), grep='| egrep "seconds|insn|topdown|pkg"')
   
   if en(3) and do['sample']:
@@ -474,8 +479,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     topdown_describe(log)
 
   if en(5):
-    cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, do['repeat']))
-    profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown primary, %d-levels %d runs' % (do['levels'], do['repeat']), 5)
+    cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, args.repeat))
+    profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown primary, %d-levels %d runs' % (do['levels'], args.repeat), 5)
   
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
@@ -751,7 +756,7 @@ def main():
   do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
   if do['perf-stat-add']:
     x = ',branches,branch-misses'
-    if do['repeat'] > 1: x += ',cycles:k'
+    if args.repeat > 1: x += ',cycles:k'
     do['perf-stat-def'] += x
   if do['plot']:
     do['packages'] += ['feh']
@@ -823,9 +828,10 @@ def main():
       do_logs('tar')
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
-    elif c == 'version':      print(os.path.basename(__file__), 'version =', version(), '; lbr =', lbr_version())
+    elif c == 'version':      print(os.path.basename(__file__), 'version =', version(),
+                                    '; '.join([''] + [module_version(x) for x in ('lbr', 'stats')]))
     elif c.startswith('backup'):
-      r = '../perf-tools-%s-lbr%s-e%d.tar.gz' % (version(), lbr_version(), len(param))
+      r = '../perf-tools-%s-%s-e%d.tar.gz' % (version(), '-'.join([module_version(x) for x in ('lbr', 'stats')]), len(param))
       to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
       if isfile(r): C.warn('file exists: %s' % r)
       fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + ['.git'] + param if param else [])

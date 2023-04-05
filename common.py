@@ -307,7 +307,7 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
     common_args.append(a)
     return defs[a] if defs and a in defs else None
   def add_argument(a, h): ap.add_argument('--' + a, default=common_def(a), help=h)
-  def add_argument2(a, h, b=None): ap.add_argument('--' + a, b if b else '-'+a[0], default=common_def(a), help=h)
+  def add_argument2(a, h, d=None): ap.add_argument('--'+a, '-'+a[0], default=common_def(a), help=h)
   add_argument('perf', 'use a custom perf tool')
   add_argument('pmu-tools', 'use a custom pmu-tools')
   add_argument('toplev-args', 'arguments to pass-through to toplev')
@@ -315,6 +315,7 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   add_argument2('metrics', 'user metrics to pass to perf-stat\'s -M')
   add_argument2('nodes', 'user metrics to pass to toplev\'s --nodes')
   if not usg: return common_args
+  ap.add_argument('-r', '--repeat', default=3, type=int, help='times to run per-app counting and topdown-primary profile steps')
   ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
   ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, '
     '2:+verbose-on metrics|build|sub-commands, 3:+toplev --perf|ASM on kernel build, 4:+args parsing, '

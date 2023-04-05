@@ -4,11 +4,11 @@
    mask | profile-step                                       | additional [optional] arguments
 ------- | -------------------------------------------------- | -------------------------------
       1 | logging setup details                              | 
-      2 | per-app counting 3 runs                            | [--tune :repeat:3]
+      2 | per-app counting 3 runs                            | [--repeat 3]
       4 | system-wide counting                               | 
       8 | sampling w/ stacks                                 | [--tune :sample:1]
      10 | topdown full tree + All Bottlenecks                | 
-     20 | topdown primary, 2-levels 3 runs                   | [--tune :repeat:3 :levels:2]
+     20 | topdown primary, 2-levels 3 runs                   | [--repeat 3 --tune :levels:2]
      40 | topdown auto-drilldown                             | 
      80 | topdown-mvl6 no multiplexing                       | 
     100 | sampling-LBR                                       | [--tune :sample:2]

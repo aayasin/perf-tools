@@ -69,6 +69,7 @@ def parse_args():
   if not args.forgive: assert len(args.config) > 1, "at least 2 modes are required (or use --forgive)"
   assert args.app and not ' ' in args.app
   assert args.profile_mask & 0x100 or args.forgive, 'args.pm=0x%x' % args.profile_mask
+  assert args.repeat > 2, "stats module requires '--repeat 3' at least"
   assert pmu.v5p() # required for COND_[N]TAKEN events
   return args
 
@@ -78,6 +79,7 @@ do = "./do.py profile"
 for x in C.argument_parser(None):
   a = getattr(args, x.replace('-', '_'))
   if a: do += ' --%s %s' % (x, "'%s'" % a if ' ' in a else a)
+if args.repeat != 3: do += ' -r %d' % args.repeat
 x = 'tune'
 a = getattr(args, x) or []
 a.insert(0, [':loops:10 :batch:1 :help:0'])

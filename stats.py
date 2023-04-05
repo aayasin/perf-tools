@@ -12,13 +12,14 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
+__version__= 0.51
 
 import common as C
 import re
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]
-  return get_stat_int(s, perf_stat_file.replace('.perf_stat-r%s.log' % repeat, ''))
+  return get_stat_int(s, perf_stat_file.replace('.perf_stat-r%s.log' % repeat, ''), perf_stat_file)
 
 def get(s, app):
   return get_stat_int(s, C.command_basename(app))
@@ -29,8 +30,8 @@ def print_metrics(app):
   return print_DB(c)
 
 # internal methods
-def get_stat_int(s, c, val=-1):
-  rollup(c)
+def get_stat_int(s, c, val=-1, stat_file=None):
+  rollup(c, stat_file)
   try:
     val = sDB[c][s]
   except KeyError:
@@ -45,6 +46,7 @@ def rollup(c, perf_stat_file=None):
   # TODO: call do.profile to get file names
   sDB[c] = read_perf(perf_stat_file)
   sDB[c].update(read_toplev(c + '.toplev-vl6.log'))
+  #sDB[c].update(read_toplev(c + '.toplev-mvl2.log'))
   if debug: print_DB(c)
 
 def print_DB(c):
@@ -62,17 +64,19 @@ def print_DB(c):
 def read_perf(f):
   d = {}
   def calc_metric(e, v=None):
-    if e == None: return ['IpMispredict', 'IpUnknown_Branch', 'L2MPKI_Code']
+    if e == None: return ['IpMispredict', 'IpUnknown_Branch', 'L2MPKI_Code', 'UopPI']
     if not 'instructions' in d: return None
     inst = float(d['instructions'])
     if e == 'branch-misses': d['IpMispredict'] = inst / v
     if e == 'r0160': d['IpUnknown_Branch'] = inst / v
     if e == 'r2424': d['L2MPKI_Code'] = 1000 * val / inst
+    if e == 'topdown-retiring': d['UopPI'] = v / inst
   if f == None: return calc_metric(None) # a hack!
-  if debug > 3: print(f)
+  if debug > 2: print('reading %s' % f)
   lines = C.file2lines(f)
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
   for l in lines:
+    if debug > 3: print('debug:', l)
     try:
       name, val, var, name2, val2, name3, val3 = parse(l)
       if name:
@@ -81,9 +85,9 @@ def read_perf(f):
         calc_metric(name, val)
       if name2: d[name2] = val2
       if name3: d[name3] = val3
-    except ValueError:
+    except ValueError or IndexError:
       C.warn("cannot parse: '%s' in %s" % (l, f))
-  if debug > 2: print(d)
+  if debug > 1: print(d)
   return d
 
 def parse(l):
@@ -103,7 +107,7 @@ def parse(l):
     val = float(items[0])
     var = get_var(2)
   elif '#' in l:
-    name_idx = 2 if 'cpu-clock' in l else 1
+    name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
     val = items[0].replace(',', '')
     val = float(val) if name_idx == 2 else int(val)
@@ -127,19 +131,23 @@ def parse(l):
 
 def read_toplev(filename, metric=None):
   d = {}
-  if debug > 4: print(filename)
-  try:
-    for l in C.file2lines(filename):
+  if debug > 2: print('reading %s' % filename)
+  for l in C.file2lines(filename):
+    try:
+      if debug > 3: print('debug:', l)
       items = l.strip().split()
       if len(items) < 1: continue
       if 'Info.Bot' in items[0]:
         d[items[1]] = float(items[3])
       elif '<==' in l and len(items) < 7:
         d['Critical-Node'] = items[1]
-    if metric: return d[metric] if metric in d else None
-  except ValueError:
-    C.warn("cannot parse: '%s'" % l)
-  except AttributeError:
-    C.warn("empty file: '%s'" % filename)
-  if debug > 5: print(d)
+      else:
+        for m in ('UopPI', ):
+          if m in items[1]: d[items[1]] = float(items[3])
+    except ValueError:
+      C.warn("cannot parse: '%s'" % l)
+    except AttributeError:
+      C.warn("empty file: '%s'" % filename)
+  if metric: return d[metric] if metric in d else None
+  if debug > 1: print(d)
   return d

@@ -12,10 +12,10 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.51
+__version__= 0.52
 
 import common as C
-import re
+import re, os.path
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]
@@ -129,9 +129,20 @@ def parse(l):
       val2 = float(val2)
   return name, val, var, name2, val2, name3, val3
 
+# Should move this to a new analysis module
+Key2group = {
+  'BAD':      'Bad',
+  'BE':       None,
+  'BE/Core':  'Cor',
+  'BE/Mem':   'Mem',
+  'FE':       'Fed',
+  'RET':      'Ret',
+}
+
 def read_toplev(filename, metric=None):
   d = {}
   if debug > 2: print('reading %s' % filename)
+  assert os.path.exists(filename), 'file does not exist: %s' % filename
   for l in C.file2lines(filename):
     try:
       if not re.match(r"^(FE|BE|BAD|RET|Info)", l): continue
@@ -139,7 +150,8 @@ def read_toplev(filename, metric=None):
       if debug > 3: print('debug:', len(items), items, l)
       if 'Info.Bot' in items[0]:
         d[items[1]] = float(items[3])
-      elif '<==' in l and len(items) < 7:
+      elif '<==' in l:
+        d['Critical-Group'] = Key2group[ items[0] ]
         d['Critical-Node'] = items[1]
       else:
         for m in ('UopPI', ):
@@ -148,6 +160,9 @@ def read_toplev(filename, metric=None):
       C.warn("cannot parse: '%s'" % l)
     except AttributeError:
       C.warn("empty file: '%s'" % filename)
-  if metric: return d[metric] if metric in d else None
   if debug > 1: print(d)
+  if metric:
+    r = d[metric] if metric in d else None
+    if debug: print('stats.read_toplev(filename=%s, metric=%s) = %s' % (filename, metric, str(r)))
+    return r
   return d

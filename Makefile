@@ -68,7 +68,8 @@ lspmu:
 help: do-help.txt
 do-help.txt: do.py common.py
 	./$< -h > $@ && sed -i 's|/home/admin1/ayasin/perf-tools|\.|' $@
-	$(DO) profile --tune :sample:3 :flameg:1 :help:-1 :msr:1 --mode profile -pm fffff > /dev/null && cat profile-mask-help.md
+	$(DO) profile --tune :flameg:1 :help:-1 :msr:1 :tma-group:"'Auto-Detect'" :sample:3 --mode profile \
+	    -pm fffff > /dev/null && cat profile-mask-help.md
 
 update:
 	$(DO) tools-update -v1
@@ -94,8 +95,9 @@ pre-push: help tramp3d-v4
 	$(MAKE) test-default PM="-pm 313e"                      # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
-	$(MAKE) test-default DO_ARGS=":msr:1 :perf-filter:0 :sample:3 :size:1" APP='taskset 0x4 ./CLTRAMP3D u' PM='-pm 1031a' && \
-	    test -f "CLTRAMP3D-u.perf_stat-I10.csv"             # tests unfiltered sampling; PEBS & over-time profile-steps
+	$(MAKE) test-default DO_ARGS=":msr:1 :perf-filter:0 :sample:3 :size:1" APP='taskset 0x4 ./CLTRAMP3D u' \
+	    PM='-pm 1831a' && test -f CLTRAMP3D-u.perf_stat-I10.csv && \
+	    test -f CLTRAMP3D-u.toplev-vvvl2.log                # tests unfiltered sampling; PEBS, tma group & over-time profile-steps
 	mkdir test-dir; cd test-dir; make -f ../Makefile test-default \
 	    DO=../do.py APP=../pmu-tools/workloads/BC2s         # tests default from another directory, toplev describe
 	$(MAKE) test-study                                      # tests study script (errors only)

@@ -17,7 +17,8 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 2.01
+# pump version for changes with profiling implications: by .01 on a fix, by .1 on new command/profile-step
+__version__ = 2.11
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -94,9 +95,10 @@ do = {'run':        C.RUN_DEF,
   'super':          0,
   'tee':            1,
   'time':           0,
-  'tma-fx':         '+IPC,+Instructions,+Time,+SLOTS,+CLKS',
+  'tma-fx':         '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
   'tma-bot-fe':     ',+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
   'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
+  'tma-group':      None,
   'xed':            1 if pmu.cpu('x86', 0) else 0,
 }
 args = argparse.Namespace()
@@ -174,6 +176,7 @@ def app_name(): return args.app != C.RUN_DEF
 def toplev_describe(m, msg=None, mod='^'):
   if do['help'] < 1: return
   exe('%s --describe %s%s' % (get_perf_toplev()[1], m, mod), msg, redir_out=None)
+def read_toplev(l, m): return None if do['help'] < 0 else stats.read_toplev(l, m)
 def perf_record_true(): return '%s record true > /dev/null' % get_perf_toplev()[0]
 
 def uniq_name():
@@ -337,10 +340,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     hdr = ('%7s' % 'mask', '%-50s' % 'profile-step', 'additional [optional] arguments')
     title = ("## Help for profile-steps in the profile command",
              "This is the bitmask argument --profile-mask <hex-value> (or -pm) of do.py",
-             "Bits of multiple steps can be set in same run")
+             "Bits of multiple steps can be set in same run", "")
     with open(filename, 'w') as f1:
       f1.write('\n'.join(['\n\t'.join(title), ' | '.join(hdr), ' | '.join(('-' * len(hdr[i]) for i in range(len(hdr)))), '']))
       for k in sorted(profile_help.keys()): f1.write(profile_help[k] + '\n')
+      f1.write('\n')
     C.info('wrote: %s' % filename)
   def perf_view(cmd='report', src=True):
     append = '%s%s' % (do['perf-report-append'], ' --objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else '')
@@ -466,17 +470,18 @@ def profile(mask, toplev_args=['mvl6', None]):
     if ' --global' in c: C.warn('Global counting is subject to system noise (cpucount=%d)' % pmu.cpu('cpucount'))
     return c, o
   def topdown_describe(log):
-    path = stats.read_toplev(log, 'Critical-Node')
+    path = read_toplev(log, 'Critical-Node')
     if path:
       path = path.split('.')
       toplev_describe(path[0], '@description of nodes in TMA tree path to critical node')
       for n in path[1:]: toplev_describe(n)
 
   # +Info metrics that would not use more counters
+  topdown_full_log = None
   if en(4):
-    cmd, log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']))
-    profile_exe(cmd + ' | tee %s | %s' % (log, grep_bk), 'topdown full tree + All Bottlenecks', 4)
-    topdown_describe(log)
+    cmd, topdown_full_log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']))
+    profile_exe(cmd + ' | tee %s | %s' % (topdown_full_log, grep_bk), 'topdown full tree + All Bottlenecks', 4)
+    topdown_describe(topdown_full_log)
 
   if en(5):
     cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, args.repeat))
@@ -500,9 +505,19 @@ def profile(mask, toplev_args=['mvl6', None]):
     profile_exe(cmd + ' | sort | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
 
   if en(13):
-    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+UopPI,+CoreIPC')
-    profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown 2 levels + FE Bottlenecks', 13)
+    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
+    profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown FE Bottlenecks', 13)
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
+
+  if en(15):
+    group = do['tma-group']
+    if not topdown_full_log: C.warn('topdown-group requires topdown-full profile-step')
+    elif not group:
+      group = read_toplev(topdown_full_log, 'Critical-Group')
+      if group: C.info('detected group: %s' % group)
+    cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs='--frequency --metric-group +Summary,+'+group)
+    profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
+    print_cmd("cat %s | %s" % (log, grep_NZ), False)
 
   if en(14) and (pmu.meteorlake() or do['help']<0):
     flags, events = '-W -c 20011', pmu.get_events(do['model'])

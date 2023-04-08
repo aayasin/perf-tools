@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.52
+__version__= 0.53
 
 import common as C
 import re, os.path
@@ -46,7 +46,7 @@ def rollup(c, perf_stat_file=None):
   # TODO: call do.profile to get file names
   sDB[c] = read_perf(perf_stat_file)
   sDB[c].update(read_toplev(c + '.toplev-vl6.log'))
-  #sDB[c].update(read_toplev(c + '.toplev-mvl2.log'))
+  sDB[c].update(read_toplev(c + '.toplev-mvl2.log'))
   if debug: print_DB(c)
 
 def print_DB(c):
@@ -154,7 +154,7 @@ def read_toplev(filename, metric=None):
         d['Critical-Group'] = Key2group[ items[0] ]
         d['Critical-Node'] = items[1]
       else:
-        for m in ('UopPI', ):
+        for m in ('IpTB', 'UopPI'):
           if m in items[1]: d[items[1]] = float(items[3])
     except ValueError:
       C.warn("cannot parse: '%s'" % l)

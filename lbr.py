@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.08
+__version__= 1.09
 
 import common as C, pmu
 from common import inc
@@ -24,6 +24,7 @@ except ImportError:
   numpy_imported = False
 
 FP_SUFFIX = "[sdh]([a-z])?"
+IMUL      = r"imul.*"
 INDIRECT  = r"(jmp|call).*%"
 CALL_RET  = '(call|ret)'
 COND_BR   = 'j[^m].*'
@@ -35,7 +36,7 @@ llvm_log = C.envfile('LLVM_LOG')
 debug = os.getenv('LBR_DBG')
 verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings
 use_cands = os.getenv('LBR_USE_CANDS')
-user_imix = C.env2list('LBR_IMIX', ['vpmovmskb'])
+user_imix = C.env2list('LBR_IMIX', ['vpmovmskb imul'])
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
@@ -76,7 +77,6 @@ header_ip_str.first = True
 header_ip_str.position = 5
 def header_ip(line): return str2int(header_ip_str(line), (line, None))
 
-
 def header_cost(line):
   x = is_header(line)
   assert x, "Not a head of sample: " + line
@@ -84,11 +84,14 @@ def header_cost(line):
 
 def line_ip_hex(line):
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
-  assert x, "expect <address> at left of '%s'" % line
+  # assert x, "expect <address> at left of '%s'" % line
   return x.group(1).lstrip("0")
 
 def line_ip(line, sample=None):
-  return str2int(line_ip_hex(line), (line, sample))
+  try:
+    return str2int(line_ip_hex(line), (line, sample))
+  except:
+    exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line)
 
 def line_timing(line):
   x = re.match(r"[^#]+# (\S+) (\d+) cycles \[\d+\] ([0-9\.]+) IPC", line)
@@ -169,6 +172,7 @@ def loop_stats(line, loop_ipc, tc_state):
       loop_stats(None, 0, 0)
     else:
       mark(INDIRECT, 'indirect')
+      mark(IMUL, 'scalar-int')
       mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % FP_SUFFIX, 'scalar-fp')
       for i in range(vec_size):
         if mark(r"[^aku]p%s\s+.*%s" % (FP_SUFFIX, vec_reg(i)), vec_len(i, 'fp')): continue

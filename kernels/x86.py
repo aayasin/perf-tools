@@ -1,7 +1,13 @@
 #!/usr/bin/env python
-# Assembly support specific to x86
+# Copyright (c) 2020-2023, Intel Corporation
 # Author: Ahmad Yasin
-# edited: Dec. 2021
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# Assembly support specific to x86
 __author__ = 'ayasin'
 __version__ = 0.23
 # TODO:

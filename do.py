@@ -528,15 +528,15 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe("sort %s.retire_lat.txt | uniq -c | sort -n | ./ptage | tail" % (data, ))
 
   def perf_record(tag, step, msg=None, record='record', track_ipc=do['perf-stat-ipc']):
-    perf_data = '%s.perf.data' % record_calibrate('perf-%s' % tag)
-    flags = do['perf-%s' % tag]
+    perf_data, flags = '%s.perf.data' % record_calibrate('perf-%s' % tag), do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     cmd = 'bash -c "%s %s %s"' % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
     profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
     warn_file(perf_data)
     if not tag in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
-    if tag == 'lbr' and int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | head | wc -l' % (perf, perf_data))) == 0:
-      C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
+    n = int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | wc -l' % (perf, perf_data)))
+    if n == 0: C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
+    elif n > 1e6: C.warn("Too many samples collected (%s in %s); rerun with '--tune :calibrate:1'" % (n, perf_data))
     return perf_data
   
   if en(8) and do['sample'] > 1:
@@ -561,7 +561,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     def tail(f=''): return "tail %s | grep -v total" % f
     def report_info(info, hists=['IPC', 'IpTB']):
       hist_cmd = ''
-      for h in hists: hist_cmd += " && grep -A33 '%s histogram:' %s | sed '/%s histogram summary/q'" % (h, info, h)
+      for h in hists: hist_cmd += " && %s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % h, info, '-A33'), h)
       exe("%s && tail %s | grep -v unique %s" % (C.grep('code footprint', info), info, hist_cmd), "@top loops & more in " + info)
     if not isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()
@@ -601,7 +601,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         misp, cmd, msg = '', "-F +brstackinsn --xed", '@info'
         if do['imix']:
-          print_cmd(' '.join(('4debug', perf, 'script', cmd, '| less')), False)
+          print_cmd(' '.join(('4debug', perf, 'script', perf_ic(data, perf_script.comm), cmd, '| less')), False)
           cmd += " | tee >(%s %s %s >> %s) %s | GREP_INST | %s " % (
             lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info, misp, clean)
           if do['imix'] & 0x1:

@@ -4,7 +4,7 @@
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
 # GNU General Public License, version 2, as published by the Free Software Foundation.
-#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+#   This program is distributed in the hope it will be useful, but WITHOUT ANY WARRANTY; without even the implied
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 # studies multiple flavors of an application (with parallel post-processing)
@@ -113,3 +113,4 @@ if args.stages & 0x4:
     C.printc('Speedup (%s/%s): %.2fx' % (aft, bef, stats.get('time', app(bef)) / stats.get('time', app(aft))))
   if args.verbose > 1:
     for x in args.config: stats.print_metrics(app(x))
+

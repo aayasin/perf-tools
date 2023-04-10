@@ -4,7 +4,7 @@
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
 # GNU General Public License, version 2, as published by the Free Software Foundation.
-#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+#   This program is distributed in the hope it will be useful, but WITHOUT ANY WARRANTY; without even the implied
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 # Misc utilities for CPU performance profiling on Linux
@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with profiling implications: by .01 on a fix, by .1 on new command/profile-step
-__version__ = 2.11
+__version__ = 2.12
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -292,6 +292,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
   new_line()          #PMU
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
+  with open(out, "a") as f: f.write('TMA version:\t%s\n' % pmu.cpu('TMA'))
   exe('%s --version >> ' % args.perf + out)
   setup_perf('log', out)
   new_line()          #Tools
@@ -459,7 +460,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   
   toplev += ' --no-desc'
   if do['plot']: toplev += ' --graph -I%d --no-multiplex' % do['interval']
-  grep_bk= "egrep '<==|MUX|Info.Bott' | sort"
+  grep_bk= "egrep '<==|MUX|Info(\.Bot|.*Time)' | sort"
   grep_NZ= "egrep -iv '^(all|)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add|warning:)|not (found|referenced|supported)|##placeholder##' "
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')

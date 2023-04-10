@@ -4,7 +4,7 @@
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
 # GNU General Public License, version 2, as published by the Free Software Foundation.
-#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+#   This program is distributed in the hope it will be useful, but WITHOUT ANY WARRANTY; without even the implied
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 # Abstraction of Intel Architecture and its Performance Monitoring Unit (PMU)
@@ -139,6 +139,13 @@ def cpu_has_feature(feature):
   return feature in flags
 
 def cpu(what, default=None):
+  def toplev_version(of):
+    v = C.exe_one_line("pmu-tools/toplev.py --version | tail -1").strip()
+    for x in v.split(','):
+      xs = x.split(':')
+      if len(xs) > 1:
+        if of == xs[0].strip(): return str(xs[1].strip())
+    return None
   try:  # not cpu.state:
     pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
     if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
@@ -147,11 +154,15 @@ def cpu(what, default=None):
     import tl_cpu
     cs = tl_cpu.CPU((), False, tl_cpu.Env()) # cpu.state
     if what == 'get': return cs
-    return {'smt-on': cs.ht,
+    data = {'CPU':    toplev_version('CPU'),
+      'TMA':          toplev_version('TMA version'),
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
+      'smt-on':       cs.ht,
       'x86':          int(platform.machine().startswith('x86')),
-    }[what]
+    }
+    if what == 'all': return data
+    return data[what]
   except ImportError:
     C.warn("could not import tl_cpu")
     if default: return default
@@ -194,3 +205,6 @@ def dsb_set_index(ip):
     mask = 2 ** (left + 1) - 1
     return ((ip & mask) >> 6)
   return None
+
+if __name__ == "__main__":
+  print(cpu('all'))

@@ -66,7 +66,8 @@ lspmu:
 	@lscpu | grep 'Model name'
 
 help: do-help.txt
-do-help.txt: do.py common.py
+do-help.txt: do.py common.py pmu.py
+	./pmu.py
 	./$< -h > $@ && sed -i 's|/home/admin1/ayasin/perf-tools|\.|' $@
 	$(DO) profile --tune :flameg:1 :help:-1 :msr:1 :tma-group:"'Auto-Detect'" :sample:3 --mode profile \
 	    -pm fffff > /dev/null && cat profile-mask-help.md

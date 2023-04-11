@@ -2,7 +2,8 @@
 DO = ./do.py
 ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 APP = taskset 0x4 ./CLTRAMP3D
-DO1 = $(DO) profile -a "$(APP)" --tune :loops:10 $(DO_ARGS)
+CMD = profile
+DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10 $(DO_ARGS)
 DO2 = $(DO) profile -a pmu-tools/workloads/BC2s $(DO_ARGS)
 FAIL = (echo "failed! $$?"; exit 1)
 PM = -pm 0x317f
@@ -85,7 +86,7 @@ test-study: study.py run.sh do.py
 
 clean:
 	rm -rf {run,BC2s,datadep,CLTRAMP3D}*{csv,data,old,log,txt} test-{dir,study}
-pre-push: help tramp3d-v4
+pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
 	$(MAKE) test-metric SHOW="grep --color -E '^|Ret.*<=='" # tests perf -M IpCall & colored TMA, then toplev --drilldown
@@ -96,9 +97,12 @@ pre-push: help tramp3d-v4
 	$(MAKE) test-default PM="-pm 313e"                      # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
-	$(MAKE) test-default DO_ARGS=":msr:1 :perf-filter:0 :sample:3 :size:1" APP='taskset 0x4 ./CLTRAMP3D u' \
-	    PM='-pm 1831a' && test -f CLTRAMP3D-u.perf_stat-I10.csv && \
-	    test -f CLTRAMP3D-u.toplev-vvvl2.log                # tests unfiltered sampling; PEBS, tma group & over-time profile-steps
+	$(MAKE) test-default DO_ARGS=":calibrate:1 :msr:1 :perf-filter:0 :sample:3 :size:1" \
+	    APP='taskset 0x4 ./CLTRAMP3D u' CMD='profile tar' PM='-pm 1931a' &&\
+	    test -f CLTRAMP3D-u.perf_stat-I10.csv && \
+	    test -f CLTRAMP3D-u.toplev-vvvl2.log &&\
+	    test -f CLTRAMP3D-u.$(shell ./pmu.py CPU).results.tar.gz \
+	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command
 	mkdir test-dir; cd test-dir; make -f ../Makefile test-default \
 	    DO=../do.py APP=../pmu-tools/workloads/BC2s         # tests default from another directory, toplev describe
 	$(MAKE) test-study                                      # tests study script (errors only)

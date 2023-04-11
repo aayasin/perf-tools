@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with profiling implications: by .01 on a fix, by .1 on new command/profile-step
-__version__ = 2.12
+__version__ = 2.14
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -292,7 +292,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
   new_line()          #PMU
   exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
-  with open(out, "a") as f: f.write('TMA version:\t%s\n' % pmu.cpu('TMA'))
+  with open(out, "a") as f: f.write('TMA version:\t%s\n' % pmu.cpu('TMA version'))
   exe('%s --version >> ' % args.perf + out)
   setup_perf('log', out)
   new_line()          #Tools
@@ -388,6 +388,8 @@ def profile(mask, toplev_args=['mvl6', None]):
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', step, events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
     return log
+  def samples_count(d): return 1e5 if args.mode == 'profile' else int(exe_1line(
+    '%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | wc -l' % (perf, d)))
   def get_comm(data):
     if not do['perf-filter']: return None
     if do['comm']: return do['comm']
@@ -398,12 +400,12 @@ def profile(mask, toplev_args=['mvl6', None]):
       exe(' '.join([perf_report_syms, '-i', data, '| grep -A11 Samples']))
       C.error("Most samples in 'perf' tool. Try run longer")
     return comm
-  def perf_script(x, msg, data, export='', fail=True):
+  def perf_script(x, msg, data, export='', fail=True, K=1e3):
     if do['perf-scr']:
-      samples = 1e3 * do['perf-scr']
+      samples = K * do['perf-scr']
       if perf_script.first: C.info('processing first %d samples only' % samples)
       export += ' LBR_STOP=%d' % samples
-      x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (300*samples))
+      x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (3*K*samples))
     if do['perf-filter'] and not perf_script.comm:
       perf_script.comm = get_comm(data)
       if perf_script.first and args.mode != 'profile': C.info("filtering on command '%s' in next post-processing" % perf_script.comm)
@@ -524,7 +526,9 @@ def profile(mask, toplev_args=['mvl6', None]):
     flags, events = '-W -c 20011', pmu.get_events(do['model'])
     data = '%s-tpebs-perf.data' % record_name('-%s%d' % (do['model'], events.count(':p')))
     cmd = "%s record %s -e %s -o %s -- %s" % (perf if 'raw' in do['model'] else ocperf, flags, events, data, r)
-    profile_exe(cmd.replace('20011', '3001') if 'raw' in do['model'] else cmd, "TMA sampling (%s)" % do['model'], 14)
+    profile_exe(cmd, "TMA sampling (%s)" % do['model'], 14)
+    if samples_count(data) < 1e4:
+      C.warn("Too little samples collected (%s in %s); rerun with: --tune :model:'MTLraw:2'" % (samples_count(data), data))
     exe("%s script -i %s -F event,retire_lat > %s.retire_lat.txt" % (perf, data, data))
     exe("sort %s.retire_lat.txt | uniq -c | sort -n | ./ptage | tail" % (data, ))
 
@@ -535,8 +539,9 @@ def profile(mask, toplev_args=['mvl6', None]):
     profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
     warn_file(perf_data)
     if not tag in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
-    n = int(exe_1line('%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | wc -l' % (perf, perf_data)))
+    n = samples_count(perf_data)
     if n == 0: C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
+    elif n < 1e4: C.warn("Too little samples collected (%s in %s); rerun with '--tune :calibrate:-1'" % (n, perf_data))
     elif n > 1e6: C.warn("Too many samples collected (%s in %s); rerun with '--tune :calibrate:1'" % (n, perf_data))
     return perf_data
   
@@ -552,7 +557,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       assert len(bins)
       exe_v0('printf "# %s:\n#\n" > %s' % ('Static Statistics', info))
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
-      if isfile(bins[0]):
+      if isfile(bins[-1]):
         exe_v0('printf "\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n" >> %s' % (bins[0], info))
         exe("strings %s | %s >> %s" % (bins[0], C.grep('^(GNU |GCC:|clang)'), info))
       exe_v0('echo >> %s' % info)
@@ -714,10 +719,12 @@ def profile(mask, toplev_args=['mvl6', None]):
   #profile-end
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', 'csv', 'log', 'txt', 'stat', 'xlsx', 'svg'] + ext
-  if cmd == 'tar' and len(tag): res = '-'.join((tag, 'results.tar.gz'))
-  s = (uniq_name() if app_name() else '') + '*'
-  if cmd == 'tar': exe('tar -czvf %s run.sh '%res + (' %s.'%s).join(log_files) + ' .%s.cmd'%s)
+  log_files = ['csv', 'log', 'txt', 'stat', 'xlsx', 'svg'] + ext
+  if cmd == 'tar':
+    r = '.'.join((tag, pmu.cpu('CPU'), 'results.tar.gz')) if len(tag) else C.error('do_logs(tar): expecting tag')
+    if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
+  s = (uniq_name() if app_name() else '')
+  if cmd == 'tar': exe('tar -czvf %s run.sh ' % r + ' '.join(C.glob(s+'*')) + ' .%s.cmd' % s, 'tar into %s' % r, log=False)
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')
 
 def build_kernel(dir='./kernels/'):
@@ -836,7 +843,7 @@ def main():
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile(args.profile_mask)
     elif c.startswith('get'): get(param)
-    elif c == 'tar':          do_logs(c, tag='.'.join((uniq_name(), pmu.cpu_TLA())) if app_name() else C.error('provide a value for -a'))
+    elif c == 'tar':          do_logs(c, tag=uniq_name() if app_name() else C.error('provide a value for -a'))
     elif c == 'clean':        do_logs(c)
     elif c == 'all':
       setup_perf()

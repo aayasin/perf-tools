@@ -51,6 +51,7 @@ test-mt: run-mt
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
 test-bc2:
 	$(DO2) -pm 40 | $(SHOW)
+	grep Time BC2s.toplev--drilldown.log
 test-metric:
 	$(DO) profile $(METRIC) --stdout -pm 2
 	$(DO) profile -pm 40 | $(SHOW)
@@ -100,7 +101,7 @@ pre-push: help
 	$(MAKE) test-default PM="-pm 313e"                      # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
-	$(MAKE) test-default DO_ARGS=":calibrate:1 :msr:1 :perf-filter:0 :sample:3 :size:1" \
+	$(MAKE) test-default DO_ARGS=":calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1" \
 	    APP="$(APP) u" CMD='suspend-smt profile tar' PM='-pm 1931a' &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command

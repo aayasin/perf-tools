@@ -18,7 +18,7 @@ optional arguments:
                         ./pmu-tools)
   --toplev-args TOPLEV_ARGS
                         arguments to pass-through to toplev (default:
-                        --frequency --metric-group +Summary --no-uncore)
+                        --frequency --metric-group +Summary)
   --events EVENTS, -e EVENTS
                         user events to pass to perf-stat's -e (default: None)
   --metrics METRICS, -m METRICS

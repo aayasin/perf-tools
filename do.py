@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with profiling implications: by .01 on a fix, by .1 on new command/profile-step
-__version__ = 2.16
+__version__ = 2.17
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -95,9 +95,11 @@ do = {'run':        C.RUN_DEF,
   'super':          0,
   'tee':            1,
   'time':           0,
-  'tma-fx':         '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
   'tma-bot-fe':     ',+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
   'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
+  'tma-dedup-nodes':'Other_Light_Ops,Lock_Latency,Contested_Accesses,Data_Sharing,FP_Arith'+
+                      C.flag2str(',L2_Bound,DRAM_Bound,Memory_Operations', pmu.icelake()),
+  'tma-fx':         '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
   'tma-group':      None,
   'xed':            1 if pmu.cpu('x86', 0) else 0,
 }
@@ -170,7 +172,7 @@ def module_version(mod_name):
   elif mod_name == 'stats':
     import stats
     mod = stats
-  else: assert 0, 'Unsupported module: %s' % mod_name
+  else: C.error('Unsupported module: ' + mod_name)
   return '%s=%.2f' % (mod_name, mod.__version__)
 def app_name(): return args.app != C.RUN_DEF
 def toplev_describe(m, msg=None, mod='^'):
@@ -473,6 +475,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, o.replace('.log', '-perf.csv'), tlargs, r)
     if ' --global' in c: C.warn('Global counting is subject to system noise (cpucount=%d)' % pmu.cpu('cpucount'))
     return c, o
+  def tl_args(x): return ' '.join([args.toplev_args, x])
   def topdown_describe(log):
     path = read_toplev(log, 'Critical-Node')
     if path:
@@ -483,12 +486,13 @@ def profile(mask, toplev_args=['mvl6', None]):
   # +Info metrics that would not use more counters
   topdown_full_log = None
   if en(4):
-    cmd, topdown_full_log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']))
+    cmd, topdown_full_log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']),
+      tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % do['tma-dedup-nodes']))
     profile_exe(cmd + ' | tee %s | %s' % (topdown_full_log, grep_bk), 'topdown full tree + All Bottlenecks', 4)
     topdown_describe(topdown_full_log)
 
   if en(5):
-    cmd, log = toplev_V('-vl%d' % do['levels'], tlargs='%s -r%d' % (args.toplev_args, args.repeat))
+    cmd, log = toplev_V('-vl%d' % do['levels'], tlargs=tl_args('-r%d' % args.repeat))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown primary, %d-levels %d runs' % (do['levels'], args.repeat), 5)
   
   if en(6):
@@ -520,7 +524,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       group = read_toplev(topdown_full_log, 'Critical-Group')
       if group: C.info('detected group: %s' % group)
     if not group: group, x = 'Mem', C.warn("Could not auto-detect group; Minimize system-noise, e.g. try './do.py disable-smt'")
-    cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs='--frequency --metric-group +Summary,+'+group)
+    cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs=C.TOPLEV_DEF.replace('Summary', 'Summary,+' + group))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
 

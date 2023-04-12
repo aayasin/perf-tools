@@ -1,18 +1,21 @@
 .PHONY: clean clean-all help
-DO = ./do.py
-ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
-APP = taskset 0x4 ./CLTRAMP3D
+AP = CLTRAMP3D
+APP = taskset 0x4 ./$(AP)
 CMD = profile
+CPU = $(shell ./pmu.py CPU)
+DO = ./do.py
 DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10 $(DO_ARGS)
 DO2 = $(DO) profile -a pmu-tools/workloads/BC2s $(DO_ARGS)
 FAIL = (echo "failed! $$?"; exit 1)
+MAKE = make --no-print-directory
+METRIC = -m IpCall
+MGR = sudo $(shell python -c 'import common; print(common.os_installer())')
+NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
 PM = -pm 0x317f
 RERUN = -pm 0x80
-MAKE = make --no-print-directory
-MGR = sudo $(shell python -c 'import common; print(common.os_installer())')
 SHELL := /bin/bash
 SHOW = tee
-NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
+ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 
 all: tramp3d-v4
 	@echo done
@@ -49,7 +52,7 @@ test-mt: run-mt
 test-bc2:
 	$(DO2) -pm 40 | $(SHOW)
 test-metric:
-	$(DO) profile -m IpCall --stdout -pm 2
+	$(DO) profile $(METRIC) --stdout -pm 2
 	$(DO) profile -pm 40 | $(SHOW)
 
 clean-all: clean
@@ -85,7 +88,7 @@ test-study: study.py run.sh do.py
 	./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > $@ 2>&1 || $(FAIL)
 
 clean:
-	rm -rf {run,BC2s,datadep,CLTRAMP3D}*{csv,data,old,log,txt} test-{dir,study}
+	rm -rf {run,BC2s,datadep,$(AP)}*{csv,data,old,log,txt} test-{dir,study}
 pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
@@ -98,10 +101,8 @@ pre-push: help
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
 	$(MAKE) test-default DO_ARGS=":calibrate:1 :msr:1 :perf-filter:0 :sample:3 :size:1" \
-	    APP='taskset 0x4 ./CLTRAMP3D u' CMD='profile tar' PM='-pm 1931a' &&\
-	    test -f CLTRAMP3D-u.perf_stat-I10.csv && \
-	    test -f CLTRAMP3D-u.toplev-vvvl2.log &&\
-	    test -f CLTRAMP3D-u.$(shell ./pmu.py CPU).results.tar.gz \
+	    APP="$(APP) u" CMD='suspend-smt profile tar' PM='-pm 1931a' &&\
+	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command
 	mkdir test-dir; cd test-dir; make -f ../Makefile test-default \
 	    DO=../do.py APP=../pmu-tools/workloads/BC2s         # tests default from another directory, toplev describe

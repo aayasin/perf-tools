@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with profiling implications: by .01 on a fix, by .1 on new command/profile-step
-__version__ = 2.14
+__version__ = 2.15
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -254,6 +254,7 @@ def setup_perf(actions=('set', 'log'), out=None):
   if 'set' in actions: exe(perf_record_true(), '@testing perf tool', redir_out=None, log=False) # fail if no perf tool
 
 def smt(x='off'):
+  if len(args.command) > 1: exe_v0(msg='setting SMT to: ' + x)
   set_sysfile('/sys/devices/system/cpu/smt/control', x)
   if do['super']: exe(args.pmu_tools + '/cputop "thread == 1" %sline | sudo sh'%x)
 def atom(x='offline'):
@@ -518,6 +519,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     elif not group:
       group = read_toplev(topdown_full_log, 'Critical-Group')
       if group: C.info('detected group: %s' % group)
+    if not group: group, x = 'Mem', C.warn("Could not auto-detect group; Minimize system-noise, e.g. try './do.py disable-smt'")
     cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs='--frequency --metric-group +Summary,+'+group)
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
@@ -560,7 +562,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       if isfile(bins[-1]):
         exe_v0('printf "\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n" >> %s' % (bins[0], info))
         exe("strings %s | %s >> %s" % (bins[0], C.grep('^(GNU |GCC:|clang)'), info))
-      exe_v0('echo >> %s' % info)
+      prn_line(info)
     def log_count(x, l): return "printf 'Count of unique %s%s: ' >> %s && wc -l < %s >> %s" % (
       'non-cold ' if do['imix'] & 0x10 else '', x, info, l, info)
     def log_br_count(x, s): return log_count("%s branches" % x, "%s.%s.log" % (data, s))
@@ -812,6 +814,9 @@ def main():
   if args.verbose > 5: C.printc(str(args))
   if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1
+  if 'suspend-smt' in args.command:
+    if pmu.cpu('smt-on'): args.command = ['disable-smt'] + args.command + ['enable-smt']
+    args.command.remove('suspend-smt')
 
   for c in args.command:
     param = c.split(':')[1:] if ':' in c else None
@@ -825,9 +830,10 @@ def main():
     elif c == 'find-perf':    exe(Find_perf)
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(level=int(param[0]))
-    # TODO: generalize disable/enable features that follow
+    # TODO: generalize disable/enable/suspend of things that follow
     elif c == 'disable-smt':  smt()
     elif c == 'enable-smt':   smt('on')
+    elif c == 'suspend-smt':  pass # for do.py -h
     elif c == 'disable-atom': atom()
     elif c == 'enable-atom':  atom('online')
     elif c == 'disable-aslr': exe('echo 0 | sudo tee /proc/sys/kernel/randomize_va_space')

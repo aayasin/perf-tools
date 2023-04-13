@@ -51,7 +51,6 @@ test-mt: run-mt
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
 test-bc2:
 	$(DO2) -pm 40 | $(SHOW)
-	grep Time BC2s.toplev--drilldown.log
 test-metric:
 	$(DO) profile $(METRIC) --stdout -pm 2
 	$(DO) profile -pm 40 | $(SHOW)
@@ -82,6 +81,7 @@ update:
 test-build:
 	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS \
 	      -n '+Core_Bound*' -pm 22 | $(SHOW)
+	grep Time datadep-20e6.toplev-vl2.log
 test-default:
 	$(DO1) $(PM)
 test-study: study.py run.sh do.py

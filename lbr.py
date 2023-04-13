@@ -36,7 +36,7 @@ llvm_log = C.envfile('LLVM_LOG')
 debug = os.getenv('LBR_DBG')
 verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings
 use_cands = os.getenv('LBR_USE_CANDS')
-user_imix = C.env2list('LBR_IMIX', ['vpmovmskb imul'])
+user_imix = C.env2list('LBR_IMIX', ['vpmovmskb', 'imul'])
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')

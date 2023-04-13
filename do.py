@@ -335,7 +335,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       elif ' -I10' in cmd: tune = '[--tune :interval:10]'
       elif ' record' in cmd and C.any_in((' -b', ' -j'), cmd): tune = '--tune :sample:3' if 'PEBS' in msg else '[--tune :sample:2]'
       elif len(tune): tune = '[--tune :%s:1]' % tune if 'stacks' in msg else 'setup-all --tune :%s:1' % tune
-      profile_help[step] = '%7x | %-50s | %s' % (2 ** step, msg, tune)
+      profile_help[step] = '%x | %-50s | %s' % (2 ** step, msg, tune)
       return
     if mode == 'log-setup': log_setup()
     elif mode == 'no-redirect': exe1(cmd, msg)
@@ -565,7 +565,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
       if isfile(bins[-1]):
         exe_v0('printf "\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n" >> %s' % (bins[0], info))
-        exe("strings %s | %s >> %s" % (bins[0], C.grep('^(GNU |GCC:|clang)'), info))
+        exe("strings %s | %s >> %s" % (bins[0], C.grep('^(GNU |GCC:|clang [bv])'), info))
       prn_line(info)
     def log_count(x, l): return "printf 'Count of unique %s%s: ' >> %s && wc -l < %s >> %s" % (
       'non-cold ' if do['imix'] & 0x10 else '', x, info, l, info)

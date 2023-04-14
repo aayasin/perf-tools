@@ -84,9 +84,14 @@ test-build:
 	grep Time datadep-20e6.toplev-vl2.log
 test-default:
 	$(DO1) $(PM)
-test-study: study.py run.sh do.py
-	rm -f run-cfg*
-	./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > $@ 2>&1 || $(FAIL)
+test-study: study.py stats.py run.sh do.py
+	rm -f run-cfg* $(AP)-s*
+	@echo ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > $@
+	./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 >> $@ 2>&1 || $(FAIL)
+	@tail $@
+	test -f run-cfg1-t1.$(CPU).stat && test -f run-cfg1-t1.$(CPU).stat
+	@$(MAKE) test-default APP="$(APP) s" PM="-pm 1012" >> $@ /dev/null 2>&1 || $(FAIL)
+	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
 
 clean:
 	rm -rf {run,BC2s,datadep,$(AP)}*{csv,data,old,log,txt} test-{dir,study}

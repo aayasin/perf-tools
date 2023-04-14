@@ -12,10 +12,10 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.53
+__version__= 0.6
 
-import common as C
-import re, os.path
+import common as C, pmu
+import csv, re, os.path
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]
@@ -28,6 +28,8 @@ def print_metrics(app):
   c = C.command_basename(app)
   rollup(c)
   return print_DB(c)
+
+def write_stat(app): return csv2stat(C.command_basename(app) + '.toplev-vl6-perf.csv')
 
 # internal methods
 def get_stat_int(s, c, val=-1, stat_file=None):
@@ -78,7 +80,7 @@ def read_perf(f):
   for l in lines:
     if debug > 3: print('debug:', l)
     try:
-      name, val, var, name2, val2, name3, val3 = parse(l)
+      name, val, var, name2, val2, name3, val3 = parse_perf(l)
       if name:
         d[name] = val
         d[name+':var'] = var
@@ -90,7 +92,7 @@ def read_perf(f):
   if debug > 1: print(d)
   return d
 
-def parse(l):
+def parse_perf(l):
   Renames = {'insn-per-cycle': 'IPC',
              'GHz': 'Frequency'}
   def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if '+-' in l else None
@@ -166,3 +168,78 @@ def read_toplev(filename, metric=None):
     if debug: print('stats.read_toplev(filename=%s, metric=%s) = %s' % (filename, metric, str(r)))
     return r
   return d
+
+def read_perf_toplev(filename):
+  perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
+  d = {}
+  with open(filename) as csvfile:
+    reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
+    for r in reader:
+      if r['Event'] in ('Event', 'dummy'): continue
+      x = r['Event']
+      v = int(float(r['Value']))
+      if x == 'msr/tsc/': x = 'tsc'
+      elif x == 'duration_time':
+        x = 'DurationTimeInMilliSeconds'
+        v = float(v/1e6)
+        d[x] = v
+        continue
+      elif '.' in x or x.startswith('cpu/topdown-') or x == 'cycles': pass
+      else: C.printf("unrecognized Event '%s' in reading %s\n" % (r['Event'], filename))
+      b = re.match(r"[a-zA-Z\.0-9_]+:?", x).group(0)
+      for i in (b, ':sup', ':user'): x = x.replace(i, i.upper())
+      if v == 0 and x in d and d[x] != 0: C.warn('skipping zero override in: ' + str(r), level=1)
+      else: d[x] = v
+  return d
+
+def csv2stat(filename):
+  if not filename.endswith('.csv'): C.error("Expecting csv format: '%s'" % filename)
+  d = read_perf_toplev(filename)
+  def params():
+    d['knob.nthreads'] = 2 if pmu.cpu('smt-on') else 1
+    d['knob.tma_version'] = pmu.cpu('TMA version')
+    d['knob.uarch'] = pmu.cpu('CPU')
+    return d['knob.uarch'] if d['knob.uarch'] else 'UNK'
+  def patch_metrics(SLOTS='TOPDOWN.SLOTS'):
+    if not (SLOTS in d and 'PERF_METRICS.FRONTEND_BOUND' in d): return
+    slots = d[SLOTS]
+    del d[SLOTS]
+    d[SLOTS + ':perf_metrics'] = slots
+    for k in ('BACKEND_BOUND', 'FRONTEND_BOUND', 'RETIRING', 'BAD_SPECULATION'):
+      m = 'PERF_METRICS.' + k
+      d[m] = int(255.0 * d[m] / slots)
+    p = 'cpu/topdown-'.upper()
+    if p + 'fetch-lat/'.upper() in d:
+      for (x, y) in (('MEMORY_BOUND', 'mem-bound'), ('FETCH_LATENCY', 'fetch-lat'), ('HEAVY_OPERATIONS', 'heavy-ops'),
+                     ('BRANCH_MISPREDICTS', 'br-mispredict')):
+        k = '%s%s/' % (p, y.upper())
+        if k in d:
+          d['PERF_METRICS.' + x] = int(255.0 * d[k] / slots)
+          del d[k]
+  def user_events(f):
+    ue = {}
+    for l in C.file2lines(f):
+      name, val = parse_perf(l)[0:2]
+      if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
+    return ue
+  def basename():
+    x = re.match(r'.*\.toplev\-([m]?vl6)\-perf\.csv', filename)
+    if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
+    return filename.replace('toplev-%s-perf.csv' % x.group(1), '')
+  patch_metrics()
+  uarch, base = params(), basename()
+  d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
+  d.update(user_events(base + 'perf_stat-r3.log'))
+  stat = base + uarch + '.stat'
+  with open(stat, 'w') as out:
+    for x in sorted(d.keys(), reverse=True):
+      out.write('%s %s\n' % (x, str(d[x])))
+  print('wrote:', stat)
+  return stat
+
+def main():
+  s = csv2stat(C.arg(1))
+  C.exe_cmd("echo scp $USER@`hostname -A | cut -d' ' -f1`:$PWD/%s ." % s)
+
+if __name__ == "__main__":
+  main()

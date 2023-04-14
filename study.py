@@ -15,9 +15,6 @@ __author__ = 'ayasin'
 import common as C, pmu, stats
 import argparse, os, sys, time
 
-import stats
-
-
 def dump_sample():
   print("""#!/bin/bash
 cd workloads/`echo $0 | sed 's/\.\///g' | cut -d- -f1`
@@ -82,7 +79,7 @@ for x in C.argument_parser(None):
 if args.repeat != 3: do += ' -r %d' % args.repeat
 x = 'tune'
 a = getattr(args, x) or []
-a.insert(0, [':loops:10 :batch:1 :help:0'])
+a.insert(0, [':batch:1 :help:0 :loops:9 :msr:1 '])
 do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
 def exe(c): return C.exe_cmd(c, debug=args.verbose)
@@ -108,9 +105,12 @@ if args.stages & 0x2:
 
 if args.stages & 0x4:
   if args.stages & 0x2: time.sleep(5)
+  for x in args.config:
+    stats.write_stat(app(x))
+    if args.verbose > 1:
+      stats.print_metrics(app(x))
   if len(args.config) == 2:
     bef, aft = args.config[0], args.config[1]
-    C.printc('Speedup (%s/%s): %.2fx' % (aft, bef, stats.get('time', app(bef)) / stats.get('time', app(aft))))
-  if args.verbose > 1:
-    for x in args.config: stats.print_metrics(app(x))
+    C.printc('Speedup (%s/%s): %sx' % (aft, bef, str(round(stats.get('time', app(bef)) / stats.get('time', app(aft)),
+             3 if args.verbose else 2))))
 

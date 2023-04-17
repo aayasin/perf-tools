@@ -28,6 +28,7 @@ from platform import python_version
 
 Uname_a = C.exe_one_line('uname -a')
 if Uname_a.startswith('Darwin'): C.error("Are you on MacOS? it is not supported (uname -a = %s" % Uname_a)
+tunable2pkg = {'msr': 'msr-tools', 'loop-ideal-ipc': 'libtinfo5'}
 
 def isfile(f): return f and os.path.isfile(f)
 Find_perf = 'sudo find / -name perf -executable -type f'
@@ -71,7 +72,7 @@ do = {'run':        C.RUN_DEF,
   'numactl':        1,
   'objdump':        'binutils-gdb/binutils/objdump' if isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
-  'packages':       ['cpuid', 'dmidecode', 'msr', 'numactl'],
+  'packages':       ['cpuid', 'dmidecode', 'numactl'] + tunable2pkg.keys(),
   'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
@@ -185,7 +186,6 @@ def uniq_name():
   return C.command_basename(args.app, iterations=(args.app_iterations if args.gen_args else None))[:200]
 
 def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=[]):
-  pkg_name = {'msr': 'msr-tools'}
   if args.install_perf:
     if args.install_perf == 'install':
       if do['package-mgr'] == 'dnf': exe('sudo yum install perf', 'installing perf')
@@ -200,7 +200,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
       exe('ln -f -s %s /usr/bin/perf'%a_perf)
     else: C.error('Unsupported --perf-install option: '+args.install_perf)
   for x in do['packages']:
-    if do[x]: packages += [pkg_name[x] if x in pkg_name else x]
+    if do[x]: packages += [tunable2pkg[x] if x in tunable2pkg else x]
   #if len(packages) and not do['package-mgr'].startswith('apt'): exe(installer.replace('install', 'makecache --refresh'), 'updating %s DB' % do['package-mgr'])
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])

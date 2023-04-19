@@ -72,7 +72,7 @@ do = {'run':        C.RUN_DEF,
   'numactl':        1,
   'objdump':        'binutils-gdb/binutils/objdump' if isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
-  'packages':       ['cpuid', 'dmidecode', 'numactl'] + tunable2pkg.keys(),
+  'packages':       ['cpuid', 'dmidecode', 'numactl'] + list(tunable2pkg.keys()),
   'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
@@ -146,9 +146,9 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
       do['cmds_file'].write(x + '\n')
       do['cmds_file'].flush()
   return C.exe_cmd(x, msg, redir_out, debug, run, log, fail, background)
-def exe1(x, m=None, log=True):
+def exe1(x, m=None, fail=True, log=True):
   if args.stdout and '| tee' in x: x, log = x.split('| tee')[0], False
-  return exe(x, m, redir_out=None, log=log)
+  return exe(x, m, redir_out=None, fail=fail, log=log)
 def exe_to_null(x): return exe1(x + ' > /dev/null')
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) # don't append to cmds_file
 def prn_line(f): exe_v0('echo >> %s' % f)
@@ -338,7 +338,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       profile_help[step] = '%x | %-50s | %s' % (2 ** step, msg, tune)
       return
     if mode == 'log-setup': log_setup()
-    elif mode == 'no-redirect': exe1(cmd, msg)
+    elif mode == 'perf-stat': exe1(cmd, msg, fail=False)
     else: exe(cmd, msg)
   def profile_mask_help(filename = 'profile-mask-help.md'):
     hdr = ('%7s' % 'mask', '%-50s' % 'profile-step', 'additional [optional] arguments')
@@ -383,11 +383,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     if evts != '': perf_args += ' -e "%s,%s"' % (do['perf-stat-def'], evts)
     log = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log')
     stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
-    profile_exe(perf + stat, msg, step, mode='no-redirect')
+    profile_exe(perf + stat, msg, step, mode='perf-stat')
     if args.stdout or do['tee']==0 or do['help']<0: return None
     if args.mode == 'process': return log
-    if isfile(log) and os.path.getsize(log) == 0: profile_exe(ocperf + stat, msg + '@; retry w/ ocperf', step, mode='no-redirect')
-    if int(exe_1line('wc -l ' + log, 0, False)) < 5:
+    if not isfile(log) or os.path.getsize(log) == 0: profile_exe(ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
+    if not isfile(log) or int(exe_1line('wc -l ' + log, 0, False)) < 5:
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', step, events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
     return log
@@ -696,7 +696,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(16):
     csv_file = perf_stat('-I%d' % do['interval'], 'over-time counting at %dms interval' % do['interval'], 16, csv=True)
     if args.events:
-      for e in args.events.split(','): exe('grep %s %s > %s' % (e, csv_file, csv_file.replace('.csv', '-%s.csv' % e)))
+      for e in args.events.split(','): exe('egrep -i %s %s > %s' % (e, csv_file, csv_file.replace('.csv', '-%s.csv' % e)))
 
   if en(19):
     data = perf_record('pt', 19)

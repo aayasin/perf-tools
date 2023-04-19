@@ -12,6 +12,8 @@ METRIC = -m IpCall
 MGR = sudo $(shell python -c 'import common; print(common.os_installer())')
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
 PM = -pm 0x317f
+PY2 = python2.7
+PY3 = python3.6
 RERUN = -pm 0x80
 SHELL := /bin/bash
 SHOW = tee
@@ -79,9 +81,10 @@ do-help.txt: do.py common.py pmu.py
 update:
 	$(DO) tools-update -v1
 test-build:
-	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS \
-	      -n '+Core_Bound*' -pm 22 | $(SHOW)
+	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS -n '+Core_Bound*' -pm 22 | $(SHOW)
 	grep Time datadep-20e6.toplev-vl2.log
+	./do.py profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
+	    -pm 10006 -r 1 | $(SHOW) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
 test-default:
 	$(DO1) $(PM)
 test-study: study.py stats.py run.sh do.py
@@ -110,9 +113,9 @@ pre-push: help
 	    APP="$(APP) u" CMD='suspend-smt profile tar' PM='-pm 1931a' &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command
-	mkdir test-dir; cd test-dir; make -f ../Makefile test-default \
-	    DO=../do.py APP=../pmu-tools/workloads/BC2s         # tests default from another directory, toplev describe
+	mkdir test-dir; cd test-dir; make -f ../Makefile test-default APP=../pmu-tools/workloads/BC2s \
+	    DO=../do.py > ../test-dir.log 2>&1                 # tests default from another directory, toplev describe
 	$(MAKE) test-study                                      # tests study script (errors only)
-	$(DO) profile > .do.log 2>&1 || $(FAIL)                 # tests default profile-steps (errors only)
+	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)                 # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
-	$(DO) profile --tune :time:2 -v3 > .do-time2.log 2>&1 || $(FAIL) # tests default w/ :time (errors only)
+	$(PY2) $(DO) profile --tune :time:2 -v3 > .do-time2.log 2>&1 || $(FAIL) # tests default w/ :time (errors only)

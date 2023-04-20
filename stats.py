@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.6
+__version__= 0.7
 
 import common as C, pmu
 import csv, re, os.path
@@ -111,6 +111,10 @@ def parse_perf(l):
   elif '#' in l:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
+    if name.count('_') > 1 and name.islower() and not name.startswith('perf_metrics'): # hack ocperf lower casing!
+      Name = name.replace('_', '^', 1).replace('_', '.', 1).replace('^', '_').upper()
+      print(name, '->', Name)
+      name = Name
     val = items[0].replace(',', '')
     val = float(val) if name_idx == 2 else int(val)
     var = get_var()
@@ -144,7 +148,7 @@ Key2group = {
 def read_toplev(filename, metric=None):
   d = {}
   if debug > 2: print('reading %s' % filename)
-  assert os.path.exists(filename), 'file does not exist: %s' % filename
+  if not os.path.exists(filename): return d
   for l in C.file2lines(filename):
     try:
       if not re.match(r"^(FE|BE|BAD|RET|Info)", l): continue
@@ -172,6 +176,7 @@ def read_toplev(filename, metric=None):
 def read_perf_toplev(filename):
   perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
   d = {}
+  if debug > 2: print('reading %s' % filename)
   with open(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
     for r in reader:
@@ -218,17 +223,21 @@ def csv2stat(filename):
           del d[k]
   def user_events(f):
     ue = {}
+    if debug > 2: print('reading %s' % f)
     for l in C.file2lines(f):
       name, val = parse_perf(l)[0:2]
       if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
     return ue
+  NOMUX = 'toplev-mvl6-nomux-perf.csv'
+  def nomux(): return filename.endswith(NOMUX)
   def basename():
-    x = re.match(r'.*\.toplev\-([m]?vl6)\-perf\.csv', filename)
+    if nomux(): return filename.replace(NOMUX, '')
+    x = re.match(r'.*\.toplev\-([m]?vl\d)\-perf\.csv', filename)
     if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
     return filename.replace('toplev-%s-perf.csv' % x.group(1), '')
   patch_metrics()
   uarch, base = params(), basename()
-  d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
+  if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
   d.update(user_events(base + 'perf_stat-r3.log'))
   stat = base + uarch + '.stat'
   with open(stat, 'w') as out:

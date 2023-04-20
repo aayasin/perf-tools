@@ -336,7 +336,7 @@ def command_basename(comm, iterations=None):
   if '/' in name[0]:
     check_executable(name[0].replace("'", ''))
     name[0] = name[0].split('/')[-1].replace('.sh', '')
-  if len(name) == 1 and ('kernels' in comm or iterations): name.append(iterations)
+  if len(name) == 1 and ('kernels' in comm or iterations): assert iterations; name.append(iterations)
   namestr = name.pop(0)
   for x in name: namestr += "-%s" % x.strip('-')
   return chop(namestr.strip('-'))

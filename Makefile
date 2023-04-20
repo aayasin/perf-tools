@@ -117,5 +117,6 @@ pre-push: help
 	    DO=../do.py > ../test-dir.log 2>&1                 # tests default from another directory, toplev describe
 	$(MAKE) test-study                                      # tests study script (errors only)
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)                 # tests default profile-steps (errors only)
+	$(DO) profile -a "openssl speed rsa2048" > openssl.log 2>&1 || $(FAIL)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
 	$(PY2) $(DO) profile --tune :time:2 -v3 > .do-time2.log 2>&1 || $(FAIL) # tests default w/ :time (errors only)

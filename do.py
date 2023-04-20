@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with profiling implications: by .01 on a fix, by .1 on new command/profile-step
-__version__ = 2.17
+__version__ = 2.18
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -415,7 +415,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     instline = '^\s+[0-9a-f]+\s'
     if 'taken branches' in msg: instline += '.*#'
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
-    if perf_script.first and not en(8): C.warn('LBR profile-step is disabled')
+    if perf_script.first and not en(8) and not do['batch']: C.warn('LBR profile-step is disabled')
     perf_script.first = False
     return exe(' '.join((perf, 'script', perf_ic(data, perf_script.comm), x)), msg, redir_out=None,
                timeit=(args.verbose > 2), export=export, fail=fail)
@@ -465,8 +465,9 @@ def profile(mask, toplev_args=['mvl6', None]):
   
   toplev += ' --no-desc'
   if do['plot']: toplev += ' --graph -I%d --no-multiplex' % do['interval']
-  grep_bk= "egrep '<==|MUX|Info(\.Bot|.*Time)' | sort"
-  grep_NZ= "egrep -iv '^(all|)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add|warning:)|not (found|referenced|supported)|##placeholder##' "
+  grep_bk= "egrep '<==|MUX|Info(\.Bot|.*Time)|warning.*zero' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
+  tl_skip= "not (found|referenced|supported)|Unknown sample event"
+  grep_NZ= "egrep -iv '^(all|)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|%s|##placeholder##' " % tl_skip
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
   def toplev_V(v, tag='', nodes=do['nodes'],
@@ -687,7 +688,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     def perf_script_ldlat(fields, tag): return perf_script("-F %s | grep -v mem-loads-aux | %s "
       "| tee %s.%s.log | tail -11" % (fields, sort2up, data, tag.lower()), "@ top-10 %s" % tag, data)
     perf_script_ldlat('event,ip,insn --xed', 'IPs')
-    perf_script_ldlat('ip,addr', 'IPs-DLAs')
+    perf_script_ldlat('ip,addr', 'DLA-IP')
 
   if en(7):
     cmd, log = toplev_V('-%s --no-multiplex' % toplev_args[0], '-nomux', ','.join((do['nodes'], do['extra-metrics'])))

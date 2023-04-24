@@ -113,8 +113,10 @@ pre-push: help
 	    APP="$(APP) u" CMD='suspend-smt profile tar' PM='-pm 1931a' &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command
-	mkdir test-dir; cd test-dir; make -f ../Makefile test-default APP=../pmu-tools/workloads/BC2s \
+	mkdir test-dir; cd test-dir; ln -s ../run.sh; make -f ../Makefile test-default APP=../pmu-tools/workloads/BC2s \
 	    DO=../do.py > ../test-dir.log 2>&1                 # tests default from another directory, toplev describe
+	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command
+	$(DO) log                                               # prompt for sudo
 	$(MAKE) test-study                                      # tests study script (errors only)
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)                 # tests default profile-steps (errors only)
 	$(DO) profile -a "openssl speed rsa2048" > openssl.log 2>&1 || $(FAIL)

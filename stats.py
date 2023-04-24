@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.7
+__version__= 0.71
 
 import common as C, pmu
 import csv, re, os.path
@@ -210,17 +210,21 @@ def csv2stat(filename):
     slots = d[SLOTS]
     del d[SLOTS]
     d[SLOTS + ':perf_metrics'] = slots
-    for k in ('BACKEND_BOUND', 'FRONTEND_BOUND', 'RETIRING', 'BAD_SPECULATION'):
-      m = 'PERF_METRICS.' + k
-      d[m] = int(255.0 * d[m] / slots)
+    fields = ['BACKEND_BOUND', 'FRONTEND_BOUND', 'RETIRING', 'BAD_SPECULATION']
+    l2map = (('MEMORY_BOUND', 'mem-bound'), ('FETCH_LATENCY', 'fetch-lat'), ('HEAVY_OPERATIONS', 'heavy-ops'), ('BRANCH_MISPREDICTS', 'br-mispredict'))
+    for (x, y) in l2map:
+      if 'PERF_METRICS.'+x in d: fields += [x]
     p = 'cpu/topdown-'.upper()
     if p + 'fetch-lat/'.upper() in d:
-      for (x, y) in (('MEMORY_BOUND', 'mem-bound'), ('FETCH_LATENCY', 'fetch-lat'), ('HEAVY_OPERATIONS', 'heavy-ops'),
-                     ('BRANCH_MISPREDICTS', 'br-mispredict')):
+      for (x, y) in l2map:
         k = '%s%s/' % (p, y.upper())
         if k in d:
-          d['PERF_METRICS.' + x] = int(255.0 * d[k] / slots)
+          d['PERF_METRICS.' + x] = d[k]
+          fields += [x]
           del d[k]
+    for k in fields:
+      m = 'PERF_METRICS.' + k
+      d[m] = int(255.0 * d[m] / slots)
   def user_events(f):
     ue = {}
     if debug > 2: print('reading %s' % f)

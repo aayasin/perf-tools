@@ -28,7 +28,7 @@ from platform import python_version
 
 Uname_a = C.exe_one_line('uname -a')
 if Uname_a.startswith('Darwin'): C.error("Are you on MacOS? it is not supported (uname -a = %s" % Uname_a)
-tunable2pkg = {'msr': 'msr-tools', 'loop-ideal-ipc': 'libtinfo5'}
+tunable2pkg = {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python3-pip'}
 
 def isfile(f): return f and os.path.isfile(f)
 Find_perf = 'sudo find / -name perf -executable -type f'
@@ -726,12 +726,16 @@ def profile(mask, toplev_args=['mvl6', None]):
   #profile-end
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['csv', 'log', 'txt', 'stat', 'xlsx', 'svg'] + ext
+  log_files = ['', 'csv', 'log', 'txt', 'stat', 'xlsx', 'svg'] + ext
   if cmd == 'tar':
     r = '.'.join((tag, pmu.cpu('CPU'), 'results.tar.gz')) if len(tag) else C.error('do_logs(tar): expecting tag')
     if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
   s = (uniq_name() if app_name() else '')
-  if cmd == 'tar': exe('tar -czvf %s run.sh ' % r + ' '.join(C.glob(s+'*')) + ' .%s.cmd' % s, 'tar into %s' % r, log=False)
+  if cmd == 'tar':
+    files = C.glob('.'+s+'*.cmd')
+    for f in C.glob(s+'*'):
+      if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
+    exe('tar -czvf %s run.sh ' % r + ' '.join(files), 'tar into %s' % r, log=False)
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')
 
 def build_kernel(dir='./kernels/'):
@@ -811,6 +815,7 @@ def main():
   do_cmd = '%s # version %s' % (C.argv2str(), version())
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
+  if args.app and '|' in args.app: C.error("Invalid use of pipe in app: '%s'. try putting it in a .sh file" % args.app)
   cmds_file = '.%s.cmd' % uniq_name()
   if isfile(cmds_file):
     C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)

@@ -13,9 +13,18 @@ __version__ = 0.23
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
+import re
+import common as C
+
 INST_UNIQ='PAUSE'
 INST_1B='NOP'
 MOVLG='MOVLG'
+FP_SUFFIX = "[sdh]([a-z])?"
+IMUL      = r"imul.*"
+INDIRECT  = r"(jmp|call).*%"
+CALL_RET  = '(call|ret)'
+COND_BR   = 'j[^m][^ ]*'
+M_FUSION_INSTS = ['cmp', 'test', 'add', 'sub', 'inc', 'dec', 'and']
 
 def bytes(x): return '.byte 0x' + ', 0x'.join(x.split(' '))
 
@@ -60,3 +69,26 @@ def x86_inst(x):
 
 def x86_asm(x, tabs=1, spaces=8):
   return ' '*spaces + 'asm("' + '\t'*tabs + x86_inst(x) + '");'
+
+# CMP, TEST, AND, ADD and SUB may be macro-fused if they compare reg-reg, reg-imm, reg-mem, mem-reg,
+# means no mem-imm fusion
+# TEST and AND fuse with all JCCs
+# CMP, ADD and SUB fuse with [JC, JB, JAE/JNB], [JE, JZ, JNE, JNZ], [JNA/JBE, JA/JNBE] and
+# [JL/JNGE, JGE/JNL, JLE/JNG, JG/JNLE]
+# INC and DEC fuse with [JE, JZ, JNE, JNZ] and [JL/JNGE, JGE/JNL, JLE/JNG, JG/JNLE] on reg and not memory
+def is_fusion(line1, line2):
+  match = re.search(COND_BR, line2)
+  if not match: return False
+  if not C.any_in(M_FUSION_INSTS, line1): return False
+  if C.any_in(['inc', 'dec'], line1) and is_memory(line1): return False
+  if is_memory(line1) and '$' in line1: return False
+  if C.any_in(['test', 'add'], line1): return True
+  JCC_GROUP1 = ['je', 'jz', 'jne', 'jnz', 'jl', 'jnge', 'jge', 'jnl', 'jle', 'jng', 'jg', 'jnle']
+  JCC_GROUP2 = ['jc', 'jb', 'jae', 'jnb', 'jna', 'jbe', 'ja', 'jnbe']
+  jcc = match.group(0)
+  if jcc in JCC_GROUP1: return True
+  if jcc in JCC_GROUP2 and C.any_in(['cmp', 'add', 'sub'], line1): return True
+  return False
+
+def is_memory(line):
+  return '(' in line and 'lea' not in line

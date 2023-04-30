@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.09
+__version__= 1.10
 
 import common as C, pmu
 from common import inc

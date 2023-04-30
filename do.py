@@ -460,7 +460,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         base, base, base), '@annotate code', redir_out='2>/dev/null', timeit=(args.verbose > 2))
     exe("grep -w -5 '%s :' %s-code.log" % (exe_1line("egrep '\s+[0-9]+ :' %s-code.log | sort -n | tail -1" %
                                                       base, 0), base), '@hottest block(s), all commands')
-    if do['xed']: perf_script("-F insn --xed | %s | tee %s-hot-insts.log | tail" % (sort2up, base),
+    if do['xed']: perf_script("-F insn --xed | grep . | %s | tee %s-hot-insts.log | tail" % (sort2up, base),
                               '@time-consuming instructions', data)
   
   toplev += ' --no-desc'

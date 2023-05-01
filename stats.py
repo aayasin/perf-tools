@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.71
+__version__= 0.72
 
 import common as C, pmu
 import csv, re, os.path
@@ -112,7 +112,8 @@ def parse_perf(l):
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
     if name.count('_') > 1 and name.islower() and not name.startswith('perf_metrics'): # hack ocperf lower casing!
-      Name = name.replace('_', '^', 1).replace('_', '.', 1).replace('^', '_').upper()
+      ignore = 2 if name.startswith('br_') else 1
+      Name = name.replace('_', '^', ignore).replace('_', '.', 1).replace('^', '_').upper()
       print(name, '->', Name)
       name = Name
     val = items[0].replace(',', '')
@@ -151,7 +152,7 @@ def read_toplev(filename, metric=None):
   if not os.path.exists(filename): return d
   for l in C.file2lines(filename):
     try:
-      if not re.match(r"^(FE|BE|BAD|RET|Info)", l): continue
+      if not re.match(r"^(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
       items = l.strip().split()
       if debug > 3: print('debug:', len(items), items, l)
       if 'Info.Bot' in items[0]:
@@ -159,6 +160,8 @@ def read_toplev(filename, metric=None):
       elif '<==' in l:
         d['Critical-Group'] = Key2group[ items[0] ]
         d['Critical-Node'] = items[1]
+      elif l.startswith('warning'):
+        d['zero-counts'] = l.split(':')[2].strip()
       else:
         for m in ('IpTB', 'UopPI'):
           if m in items[1]: d[items[1]] = float(items[3])

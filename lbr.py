@@ -11,23 +11,19 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.09
+__version__= 1.10
 
 import common as C, pmu
 from common import inc
 import os, re, sys
 import llvm_mca_lbr
+from kernels import x86
 try:
   from numpy import average
   numpy_imported = True
 except ImportError:
   numpy_imported = False
 
-FP_SUFFIX = "[sdh]([a-z])?"
-IMUL      = r"imul.*"
-INDIRECT  = r"(jmp|call).*%"
-CALL_RET  = '(call|ret)'
-COND_BR   = 'j[^m].*'
 MEM_INSTS = ['load', 'store', 'lock', 'prefetch']
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -171,11 +167,11 @@ def loop_stats(line, loop_ipc, tc_state):
     if not is_in_loop(line_ip(line), loop_stats.id): # just exited a loop
       loop_stats(None, 0, 0)
     else:
-      mark(INDIRECT, 'indirect')
-      mark(IMUL, 'scalar-int')
-      mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % FP_SUFFIX, 'scalar-fp')
+      mark(x86.INDIRECT, 'indirect')
+      mark(x86.IMUL, 'scalar-int')
+      mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % x86.FP_SUFFIX, 'scalar-fp')
       for i in range(vec_size):
-        if mark(r"[^aku]p%s\s+.*%s" % (FP_SUFFIX, vec_reg(i)), vec_len(i, 'fp')): continue
+        if mark(r"[^aku]p%s\s+.*%s" % (x86.FP_SUFFIX, vec_reg(i)), vec_len(i, 'fp')): continue
         mark(INT_VEC(i), vec_len(i))
   return tripcount(line_ip(line), loop_ipc, tc_state)
 loop_stats.id = None
@@ -232,7 +228,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens,
           inc(loop['paths-%d'%x], ';'.join([hex(a) for a in lbr_takens[-x:]]))
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
-      size, cnt, conds = 1, {}, []
+      size, cnt, conds, fusion = 1, {}, [], 0
       # TODO: Add env to generalize zcnt as loop identifier here and in line_inst()
       types = ['taken', 'lea', 'cmov'] + MEM_INSTS + ['zcnt']
       for i in types: cnt[i] = 0
@@ -240,12 +236,14 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens,
       while x >= 1:
         size += 1
         if is_taken(lines[x]): cnt['taken'] += 1
-        if is_type(COND_BR, lines[x]): conds += [line_ip(lines[x])]
+        if is_type(x86.COND_BR, lines[x]): conds += [line_ip(lines[x])]
+        if x86.is_fusion(lines[x], lines[x + 1]): fusion += 1
         t = line_inst(lines[x])
         if t and t in types: cnt[t] += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
           loop['size'], loop['Conds'] = size, len(conds)
+          if fusion > 0: loop['macro-fusion'] = fusion
           for i in types: loop[i] = cnt[i]
           if len(conds):
             loop['Cond_polarity'] = {}
@@ -317,7 +315,8 @@ def is_imix(t):
   return t in MEM_INSTS or t.startswith('vec')
 Insts = inst2pred(None) + ['call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
 Insts_global = Insts + is_imix(None) + ['all']
-Insts_all = ['cond_backward', 'cond_forward'] + Insts_global
+Insts_all = ['cond_backward', 'cond_forward', 'cond_non-taken', 'cond_fusible',
+             'cond_non-fusible', 'cond_taken-not-first'] + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + Insts_all}
 hsts = {}
@@ -479,12 +478,18 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
                 if x >= 0:
                   if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
                   if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
-          if edge_en and is_taken(lines[-1]) and is_type(COND_BR, lines[-1]):
+          if edge_en and is_type(x86.COND_BR, lines[-1]) and is_taken(lines[-1]):
             glob['cond_%sward' % ('for' if ip > xip else 'back')] += 1
+          # checks all lines but first
+          if edge_en and is_type(x86.COND_BR, line):
+            if is_taken(line): glob['cond_taken-not-first'] += 1
+            else: glob['cond_non-taken'] += 1
+            if x86.is_fusion(lines[-1], line): glob['cond_fusible'] += 1
+            else: glob['cond_non-fusible'] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)
-          if 'indirect-x2g' in hsts and is_type(INDIRECT, lines[-1]) and abs(ip - xip) >= 2**31:
+          if 'indirect-x2g' in hsts and is_type(x86.INDIRECT, lines[-1]) and abs(ip - xip) >= 2**31:
             inc(hsts['indirect-x2g'], xip)
             if 'MISP' in lines[-1]: inc(hsts['indirect-x2g-misp'], xip)
           if xip in indirects:
@@ -520,7 +525,7 @@ read_sample.dump = C.env2int('LBR_DUMP', 0)
 
 
 def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
-def is_callret(l):    return is_type(CALL_RET, l)
+def is_callret(l):    return is_type(x86.CALL_RET, l)
 
 # TODO: re-design this function to return: event-name, timestamp, etc
 def is_header(line):  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
@@ -637,6 +642,8 @@ def print_global_stats():
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
   if glob['size_stats_en']:
     for x in ('backward', ' forward'): print_stat(x + ' taken conditional', glob['cond_' + x.strip()], imix=True)
+    for x in ('non-taken', 'fusible', 'non-fusible', 'taken-not-first'):
+      print_stat(x + ' conditional', glob['cond_' + x], imix=True)
     for x in Insts_global: print_stat(x, glob[x], imix=True)
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

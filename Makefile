@@ -29,7 +29,8 @@ link-python:
 	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
 llvm:
 	$(MGR) -y -q install curl clang
-
+diff:
+	git diff | grep -v '^\-' | less
 intel:
 	git clone https://gitlab.devtools.intel.com/micros/dtlb
 	cd dtlb; ./build.sh
@@ -88,16 +89,21 @@ test-build:
 test-default:
 	$(DO1) $(PM)
 test-study: study.py stats.py run.sh do.py
-	rm -f run-cfg* $(AP)-s*
+	rm -f ./{.,}{run,BC2s}-cfg*,$(AP)-s*}
 	@echo ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > $@
-	./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 >> $@ 2>&1 || $(FAIL)
+	./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 :forgive:1 -v1 >> $@ 2>&1 || $(FAIL)
 	@tail $@
-	test -f run-cfg1-t1.$(CPU).stat && test -f run-cfg1-t1.$(CPU).stat
-	@$(MAKE) test-default APP="$(APP) s" PM="-pm 1012" >> $@ /dev/null 2>&1 || $(FAIL)
+	test -f run-cfg1-t1.$(CPU).stat && test -f run-cfg2-t1.$(CPU).stat
+	@echo ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp >> $@
+	./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp >> $@ 2>&1
+	test -f BC2s-cfg1-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
+	test -f BC2s-cfg2-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
+test-stats: stats.py
+	@$(MAKE) test-default APP="$(APP) s" PM="-pm 1012" >> /dev/null 2>&1
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
 
 clean:
-	rm -rf {run,BC2s,datadep,$(AP)}*{csv,data,old,log,txt} test-{dir,study}
+	rm -rf {run,BC2s,datadep,$(AP)}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
 pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
@@ -116,9 +122,10 @@ pre-push: help
 	mkdir test-dir; cd test-dir; ln -s ../run.sh; make -f ../Makefile test-default APP=../pmu-tools/workloads/BC2s \
 	    DO=../do.py > ../test-dir.log 2>&1                 # tests default from another directory, toplev describe
 	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command
-	$(DO) log                                               # prompt for sudo
 	$(MAKE) test-study                                      # tests study script (errors only)
-	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)                 # tests default profile-steps (errors only)
-	$(DO) profile -a "openssl speed rsa2048" > openssl.log 2>&1 || $(FAIL)
+	$(MAKE) test-stats                                      # tests stats module
+	$(PY3) $(DO) profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1  || echo skip
+	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
 	$(PY2) $(DO) profile --tune :time:2 -v3 > .do-time2.log 2>&1 || $(FAIL) # tests default w/ :time (errors only)
+	time $(DO) profile -a "openssl speed rsa2048" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)

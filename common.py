@@ -75,9 +75,8 @@ def exit(msg=''):
 #debug
 #
 #print (to stderr) and flush
-def printf(x, flush=True, std=sys.stderr):
-  if std == sys.stderr: x = color.GREY + x + color.END
-  std.write(x)
+def printf(x, flush=True, std=sys.stderr, col=color.GREY):
+  std.write(col + x + color.END)
   if flush: std.flush()
 
 def annotate(stuff, label=''):
@@ -131,14 +130,16 @@ def exe2list(x, sep=' ', debug=False):
   return res
 
 def exe_one_line(x, field=None, debug=False):
+  def print1(x): printf(x, std=sys.stdout, col=color.BLUE) if debug else None
   x_str = 'exe_one_line(%s, f=%s)' % (x, str(field))
+  print1('%s = ' % x_str)
   try:
     res = exe_output(x, '')
   except subprocess.CalledProcessError:
     warn('%s failed!' % x_str)
     res = 'N/A'
   if field is not None: res = str2list(res)[field]
-  if debug: printc('%s = %s' % (x_str, res), color.BLUE)
+  print1('%s\n' % res)
   return res
 
 def par_jobs_file(commands, name=None, verbose=False, shell='bash'):
@@ -172,21 +173,11 @@ def check_executable(x):
   if not (os.path.isfile(x) and os.access(x, os.X_OK)): error("'%s' is not executable" % x)
 
 def dirname(): return os.path.dirname(__file__)
-
-def env2int(x, default=0, base=10):
-  return int(os.getenv(x), base) if os.getenv(x) else default
-
-def env2str(x):
-  y = os.getenv(x)
-  return '%s=%s' % (x, y) if y else ''
-
-def env2list(x, default):
-  y = os.getenv(x)
-  return y.split() if y else default
-
-def envfile(x):
-  x = os.getenv(x)
-  return x if x and os.path.isfile(x) else None
+def realpath(x): return os.path.join(dirname(), x)
+def env2int(x, default=0, base=10): return int(os.getenv(x), base) if os.getenv(x) else default
+def env2str(x): y = os.getenv(x); return '%s=%s' % (x, y) if y else ''
+def env2list(x, default): y = os.getenv(x); return y.split() if y else default
+def envfile(x): x = os.getenv(x); return x if x and os.path.isfile(x) else None
 
 def print_env(std=sys.stderr):
   for k, v in sorted(os.environ.items()):
@@ -239,7 +230,8 @@ def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])
 # chop - clean a list of charecters from a string
 # @s:     input string
 # @stuff: input charecters as string, or a first item in a tuple of strings
-def chop(source, stuff='./~<>=,;{}|"\': '):
+CHOP_STUFF='./~<>=,;{}|"\': '
+def chop(source, stuff=CHOP_STUFF):
   r, chars = source, stuff
   items = []
   if type(stuff) is tuple:
@@ -261,18 +253,10 @@ def is_num(x, hex=False):
   except ValueError:
     return False
 
-def float2str(f):
-  if not is_num(f): return f
-  return '{:,}'.format(f)
-
+def float2str(f): return f if not is_num(f) else '{:,}'.format(f)
 def flag2str(prefix, flag): return '%s%s' % (prefix, str(flag).replace('True', '')) if flag else ''
-
-def flag_value(s, f, v='', sep=' '):
-  if f in s: v = s.split(f)[1].split(sep)[1]
-  return v
-
-def str2list(s):
-  return ' '.join(s.split()).split(' ')
+def flag_value(s, f, sep=' '): return s.split(f)[1].split(sep)[1] if f in s else None
+def str2list(s):  return ' '.join(s.split()).split(' ')
 
 def arg(num, default=None):
   if len(sys.argv) <= num and not default: error("must provide %d parameters" % num)
@@ -343,6 +327,4 @@ def command_basename(comm, iterations=None):
 
 # stats
 def inc(d, b, i=1): d[b] = d.get(b, 0) + i
-def ratio(x, histo, denom='total'):
-  return '%s-ratio: %.1f%%'%(x, 100.0*histo[x]/max(histo[denom], 1))
-
+def ratio(x, hist, denom='total'): return '%s-ratio: %.1f%%'%(x, 100.0*hist[x]/max(hist[denom], 1))

@@ -10,6 +10,7 @@
 # Misc utilities for CPU performance profiling on Linux
 #
 # TODO list:
+#   move TMA code to a seperate tma/tma.py folder/module
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
 #   quiet mode
@@ -17,8 +18,8 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-# pump version for changes with profiling implications: by .01 on a fix, by .1 on new command/profile-step
-__version__ = 2.18
+# pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step
+__version__ = 2.20
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -47,7 +48,7 @@ do = {'run':        C.RUN_DEF,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
   'flameg':         0,
-  'forgive':        0,
+  'forgive':        1,
   'gen-kernel':     1,
   'help':           1,
   'interval':       10,
@@ -77,6 +78,7 @@ do = {'run':        C.RUN_DEF,
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
   'perf-pebs':      '-b -e %s -c 1000003' % pmu.event('dsb-miss'),
+  'perf-pebs-top':  0,
   'perf-pt':        "-e '{intel_pt//u,%su}' -c 700001 -m,64M" % pmu.lbr_event(), # noretcomp
   'perf-record':    ' -g ', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-report-append': '',
@@ -102,6 +104,7 @@ do = {'run':        C.RUN_DEF,
                       C.flag2str(',L2_Bound,DRAM_Bound,Memory_Operations', pmu.icelake()),
   'tma-fx':         '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
   'tma-group':      None,
+  'tma-zero-ok':    'Data_Sharing Contested_Accesses Remote_Cache Slow_Pause',
   'xed':            1 if pmu.cpu('x86', 0) else 0,
 }
 args = argparse.Namespace()
@@ -113,7 +116,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
     while C.any_in(('=', 'python'), X[i]): i += 1
     j=i+1
     while C.any_in(('--no-desc',), X[j]): j += 1
-    kk = C.flag_value(x, '-e') if ' record' in x else C.flag_value(x, '-F') if ' script' in x else X[j+1]
+    kk = C.flag_value(x, '-e') or '' if ' record' in x else C.flag_value(x, '-F') if ' script' in x else X[j+1]
     cmd_name = C.chop('-'.join((X[i].split('/')[-1], X[j], kk)))
     time_str = '%s %s' % (time, '-f "\\t%%E time-real:%s"' % cmd_name if do['time'] > 1 else '')
     X.insert(1 if '=' in X[0] else 0, time_str)
@@ -161,10 +164,10 @@ def exe_1line(x, f=None, heavy=True):
   return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(x, f, args.verbose > 1)
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
 
+def error(x): C.warn(x) if do['forgive'] else C.error(x)
 def warn_file(x):
   if not args.mode == 'profile' and not args.print_only and not isfile(x): C.warn('file does not exist: %s' % x)
 
-def rp(x): return os.path.join(C.dirname(), x)
 def version(): return str(round(__version__, 3 if args.tune else 2))
 def module_version(mod_name):
   if mod_name == 'lbr':
@@ -173,6 +176,9 @@ def module_version(mod_name):
   elif mod_name == 'stats':
     import stats
     mod = stats
+  elif mod_name == 'study':
+    import study
+    mod = study
   else: C.error('Unsupported module: ' + mod_name)
   return '%s=%.2f' % (mod_name, mod.__version__)
 def app_name(): return args.app != C.RUN_DEF
@@ -329,6 +335,8 @@ def get_perf_toplev():
 def profile(mask, toplev_args=['mvl6', None]):
   out, profile_help = uniq_name(), {}
   perf, toplev, ocperf = get_perf_toplev()
+  base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
+  logs = {'stat': None, 'code': base + '-code.log', 'tma': None}
   def profile_exe(cmd, msg, step, mode='redirect', tune=''):
     if do['help'] < 0:
       if ' -r3' in cmd: tune = '[--repeat 3%s]' % (' --tune :levels:2' if ' -vl2 ' in cmd else '')
@@ -421,28 +429,28 @@ def profile(mask, toplev_args=['mvl6', None]):
                timeit=(args.verbose > 2), export=export, fail=fail)
   perf_script.first = True
   perf_script.comm = do['comm']
-  perf_stat_log = None
-  def record_name(flags): return '%s%s' % (out, C.chop(flags, (' :/,={}\'', 'cpu_core', 'cpu')))
-  def get_stat(s, default): return stats.get_stat_log(s, perf_stat_log) if isfile(perf_stat_log) else default
+  def record_name(flags): return '%s%s' % (out, C.chop(flags, (C.CHOP_STUFF, 'cpu_core', 'cpu')))
+  def get_stat(s, default): return stats.get_stat_log(s, logs['stat']) if isfile(logs['stat']) else default
   def record_calibrate(x):
     factor = do['calibrate']
     if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs-utilized', 1)))
     if factor:
-      do[x] = do[x].replace('0000', '0' * (4 + factor))
-      C.info('\tcalibrated: %s' % do[x])
+      if not '000' in C.flag_value(do[x], '-c'): error("cannot calibrate '%s' with '%s'" % (x, do[x]))
+      else:
+        do[x] = do[x].replace('000', '0' * (3 + factor), 1)
+        C.info('\tcalibrated: %s' % do[x])
     return record_name(do[x])
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
   if args.profile_mask & ~0x1: C.info('App: ' + r)
-  if en(1): perf_stat_log = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
+  if en(1): logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
   if en(2): perf_stat('-a', 'system-wide counting', 2, a_events(), grep='| egrep "seconds|insn|topdown|pkg"')
   
   if en(3) and do['sample']:
-    base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
     data = '%s.perf.data' % record_name(do['perf-record'])
     profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.period(), data, do['perf-record'], r),
                 'sampling %s' % do['perf-record'].replace(' -g ', 'w/ stacks'), 3, tune='sample')
-    if do['log-stdout'] and args.mode != 'process' and not do['forgive']:
+    if do['log-stdout'] and args.mode != 'process' and do['forgive'] < 2:
       record_out = C.file2lines(C.log_stdio)
       for l in reversed(record_out):
         if 'sampling ' in l: break
@@ -454,12 +462,12 @@ def profile(mask, toplev_args=['mvl6', None]):
       "| egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//'" % (data, base), '@report functions')
     exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A22 Overhead", '@report modules')
-    exe("%s --stdio -n -l -i %s | c++filt | tee %s-code.log "
+    exe("%s --stdio -n -l -i %s | c++filt | tee %s "
         "| tee >(egrep '^\s+[0-9]+ :' | sort -n | ./ptage > %s-code-ips.log) "
         "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
-        base, base, base), '@annotate code', redir_out='2>/dev/null', timeit=(args.verbose > 2))
-    exe("grep -w -5 '%s :' %s-code.log" % (exe_1line("egrep '\s+[0-9]+ :' %s-code.log | sort -n | tail -1" %
-                                                      base, 0), base), '@hottest block(s), all commands')
+        logs['code'], base, base), '@annotate code', redir_out='2>/dev/null', timeit=(args.verbose > 2))
+    exe("grep -w -5 '%s :' %s" % (exe_1line("egrep '\s+[0-9]+ :' %s | sort -n | tail -1" % logs['code'], 0),
+                                  logs['code']), '@hottest block(s), all commands')
     if do['xed']: perf_script("-F insn --xed | %s | tee %s-hot-insts.log | tail" % (sort2up, base),
                               '@time-consuming instructions', data)
   
@@ -474,7 +482,9 @@ def profile(mask, toplev_args=['mvl6', None]):
                tlargs = toplev_args[1] if toplev_args[1] else args.toplev_args):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
     c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, o.replace('.log', '-perf.csv'), tlargs, r)
-    if ' --global' in c: C.warn('Global counting is subject to system noise (cpucount=%d)' % pmu.cpu('cpucount'))
+    if ' --global' in c:
+      # https://github.com/andikleen/pmu-tools/issues/453
+      C.warn('Global counting is subject to system noise (cpucount=%d)' % pmu.cpu('cpucount'))
     return c, o
   def tl_args(x): return ' '.join([args.toplev_args, x])
   def topdown_describe(log):
@@ -485,12 +495,15 @@ def profile(mask, toplev_args=['mvl6', None]):
       for n in path[1:]: toplev_describe(n)
 
   # +Info metrics that would not use more counters
-  topdown_full_log = None
   if en(4):
-    cmd, topdown_full_log = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']),
+    cmd, logs['tma'] = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']),
       tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % do['tma-dedup-nodes']))
-    profile_exe(cmd + ' | tee %s | %s' % (topdown_full_log, grep_bk), 'topdown full tree + All Bottlenecks', 4)
-    topdown_describe(topdown_full_log)
+    profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk), 'topdown full tree + All Bottlenecks', 4)
+    zeros = read_toplev(logs['tma'], 'zero-counts')
+    if zeros and len([m for m in zeros.split() if m not in do['tma-zero-ok'].split()]):
+      # https://github.com/andikleen/pmu-tools/issues/455
+      error("Too many metrics with zero counts (%s). Run longer or use: --toplev-args ' --no-multiplex'" % zeros)
+    topdown_describe(logs['tma'])
 
   if en(5):
     cmd, log = toplev_V('-vl%d' % do['levels'], tlargs=tl_args('-r%d' % args.repeat))
@@ -520,9 +533,9 @@ def profile(mask, toplev_args=['mvl6', None]):
 
   if en(15):
     group = do['tma-group']
-    if not topdown_full_log: C.warn('topdown-group requires topdown-full profile-step')
+    if not logs['tma']: C.warn('topdown-group requires topdown-full profile-step')
     elif not group:
-      group = read_toplev(topdown_full_log, 'Critical-Group')
+      group = read_toplev(logs['tma'], 'Critical-Group')
       if group: C.info('detected group: %s' % group)
     if not group: group, x = 'Mem', C.warn("Could not auto-detect group; Minimize system-noise, e.g. try './do.py disable-smt'")
     cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs=C.TOPLEV_DEF.replace('Summary', 'Summary,+' + group))
@@ -541,7 +554,7 @@ def profile(mask, toplev_args=['mvl6', None]):
 
   def perf_record(tag, step, msg=None, record='record', track_ipc=do['perf-stat-ipc']):
     perf_data, flags = '%s.perf.data' % record_calibrate('perf-%s' % tag), do['perf-%s' % tag]
-    assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or do['forgive'], 'No unfiltered LBRs! for %s: %s' % (tag, flags)
+    assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or (do['forgive'] > 1), 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     cmd = 'bash -c "%s %s %s"' % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
     profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
     warn_file(perf_data)
@@ -549,11 +562,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     n = samples_count(perf_data)
     if n == 0: C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
     elif n < 1e4: C.warn("Too little samples collected (%s in %s); rerun with '--tune :calibrate:-1'" % (n, perf_data))
-    elif n > 1e6: C.warn("Too many samples collected (%s in %s); rerun with '--tune :calibrate:1'" % (n, perf_data))
+    elif n > 1e5: C.warn("Too many samples collected (%s in %s); rerun with '--tune :calibrate:1'" % (n, perf_data))
     return perf_data
   
   if en(8) and do['sample'] > 1:
-    assert pmu.lbr_event()[:-1] in do['perf-lbr'] or do['forgive'], 'Incorrect event for LBR in: ' + do['perf-lbr']
+    assert pmu.lbr_event()[:-1] in do['perf-lbr'] or do['forgive'] > 2, 'Incorrect event for LBR in: ' + do['perf-lbr']
     data = perf_record('lbr', 8)
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
@@ -581,8 +594,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       exe_v0('printf "# processing %s%s\n"%s %s' % (data, C.flag2str(" filtered on ", comm), '>>' if do['size'] else '>', info))
       if do['lbr-branch-stats']: exe(perf + " report %s | grep -A13 'Branch Statistics:' | tee -a %s | egrep -v ':\s+0\.0%%|CROSS'" %
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
-      if isfile(perf_stat_log):
-        exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (perf_stat_log, info))
+      if isfile(logs['stat']): exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, " egrep -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
       perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data,
         log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')), '@processing samples', data, fail=0)
@@ -616,7 +628,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         if do['imix']:
           print_cmd(' '.join(('4debug', perf, 'script', perf_ic(data, perf_script.comm), cmd, '| less')), False)
           cmd += " | tee >(%s %s %s >> %s) %s | GREP_INST | %s " % (
-            lbr_env, rp('lbr_stats'), do['lbr-stats-tk'], info, misp, clean)
+            lbr_env, C.realpath('lbr_stats'), do['lbr-stats-tk'], info, misp, clean)
           if do['imix'] & 0x1:
             cmd += "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
             msg += ', hitcounts'
@@ -640,10 +652,10 @@ def profile(mask, toplev_args=['mvl6', None]):
         cmd, top = '', min(do['loops'], int(exe_1line('wc -l %s' % loops, 0)))
         do['loops'] = top
         while top > 1:
-          cmd += ' | tee >(%s %s >> %s) ' % (rp('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
+          cmd += ' | tee >(%s %s >> %s) ' % (C.realpath('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
           top -= 1
         cmd += ' | ./loop_stats %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], info)
-        print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, rp('loop_stats'),
+        print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, C.realpath('loop_stats'),
           exe_1line('tail -1 %s' % loops, 2)[:-1], info))
         perf_script("-F +brstackinsn --xed %s && %s" % (cmd, C.grep('FL-cycles...[1-9][0-9]?', info, color=1)),
                     "@detailed stats for hot loops", data,
@@ -662,13 +674,15 @@ def profile(mask, toplev_args=['mvl6', None]):
         is_dsb = 1
         perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
                     (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
-    top = 0
-    if not is_dsb: pass
+    top = do['perf-pebs-top']
+    top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
+    if top < 0 and isfile(logs['code']):
+      exe("grep -w -5 '%s:' %s" % (top_ip, logs['code']), '@code around IP: %s' % top_ip)
+    elif not is_dsb: pass
     elif top == 1:
-      top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
       # asserts in skip_sample() only if piped!!
       perf_script("-F +brstackinsn --xed | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
-        rp('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
+        C.realpath('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
     else:
       perf_script("-F +brstackinsn --xed | ./lbr_stats %s | tee -a %s.ips.log" % (do['lbr-stats'], data),
                   "@ stats on PEBS event", data)
@@ -676,7 +690,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       cmd = ''
       while top > 0:
         top_ip = exe_1line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
-        cmd += ' | tee >(%s %s >> %s.ctxt.log) ' % (rp('lbr_stats'), top_ip, data)
+        cmd += ' | tee >(%s %s >> %s.ctxt.log) ' % (C.realpath('lbr_stats'), top_ip, data)
         top -= 1
       perf_script("-F +brstackinsn --xed %s > /dev/null" % cmd, "@ stats on PEBS", data)
 
@@ -704,7 +718,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     tag, info = 'pt', '%s.info.log' % data
     exe(perf + " script --no-itrace -F event,comm -i %s | %s | tee %s.modules.log | ./ptage | tail" % (data, sort2u, data))
     perf_script("--itrace=Le -F +brstackinsn --xed | tee >(egrep 'ppp|#' > %s.pt-takens.log) | %s %s > %s" %
-      (data, rp('lbr_stats'), do['lbr-stats-tk'], info), "@pt info", data)
+      (data, C.realpath('lbr_stats'), do['lbr-stats-tk'], info), "@pt info", data)
 
   if en(18):
     assert do['msr']
@@ -870,7 +884,8 @@ def main():
     elif c == 'version':      print(os.path.basename(__file__), 'version =', version(),
                                     '; '.join([''] + [module_version(x) for x in ('lbr', 'stats')]))
     elif c.startswith('backup'):
-      r = '../perf-tools-%s-%s-e%d.tar.gz' % (version(), '-'.join([module_version(x) for x in ('lbr', 'stats')]), len(param))
+      r = '../perf-tools-%s-%s-e%d.tar.gz' % (version(),
+          '-'.join([module_version(x) for x in ('lbr', 'stats', 'study')]), len(param))
       to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
       if isfile(r): C.warn('file exists: %s' % r)
       fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + ['.git'] + param if param else [])

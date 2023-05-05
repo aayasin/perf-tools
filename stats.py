@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.72
+__version__= 0.73
 
 import common as C, pmu
 import csv, re, os.path
@@ -205,9 +205,9 @@ def csv2stat(filename):
   d = read_perf_toplev(filename)
   def params():
     d['knob.nthreads'] = 2 if pmu.cpu('smt-on') else 1
-    d['knob.tma_version'] = pmu.cpu('TMA version')
+    d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', '4.5-full-perf', prefix=False)
     d['knob.uarch'] = pmu.cpu('CPU')
-    return d['knob.uarch'] if d['knob.uarch'] else 'UNK'
+    return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK', prefix=False)
   def patch_metrics(SLOTS='TOPDOWN.SLOTS'):
     if not (SLOTS in d and 'PERF_METRICS.FRONTEND_BOUND' in d): return
     slots = d[SLOTS]
@@ -230,6 +230,7 @@ def csv2stat(filename):
       d[m] = int(255.0 * d[m] / slots)
   def user_events(f):
     ue = {}
+    if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
     if debug > 2: print('reading %s' % f)
     for l in C.file2lines(f):
       name, val = parse_perf(l)[0:2]

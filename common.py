@@ -56,7 +56,7 @@ def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3):
   if suppress_after and warn_db[msg] > suppress_after: return
   WARN = env2int('WARN')
   if bold: col += color.BOLD
-  if level <= WARN: printc('WARNING: %s' % msg, col)
+  if level <= WARN: printc('WARNING: %s%s' % (msg, '; suppressing' if warn_db[msg]==suppress_after else ''), col)
 def warn_summary():
   if len(warn_db): print('Top warnings: (%d total unique)\n' % len(warn_db), hist2str(warn_db))
 
@@ -174,8 +174,8 @@ def check_executable(x):
 
 def dirname(): return os.path.dirname(__file__)
 def realpath(x): return os.path.join(dirname(), x)
-def env2int(x, default=0, base=10): return int(os.getenv(x), base) if os.getenv(x) else default
-def env2str(x): y = os.getenv(x); return '%s=%s' % (x, y) if y else ''
+def env2int(x, default=0, base=10): y=os.getenv(x); return int(y, base) if y else default
+def env2str(x, default='', prefix=1): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
 def env2list(x, default): y = os.getenv(x); return y.split() if y else default
 def envfile(x): x = os.getenv(x); return x if x and os.path.isfile(x) else None
 

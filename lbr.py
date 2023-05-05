@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.11
+__version__= 1.12
 
 import common as C, pmu
 from common import inc
@@ -301,7 +301,7 @@ lbr_events = []
 loops = {}
 stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
-stat['size'], size_sum = {'min': 0, 'max': 0, 'avg': 0}, 0
+stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
 
 CISC_TEST='_cisc-test/cmp'
 def inst2pred(i):
@@ -355,7 +355,10 @@ def edge_en_init(indirect_en):
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_latency=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
-  global lbr_events, size_sum, bwd_br_tgts, edge_en
+  def invalid(bad, msg):
+    stat[bad] += 1
+    if not loop_ipc: C.warn('%s sample encountered (%s)' % (bad, msg))
+  global lbr_events, bwd_br_tgts, edge_en
   valid, lines, bwd_br_tgts = 0, [], []
   glob['size_stats_en'] = skip_bad and not labels and not loop_ipc
   glob['loop_stats_en'] = lp_stats_en
@@ -373,13 +376,23 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     valid, lines, bwd_br_tgts = 1, [], []
     insts, takens, xip, timestamp = 0, [], None, None
     tc_state = 'new'
+    def update_size_stats():
+      size = len(lines) - 1
+      if not glob['size_stats_en'] or size<0: return
+      if stat['size']['sum'] == 0:
+        stat['size']['min'] = stat['size']['max'] = size
+      else:
+        if stat['size']['min'] > size: stat['size']['min'] = size
+        if stat['size']['max'] < size: stat['size']['max'] = size
+      stat['size']['sum'] += size
+      inc(stat['takens'], len(takens))
     stat['total'] += 1
     if stat['total'] % read_sample.tick == 0: C.printf('.')
     while True:
       line = read_line()
       # input ended
       if not line:
-        if len(lines): stat['bogus'] += 1
+        if len(lines): invalid('bogus', 'input truncated')
         if stat['total'] == stat['bogus']:
           print_all()
           C.error('No LBR data in profile')
@@ -417,7 +430,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
            min_lines and (len_m1 < min_lines) or\
            header_ip(lines[0]) != line_ip(lines[len_m1]):
           valid = 0
-          stat['bogus'] += 1
+          invalid('bogus', 'too short')
+          # apparently there is a perf-script bug (seen with perf tool 6.1)
+          update_size_stats()
           if debug and debug == timestamp:
             exit((line.strip(), len(lines)), lines, 'a bogus sample ended')
         elif len_m1 and type(tc_state) == int and is_in_loop(line_ip(lines[-1]), loop_ipc):
@@ -433,28 +448,30 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         # exchange2_r_0.j 57729 3736595.069891:    1000003 r20c4:pp:            41f47a brute_force_mp_brute_+0x43aa (/home/admin1/ayasin/perf-tools/exchange2_r_0.jmpi4)
         # exchange2_r_0.j 57729 3736595.069892:    1000003 r20c4:pp:            41fad4 brute_force_mp_brute_+0x4a04 (/home/admin1/ayasin/perf-tools/exchange2_r_0.jmpi4)
         lines = []
-        stat['bogus'] += 1 # for this one
+        invalid('bogus', 'header-only') # for this one
         stat['total'] += 1 # for new one
       # invalid sample is about to end
-      if skip_bad and 'not reaching sample' in line:
+      tag = 'not reaching sample'
+      if skip_bad and tag in line:
         valid = 0
-        stat['bad'] += 1
+        invalid('bad', tag)
         assert re.match(r"^$", read_line())
         break
       # a line with a label
       if not labels and is_label(line):
         continue
       # e.g. "        00007ffff7afc6ca        <bad>" then "mismatch of LBR data and executable"
-      if 'mismatch of LBR data' in line:
+      tag = 'mismatch of LBR data'
+      if tag in line:
         valid = skip_sample(lines[0])
-        stat['bad'] += 1
+        invalid('bad', tag)
         break
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
       if skip_bad and len(lines) and not line.strip().startswith('0'):
         if debug and debug == timestamp:
           exit(line, lines, "bad line")
         valid = skip_sample(lines[0])
-        stat['bogus'] += 1
+        invalid('bogus', 'instruction address missing')
         break
       ip = None if header or is_label(line) or 'not reaching sample' in line else line_ip(line, lines)
       new_line = is_line_start(ip, xip)
@@ -517,14 +534,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
       C.info('stopping after %s valid samples' % read_sample.stop)
       print_common(stat['total'])
       exit(None, lines, 'stop', msg="run:\t 'kill -9 $(pidof perf)'\t!")
-  if glob['size_stats_en']:
-    size = len(lines) - 1
-    if size_sum == 0: stat['size']['min'] = stat['size']['max'] = size
-    else:
-      if stat['size']['min'] > size: stat['size']['min'] = size
-      if stat['size']['max'] < size: stat['size']['max'] = size
-    size_sum += size
-    inc(stat['takens'], len(takens))
+  update_size_stats()
   return lines
 read_sample.stop = os.getenv('LBR_STOP')
 read_sample.tick = C.env2int('LBR_TICK', 1000)
@@ -663,7 +673,7 @@ def print_global_stats():
 def print_common(total):
   if glob['size_stats_en']:
     totalv = (total - stat['bad'] - stat['bogus'])
-    stat['size']['avg'] = round(size_sum / totalv, 1) if totalv else -1
+    stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
   if edge_en and total: print_global_stats()
   print('#Global-stats-end\n')

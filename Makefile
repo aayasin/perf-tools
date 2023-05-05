@@ -89,9 +89,9 @@ test-build:
 test-default:
 	$(DO1) $(PM)
 test-study: study.py stats.py run.sh do.py
-	rm -f ./{.,}{run,BC2s}-cfg*,$(AP)-s*}
+	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > $@
-	./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 :forgive:1 -v1 >> $@ 2>&1 || $(FAIL)
+	./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 >> $@ 2>&1 || $(FAIL)
 	@tail $@
 	test -f run-cfg1-t1.$(CPU).stat && test -f run-cfg2-t1.$(CPU).stat
 	@echo ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp >> $@

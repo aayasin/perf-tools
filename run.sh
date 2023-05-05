@@ -4,7 +4,7 @@
 # taskset set CPU affinity for consistent measurements (for CPUs 0,1 in this example)
 taskset 0x3 \
  ./pmu-tools/workloads/PYTHON1s 2>&1 | 	# a sample command with no arguments
- tee .out-$1-$$.log |			# redirect bulk output to some log file
+ tee .run-$1-$$.log |			# redirect bulk output to some log file
  grep seconds				# grep for execution-time & some work metric
  
 # sample output of the last command

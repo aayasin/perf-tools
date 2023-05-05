@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.10
+__version__= 1.11
 
 import common as C, pmu
 from common import inc
@@ -111,14 +111,16 @@ def line_inst(line):
     if 'lea' in line: return 'lea'
     elif 'lock' in line: return 'lock'
     elif 'prefetch' in line: return 'prefetch'
-    elif is_type('cisc-test', line) or 'gather' in line: return 'load'
+    elif is_type(CISC_TEST, line) or 'gather' in line: return 'load'
     elif re.match(r"\s+\S+\s+[^\(\),]+,", line) or 'scatter' in line: return 'store'
     else: return 'load'
   else:
     for x in pInsts: # skip non-vector p/v-prefixed insts
       if x in line: return x
     r = re.match(r"\s+\S+\s+(\S+)", line)
-    if r and re.match(r"^[pv]", r.group(1)):
+    if not r: pass
+    elif re.match(r"^(and|or|xor|not)", r.group(1)): return 'logic'
+    elif re.match(r"^[pv]", r.group(1)):
       for i in range(vec_size):
         if re.findall(INT_VEC(i), line): return vec_len(i)
       warn(0x100, 'vec-int: ' + ' '.join(line.split()[1:]))
@@ -301,19 +303,24 @@ stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'], size_sum = {'min': 0, 'max': 0, 'avg': 0}, 0
 
+CISC_TEST='_cisc-test/cmp'
 def inst2pred(i):
   i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
-         'cisc-test':   '(cmp[^x]|test).*\(',
+    'add-sub':        '(add|sub).*',
+    'inc-dec':        '(inc|dec).*',
+    CISC_TEST:        '(cmp[^x]|test).*\(',
+    '_risc-test/cmp':  '(cmp[^x]|test)[^\(]*',
   }
-  if i is None: return list(i2p.keys())
+  if i is None: return sorted(list(i2p.keys()))
   return i2p[i] if i in i2p else i
 
 # determine what is counted globally
 def is_imix(t):
   # TODO: cover FP vector too
-  if not t: return MEM_INSTS + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
-  return t in MEM_INSTS or t.startswith('vec')
-Insts = inst2pred(None) + ['call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
+  IMIX_LIST = MEM_INSTS + ['logic']
+  if not t: return IMIX_LIST + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
+  return t in IMIX_LIST or t.startswith('vec')
+Insts = inst2pred(None) + ['cmov', 'lea', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
 Insts_global = Insts + is_imix(None) + ['all']
 Insts_all = ['cond_backward', 'cond_forward', 'cond_non-taken', 'cond_fusible',
              'cond_non-fusible', 'cond_taken-not-first'] + Insts_global

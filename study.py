@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.51
+__version__= 0.52
 
 import common as C, pmu, stats
 import argparse, os, sys, time
@@ -99,7 +99,7 @@ def main():
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def app(flavor):
     if args.attempt == '-1': return args.app
-    return "'%s %s t%s'" % (args.app, flavor, args.attempt)
+    return "'%s %s %s'" % (args.app, flavor, 't%s'%args.attempt if args.attempt.isdigit() else args.attempt)
 
   if args.stages & 0x8: exe(do.replace('profile', 'log').replace('batch:1', 'batch:0'))
 

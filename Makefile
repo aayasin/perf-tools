@@ -11,7 +11,7 @@ MAKE = make --no-print-directory
 METRIC = -m IpCall
 MGR = sudo $(shell python -c 'import common; print(common.os_installer())')
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
-PM = -pm 0x317f
+PM = $(shell python -c 'import common; print("0x%x" % common.PROF_MASK_DEF)')
 PY2 = python2.7
 PY3 = python3.6
 RERUN = -pm 0x80
@@ -44,7 +44,7 @@ run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
 test-mem-bw: run-mem-bw
 	sleep 2s
-	set -o pipefail; $(DO) profile -s2 $(ST) $(RERUN) | $(SHOW)
+	set -o pipefail; $(DO) profile -s2 $(ST) -o $< $(RERUN) | $(SHOW)
 	kill -9 `pidof m0-n8192-u01.llv`
 run-mt:
 	./omp-bin.sh $(NUM_THREADS) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv &
@@ -87,7 +87,7 @@ test-build:
 	./do.py profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
 	    -pm 10006 -r 1 | $(SHOW) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
 test-default:
-	$(DO1) $(PM)
+	$(DO1) -pm $(PM)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -v1 > $@
@@ -99,7 +99,7 @@ test-study: study.py stats.py run.sh do.py
 	test -f BC2s-cfg1-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
 	test -f BC2s-cfg2-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
 test-stats: stats.py
-	@$(MAKE) test-default APP="$(APP) s" PM="-pm 1012" >> /dev/null 2>&1
+	@$(MAKE) test-default APP="$(APP) s" PM=1012 >> /dev/null 2>&1
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
 
 clean:
@@ -112,15 +112,15 @@ pre-push: help
 	$(MAKE) test-bc2 SHOW="grep --color -E '^|Mispredict'"	# tests topdown across-tree tagging; Mispredict
 	$(MAKE) test-build SHOW="grep --color -E '^|build|DSB|Ports'" # tests build command, perf -e, toplev --nodes; Ports_*
 	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'                 # tests load-latency profile-step + verbose:1
-	$(MAKE) test-default PM="-pm 313e"                      # tests default non-MUX sensitive profile-steps
+	$(MAKE) test-default PM=313e                            # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
-	$(MAKE) test-default DO_ARGS=":calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1" \
-	    APP="$(APP) u" CMD='suspend-smt profile tar' PM='-pm 1931a' &&\
+	$(MAKE) test-default DO_ARGS=":calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \
+	    CMD='suspend-smt profile tar' PM=1931a &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command
-	mkdir test-dir; cd test-dir; ln -s ../run.sh; make -f ../Makefile test-default APP=../pmu-tools/workloads/BC2s \
-	    DO=../do.py > ../test-dir.log 2>&1                 # tests default from another directory, toplev describe
+	mkdir test-dir; cd test-dir; ln -s ../run.sh; ln -s ../common.py; make test-default APP=../pmu-tools/workloads/BC2s \
+	    DO=../do.py -f ../Makefile > ../test-dir.log 2>&1   # tests default from another directory, toplev describe
 	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command
 	$(MAKE) test-study                                      # tests study script (errors only)
 	$(MAKE) test-stats                                      # tests stats module

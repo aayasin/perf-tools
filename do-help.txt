@@ -54,6 +54,8 @@ optional arguments:
   -s SYS_WIDE, --sys-wide SYS_WIDE
                         profile system-wide for x seconds. disabled by default
                         (default: 0)
+  -o OUTPUT, --output OUTPUT
+                        basename to use for output files (default: None)
   -g GEN_ARGS, --gen-args GEN_ARGS
                         args to gen-kernel.py (default: None)
   -ki APP_ITERATIONS, --app-iterations APP_ITERATIONS

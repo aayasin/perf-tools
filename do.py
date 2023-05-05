@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step
-__version__ = 2.20
+__version__ = 2.21
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -181,15 +181,13 @@ def module_version(mod_name):
     mod = study
   else: C.error('Unsupported module: ' + mod_name)
   return '%s=%.2f' % (mod_name, mod.__version__)
-def app_name(): return args.app != C.RUN_DEF
+def user_app(): return args.output or args.app != C.RUN_DEF
+def uniq_name(): return args.output or C.command_basename(args.app, args.app_iterations if args.gen_args else None)[:200]
 def toplev_describe(m, msg=None, mod='^'):
   if do['help'] < 1: return
   exe('%s --describe %s%s' % (get_perf_toplev()[1], m, mod), msg, redir_out=None)
 def read_toplev(l, m): return None if do['help'] < 0 else stats.read_toplev(l, m)
 def perf_record_true(): return '%s record true > /dev/null' % get_perf_toplev()[0]
-
-def uniq_name():
-  return C.command_basename(args.app, iterations=(args.app_iterations if args.gen_args else None))[:200]
 
 def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=[]):
   if args.install_perf:
@@ -744,7 +742,7 @@ def do_logs(cmd, ext=[], tag=''):
   if cmd == 'tar':
     r = '.'.join((tag, pmu.cpu('CPU'), 'results.tar.gz')) if len(tag) else C.error('do_logs(tar): expecting tag')
     if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
-  s = (uniq_name() if app_name() else '')
+  s = (uniq_name() if user_app() else '')
   if cmd == 'tar':
     files = C.glob('.'+s+'*.cmd')
     for f in C.glob(s+'*'):
@@ -776,6 +774,7 @@ def parse_args():
   ap.add_argument('--stdout', action='store_const', const=True, default=False, help='keep profiling unfiltered results in stdout')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
   ap.add_argument('-s', '--sys-wide', type=int, default=0, help='profile system-wide for x seconds. disabled by default')
+  ap.add_argument('-o', '--output', help='basename to use for output files')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
   x = ap.parse_args()
@@ -785,8 +784,9 @@ def main():
   global args
   args = parse_args()
   #args sanity checks
-  if (args.gen_args or 'build' in args.command) and not app_name():
+  if (args.gen_args or 'build' in args.command) and not user_app():
     C.error('must specify --app-name with any of: --gen-args, build')
+  if args.output and ' ' in args.output: C.error('--output must not have spaces')
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
@@ -827,7 +827,7 @@ def main():
     for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'
   if args.verbose > 2: C.info('timing perf tool post-processing')
   do_cmd = '%s # version %s' % (C.argv2str(), version())
-  if do['log-stdout']: C.log_stdio = '%s-out.txt' % ('run-default' if args.app == C.RUN_DEF else uniq_name())
+  if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   if args.app and '|' in args.app: C.error("Invalid use of pipe in app: '%s'. try putting it in a .sh file" % args.app)
   cmds_file = '.%s.cmd' % uniq_name()
@@ -873,7 +873,7 @@ def main():
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile(args.profile_mask)
     elif c.startswith('get'): get(param)
-    elif c == 'tar':          do_logs(c, tag=uniq_name() if app_name() else C.error('provide a value for -a'))
+    elif c == 'tar':          do_logs(c, tag=uniq_name() if user_app() else C.error('provide a value for -a or -o'))
     elif c == 'clean':        do_logs(c)
     elif c == 'all':
       setup_perf()

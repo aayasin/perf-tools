@@ -17,7 +17,7 @@
 400 | sampling-LDLAT                                     | 
 1000 | Info metrics                                       | 
 2000 | topdown FE Bottlenecks                             | 
-4000 | TMA sampling (MTL)                                 | 
+4000 | TMA sampling (MTL with 23 events)                  | 
 8000 | topdown Auto-Detect group                          | 
 10000 | over-time counting at 10ms interval                | [--tune :interval:10]
 20000 | FlameGraph                                         | setup-all --tune :flameg:1

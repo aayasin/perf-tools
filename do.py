@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step
-__version__ = 2.21
+__version__ = 2.22
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -145,7 +145,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], do['pmu']):
       C.warn('CPU model is unrecognized; consider Linux kernel update (https://intelpedia.intel.com/IntelNext#Intel_Next_OS)', suppress_after=1)
-    if not 'loop_stats' in x or args.verbose > 0:
+    if (not x.startswith('#') or args.verbose > 2) and (not 'loop_stats' in x or args.verbose > 3):
       do['cmds_file'].write(x + '\n')
       do['cmds_file'].flush()
   return C.exe_cmd(x, msg, redir_out, debug, run, log, fail, background)
@@ -457,7 +457,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_view(), data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
     exe(perf_report_syms + " -n --no-call-graph -i %s | tee %s-funcs.log | grep -A7 Overhead "
-      "| egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//'" % (data, base), '@report functions')
+      "| egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//' | nl -v-1" % (data, base), '@report functions')
     exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
       base+"-modules.log | grep -A22 Overhead", '@report modules')
     exe("%s --stdio -n -l -i %s | c++filt | tee %s "
@@ -541,10 +541,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
 
   if en(14) and (pmu.meteorlake() or do['help']<0):
-    flags, events = '-W -c 20011', pmu.get_events(do['model'])
-    data = '%s-tpebs-perf.data' % record_name('-%s%d' % (do['model'], events.count(':p')))
-    cmd = "%s record %s -e %s -o %s -- %s" % (perf if 'raw' in do['model'] else ocperf, flags, events, data, r)
-    profile_exe(cmd, "TMA sampling (%s)" % do['model'], 14)
+    flags, raw, events = '-W -c 20011', 'raw' in do['model'], pmu.get_events(do['model'])
+    nevents = events.count('/p' if raw else ':p')
+    data = '%s_tpebs-perf.data' % record_name('_%s-%d' % (do['model'], nevents))
+    cmd = "%s record %s -e %s -o %s -- %s" % (perf if raw else ocperf, flags, events, data, r)
+    profile_exe(cmd, "TMA sampling (%s with %d events)" % (do['model'], nevents), 14)
     if samples_count(data) < 1e4:
       C.warn("Too little samples collected (%s in %s); rerun with: --tune :model:'MTLraw:2'" % (samples_count(data), data))
     exe("%s script -i %s -F event,retire_lat > %s.retire_lat.txt" % (perf, data, data))
@@ -569,15 +570,16 @@ def profile(mask, toplev_args=['mvl6', None]):
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def static_stats():
+      if args.mode == 'profile': return
       bins = exe2list(perf + " script -i %s | cut -d\( -f2 | cut -d\) -f1 | egrep -v '^\[|anonymous' | %s | tail -5" %
                         (data, sort2u))[1:][::2]
-      if args.mode == 'profile': return
       assert len(bins)
       exe_v0('printf "# %s:\n#\n" > %s' % ('Static Statistics', info))
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
-      if isfile(bins[-1]):
-        exe_v0('printf "\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n" >> %s' % (bins[0], info))
-        exe("strings %s | %s >> %s" % (bins[0], C.grep('^(GNU |GCC:|clang [bv])'), info))
+      bin=bins[-1]
+      if isfile(bin):
+        exe_v0('printf "\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n" >> %s' % (bin, info))
+        exe("strings %s | %s >> %s" % (bin, C.grep('^(GNU |GCC:|clang [bv])'), info))
       prn_line(info)
     def log_count(x, l): return "printf 'Count of unique %s%s: ' >> %s && wc -l < %s >> %s" % (
       'non-cold ' if do['imix'] & 0x10 else '', x, info, l, info)

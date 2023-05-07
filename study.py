@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.52
+__version__= 0.53
 
 import common as C, pmu, stats
 import argparse, os, sys, time
@@ -72,6 +72,7 @@ def parse_args():
   ap.add_argument('--dump', action='store_const', const=True, default=False)
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
+  ap.add_argument('--dis-smt', action='store_const', const=True, default=True)
   args = ap.parse_args()
   def fassert(x, msg): assert x or args.forgive, msg
   if args.dump: dump_sample()
@@ -85,7 +86,8 @@ def parse_args():
 
 def main():
   args = parse_args()
-  do = "%s profile" % C.realpath('do.py')
+  do0 = C.realpath('do.py')
+  do = do0 + ' profile'
   for x in C.argument_parser(None):
     a = getattr(args, x.replace('-', '_'))
     if a: do += ' --%s %s' % (x, "'%s'" % a if ' ' in a else a)
@@ -104,8 +106,10 @@ def main():
   if args.stages & 0x8: exe(do.replace('profile', 'log').replace('batch:1', 'batch:0'))
 
   if args.stages & 0x1:
+    if args.dis_smt and pmu.cpu('smt-on'): exe('%s disable-smt -v1' % do0)
     if 'misp' in args.mode: args.profile_mask |= 0x200
     for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
+    if args.dis_smt and not pmu.cpu('smt-on'): exe('%s enable-smt -v1' % do0)
 
   if args.stages & 0x2:
     jobs = []

@@ -138,11 +138,12 @@ def cpu(what, default=None):
     sys.path.append(pmutools)
     import tl_cpu
     cs = tl_cpu.CPU((), False, tl_cpu.Env()) # cpu.state
-    #if what == 'get': return cs
+    if what == 'get-cs': return cs
     cpu.state = {
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
       'smt-on':       cs.ht,
+      'socketcount':  cs.sockets,
       'x86':          int(platform.machine().startswith('x86')),
     }
     cpu.state.update(versions())

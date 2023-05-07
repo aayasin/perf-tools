@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.73
+__version__= 0.74
 
 import common as C, pmu
 import csv, re, os.path
@@ -204,6 +204,8 @@ def csv2stat(filename):
   if not filename.endswith('.csv'): C.error("Expecting csv format: '%s'" % filename)
   d = read_perf_toplev(filename)
   def params():
+    d['knob.ncores'] = pmu.cpu('corecount')
+    d['knob.nsockets'] = pmu.cpu('socketcount')
     d['knob.nthreads'] = 2 if pmu.cpu('smt-on') else 1
     d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', '4.5-full-perf', prefix=False)
     d['knob.uarch'] = pmu.cpu('CPU')

@@ -26,7 +26,7 @@ INTRO_MESSAGE = '\
   'llvm-mca output.\n'
 
 
-LLVM = C.GLOBAL_PATHS['llvm-mca']
+LLVM = C.Globals['llvm-mca']
 
 # handle incompatibilities between xed and LLVM MCinst
 repl = (("movsxd", "movslq"),

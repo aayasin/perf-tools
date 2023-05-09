@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step
-__version__ = 2.23
+__version__ = 2.24
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -141,7 +141,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
         if not 'perf record ' in x: msg = None
     elif args.mode == 'profile':
         x, run, debug = '# ' + x, False, args.verbose > 2
-    elif '--xed' in x and not isfile(C.GLOBAL_PATHS['xed']): C.error('!\n'.join(('xed was not installed',
+    elif '--xed' in x and not isfile(C.Globals['xed']): C.error('!\n'.join(('xed was not installed',
       "required by '%s' in perf-script of '%s'" % (msg, x), 'try: ./do.py setup-all --tune :xed:1 ')))
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], do['pmu']):
@@ -210,7 +210,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']:
-    if do['xed'] < 2 and isfile(C.GLOBAL_PATHS['xed']): exe_v0(msg='xed is already installed')
+    if do['xed'] < 2 and isfile(C.Globals['xed']): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
     pip = 'pip3' if python_version().startswith('3') else 'pip'
     for x in do['python-pkgs']: exe('%s install %s' % (pip, x), '@installing %s' % x)
@@ -218,7 +218,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
   if do['loop-ideal-ipc']:
-    if isfile(C.GLOBAL_PATHS['llvm-mca']): exe_v0(msg='llvm is already installed')
+    if isfile(C.Globals['llvm-mca']): exe_v0(msg='llvm is already installed')
     else: exe('./build-llvm.sh', 'installing llvm')
 
 def tools_update(kernels=[], level=3):
@@ -279,15 +279,18 @@ def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpu
         set_sysfile(f, freq)
 
 def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
+  def label(x, tool='dmesg'): return C.grep(x, flags='-H --label %s' % tool)
+  def log_patch(x, patch='| sed s/=/:\ /'): return exe("%s %s >> %s" % (x, patch, out))
   def new_line(): return prn_line(out)
   def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s' % (args.pmu_tools, m))
+  def version(tool): C.fappend('%s: %s' % (tool, exe_1line('%s --version | head -1' % tool)), out)
   C.printc(do['pmu']) #OS
   if args.mode == 'process': return
-  exe('uname -a > ' + out, 'logging setup')
-  exe("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME' >> " + out)
+  exe('uname -a | sed s/Linux/Linux:/ > ' + out, 'logging setup')
+  log_patch("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME'")
   for f in ('/sys/kernel/mm/transparent_hugepage/enabled', ):
     prn_sysfile(f, out)
-  exe("sudo sysctl -a | tee setup-sysctl.log | egrep 'randomize_va_space|hugepages =' >> %s" % out)
+  log_patch("sudo sysctl -a | tee setup-sysctl.log | egrep 'randomize_va_space|hugepages ='")
   exe("env > setup-env.log")
   new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
@@ -295,26 +298,22 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
     for m in do['msrs']:
       v = read_msr(m)
       exe('echo "MSR %s: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
-  if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
-  exe("sudo dmesg -T | tee %s | %s >> %s && %s | tail -1 >> %s" % (d, C.grep('Performance E|micro'), out, C.grep('BIOS ', d), out))
+  if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x00000001', 'cpuid'), out))
+  exe("sudo dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d, label('Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
   new_line()          #PMU
-  exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
-  with open(out, "a") as f: f.write('TMA version:\t%s\n' % pmu.cpu('TMA version'))
-  exe('%s --version >> ' % args.perf + out)
-  setup_perf('log', out)
+  C.fappend('PMU: %s\nTMA version:\t%s' % (do['pmu'], pmu.cpu('TMA version')), out)
+  version(args.perf); setup_perf('log', out)
   new_line()          #Tools
-  exe('echo "python version: %s" >> %s' % (python_version(), out))
-  for x in (do['compiler'], 'as'): exe('%s --version | head -1 >> ' % x + out)
-  exe1('ldd --version | head -1 >> %s' % out, log=False)
-  if do['loop-ideal-ipc']: exe('echo "llvm-mca version: %s" >> %s' % (exe_1line(('%s --version | grep version') %
-                                                                      C.GLOBAL_PATHS['llvm-mca']), out))
+  C.fappend('python version: ' + python_version(), out)
+  for x in (do['compiler'].split()[0], 'as', 'ldd'): version(x)
+  if do['loop-ideal-ipc']: log_patch('%s --version | %s >> %s' % (C.Globals['llvm-mca'], label('version', 'llvm-mca'), out))
   new_line()          #Memory
   if do['numactl']: exe('numactl -H >> ' + out)
   new_line()          #Devices, etc
   exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)
   exe("ulimit -a > setup-ulimit.log")
-  if do['dmidecode']: exe('sudo dmidecode > setup-memory.log')
+  if do['dmidecode']: sudo('dmidecode > setup-memory.log')
 
 def get_perf_toplev():
   perf, env, ptools = args.perf, '', {}
@@ -804,6 +803,8 @@ def main():
         if args.verbose > 3: print(t)
         exec(t)
   if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
+  kernelv = exe_1line('uname -r', heavy=False)
+  if kernelv.startswith('6.4'): error('Unsupported kernel version: ' + kernelv)
   do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
   if do['perf-stat-add']:
     x = ',branches,branch-misses'

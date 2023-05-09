@@ -30,20 +30,20 @@ class color:
   UNDERLINE = '\033[4m'
   END = '\033[0m'
 
+Globals = {'llvm-mca': '/usr/local/bin/llvm-mca',
+  'xed':           '/usr/local/bin/xed'
+}
 
-GLOBAL_PATHS = {'llvm-mca':      '/usr/local/bin/llvm-mca',
-                'xed':           '/usr/local/bin/xed'
-                }
+# append to a file
+def fappend(text, filename):
+  with open(filename, 'a') as f: f.write(text + '\n')
 
 # colored printing, writes to outfile or log_stdio
 def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   msg = col + msg + color.END
   if not log_only: print(msg)
   if not outfile: outfile = log_stdio
-  if outfile:
-    file1 = open(outfile, "a")
-    file1.write(msg+'\n')
-    file1.close()
+  if outfile: fappend(msg, outfile)
 log_stdio=None
 
 def info(msg, bold=False, col=color.GREY):

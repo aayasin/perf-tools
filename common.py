@@ -68,9 +68,9 @@ def error(msg):
   if dump_stack_on_error: print(let_python_fail)
   sys.exit(' !')
 
-def exit(msg=''):
-  printc('%s ..'%msg, color.GREEN)
-  sys.exit('exiting')
+def exit(msg=None):
+  printc('%s ..' % str(msg), color.GREEN)
+  sys.exit('exiting' if msg else 0)
 
 #debug
 #

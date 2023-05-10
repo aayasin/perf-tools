@@ -163,7 +163,7 @@ def read_toplev(filename, metric=None):
       elif l.startswith('warning'):
         d['zero-counts'] = l.split(':')[2].strip()
       else:
-        for m in ('IpTB', 'UopPI'):
+        for m in ('IpTB', 'UopPI', 'SMT_on'):
           if m in items[1]: d[items[1]] = float(items[3])
     except ValueError:
       C.warn("cannot parse: '%s'" % l)
@@ -203,10 +203,10 @@ def read_perf_toplev(filename):
 def csv2stat(filename):
   if not filename.endswith('.csv'): C.error("Expecting csv format: '%s'" % filename)
   d = read_perf_toplev(filename)
-  def params():
+  def params(smt_on):
     d['knob.ncores'] = pmu.cpu('corecount')
     d['knob.nsockets'] = pmu.cpu('socketcount')
-    d['knob.nthreads'] = 2 if pmu.cpu('smt-on') else 1
+    d['knob.nthreads'] = 2 if smt_on else 1
     d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', '4.5-full-perf')
     d['knob.uarch'] = pmu.cpu('CPU')
     return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK')
@@ -246,7 +246,8 @@ def csv2stat(filename):
     if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
     return filename.replace('toplev-%s-perf.csv' % x.group(1), '')
   patch_metrics()
-  uarch, base = params(), basename()
+  base = basename()
+  uarch = params(read_toplev(filename.replace('-perf.csv', '.log'), 'SMT_on'))
   if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
   d.update(user_events(base + 'perf_stat-r3.log'))
   stat = base + uarch + '.stat'

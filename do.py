@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step
-__version__ = 2.24
+__version__ = 2.25
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -146,7 +146,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], do['pmu']):
       C.warn('CPU model is unrecognized; consider Linux kernel update (https://intelpedia.intel.com/IntelNext#Intel_Next_OS)', suppress_after=1)
-    if (not x.startswith('#') or args.verbose > 2) and (not 'loop_stats' in x or args.verbose > 3):
+    if do['cmds_file'] and (not 'loop_stats' in x or args.verbose > 3) and (not x.startswith('#') or args.verbose > 2 or do['batch']):
       do['cmds_file'].write(x + '\n')
       do['cmds_file'].flush()
   return C.exe_cmd(x, msg, redir_out, debug, run, log, fail, background)
@@ -159,7 +159,7 @@ def prn_line(f): exe_v0('echo >> %s' % f)
 
 def print_cmd(x, show=True):
   if show and not do['batch']: C.printc(x)
-  if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
+  if len(vars(args))>0 and do['cmds_file']: do['cmds_file'].write('# ' + x + '\n')
 
 def exe_1line(x, f=None, heavy=True):
   return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(x, f, args.verbose > 1)
@@ -182,6 +182,7 @@ def module_version(mod_name):
     mod = study
   else: C.error('Unsupported module: ' + mod_name)
   return '%s=%.2f' % (mod_name, mod.__version__)
+def profiling(): return args.mode != 'process'
 def user_app(): return args.output or args.app != C.RUN_DEF
 def uniq_name(): return args.output or C.command_basename(args.app, args.app_iterations if args.gen_args else None)[:200]
 def toplev_describe(m, msg=None, mod='^'):
@@ -448,7 +449,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     data = '%s.perf.data' % record_name(do['perf-record'])
     profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.period(), data, do['perf-record'], r),
                 'sampling %s' % do['perf-record'].replace(' -g ', 'w/ stacks'), 3, tune='sample')
-    if do['log-stdout'] and args.mode != 'process' and do['forgive'] < 2:
+    if do['log-stdout'] and profiling() and do['forgive'] < 2:
       record_out = C.file2lines(C.log_stdio)
       for l in reversed(record_out):
         if 'sampling ' in l: break
@@ -456,10 +457,9 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe(perf_report + " --header-only -i %s | grep duration" % data)
     print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_view(), data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
-    exe(perf_report_syms + " -n --no-call-graph -i %s | tee %s-funcs.log | grep -A7 Overhead "
-      "| egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//' | nl -v-1" % (data, base), '@report functions')
-    exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
-      base+"-modules.log | grep -A22 Overhead", '@report modules')
+    def show(n=7): return "| grep -wA%d Overhead | cut -c-150 | egrep -v '^[#\s]*$| 0\.0.%%' | sed 's/[ \\t]*$//' " % n
+    exe(perf_report_syms + " -n --no-call-graph -i %s | tee %s-funcs.log %s| nl -v-1" % (data, base, show()), '@report functions')
+    exe(perf_report + " --stdio --hierarchy --header -i %s | tee %s-modules.log %s" % (data, base, show(22)), '@report modules')
     exe("%s --stdio -n -l -i %s | c++filt | tee %s "
         "| tee >(egrep '^\s+[0-9]+ :' | sort -n | ./ptage > %s-code-ips.log) "
         "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
@@ -497,6 +497,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd, logs['tma'] = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']),
       tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % do['tma-dedup-nodes']))
     profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk), 'topdown full tree + All Bottlenecks', 4)
+    if profiling(): C.fappend('Info.PerfTools SMT_on - %d' % (1 if pmu.cpu('smt-on') else 0), logs['tma'])
     zeros = read_toplev(logs['tma'], 'zero-counts')
     if zeros and len([m for m in zeros.split() if m not in do['tma-zero-ok'].split()]):
       # https://github.com/andikleen/pmu-tools/issues/455
@@ -669,7 +670,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
-      if pmu.cpu('smt-on') and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')
+      if pmu.cpu('smt-on') and not do['batch'] and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')
       else:
         is_dsb = 1
         perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
@@ -821,24 +822,25 @@ def main():
     if args.profile_mask & 0x300: args.profile_mask |= 0x2
   record_steps = ('record', 'lbr', 'pebs', 'ldlat', 'pt')
   if args.sys_wide:
-    if args.mode != 'process': C.info('system-wide profiling')
+    if profiling(): C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
     args.profile_mask &= ~0x4 # disable system-wide profile-step
   if do['container']:
-    if args.mode != 'process': C.info('container profiling')
+    if profiling(): C.info('container profiling')
     for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'
   if args.verbose > 2: C.info('timing perf tool post-processing')
   do_cmd = '%s # version %s' % (C.argv2str(), version())
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   if args.app and '|' in args.app: C.error("Invalid use of pipe in app: '%s'. try putting it in a .sh file" % args.app)
-  cmds_file = '.%s.cmd' % uniq_name()
-  if isfile(cmds_file):
-    C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)
-  do['cmds_file'] = open(cmds_file, 'w')
-  do['cmds_file'].write('# %s\n' % do_cmd)
+  if not do['batch'] or args.mode == 'profile':
+    cmds_file = '.%s.cmd' % uniq_name()
+    if isfile(cmds_file):
+      C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)
+    do['cmds_file'] = open(cmds_file, 'w')
+    do['cmds_file'].write('# %s\n' % do_cmd)
   if args.verbose > 5: C.printc(str(args))
   if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1
@@ -911,4 +913,4 @@ def get(param):
 
 if __name__ == "__main__":
   main()
-  do['cmds_file'].close()
+  if do['cmds_file']: do['cmds_file'].close()

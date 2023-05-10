@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.12
+__version__= 1.13
 
 import common as C, pmu
 from common import inc
@@ -405,8 +405,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         if not ev in lbr_events:
           lbr_events += [ev]
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
-          if len(lbr_events) == 1: x += ' primary= %s%s%s' % (event, C.flag2str(' ', C.env2str('LBR_STOP')),
-            C.flag2str(' ', C.env2str('LBR_IMIX')))
+          def f2s(x): return C.flag2str(' ', C.env2str(x, prefix=True))
+          if len(lbr_events) == 1: x += ' primary= %s%s%s' % (event, f2s('LBR_STOP'), f2s('LBR_IMIX'))
           if ip_filter: x += ' ip_filter= %s' % str(ip_filter)
           if loop_ipc: x += ' loop= %s%s' % (hex(loop_ipc), C.flag2str(' history= ', C.env2int('LBR_PATH_HISTORY')))
           if verbose: x += ' verbose= %s' % hex(verbose)
@@ -635,10 +635,10 @@ def print_hist(hist_t, Threshold=0.01):
 def print_hist_sum(name, h):
   s = sum(hsts[h].values())
   print_stat(name, s, comment='histogram' if s else '')
-def print_stat(name, count, prefix='count', comment='', imix=False):
+def print_stat(name, count, prefix='count', comment='', ratio_of=None):
   def c(x): return x.replace(':', '-')
   def nm(x):
-    if not imix: return x
+    if not ratio_of or ratio_of[0] != 'ALL': return x
     n = (x if 'cond' in name else x.upper()) + ' '
     if x.startswith('vec'): n += 'comp '
     if x in is_imix(None):  n += 'insts-class'
@@ -646,9 +646,10 @@ def print_stat(name, count, prefix='count', comment='', imix=False):
     else: n += 'instructions'
     return n
   if len(comment): comment = '\t:(see %s below)' % c(comment)
-  elif imix: comment = '\t: %7s of ALL' % ratio(count, glob['all'])
+  elif ratio_of: comment = '\t: %7s of %s' % (ratio(count, ratio_of[1]), ratio_of[0])
   print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 45 - len(prefix)), str(count), comment))
 def print_estimate(name, s): print_stat(name, s, 'estimate')
+def print_imix_stat(n, c): print_stat(n, c, ratio_of=('ALL', glob['all']))
 
 def print_global_stats():
   def nc(x): return 'non-cold ' + x
@@ -657,11 +658,13 @@ def print_global_stats():
   if len(footprint): print_estimate(nc('code footprint [KB]'), '%.2f' % (len(footprint) / 16.0))
   if len(pages): print_stat(nc('code 4K-pages'), len(pages))
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
+  for n in (4, 5): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
+                              prefix='proxy count', ratio_of=('loops', len(loops)))
   if glob['size_stats_en']:
-    for x in ('backward', ' forward'): print_stat(x + ' taken conditional', glob['cond_' + x.strip()], imix=True)
+    for x in ('backward', ' forward'): print_imix_stat(x + ' taken conditional', glob['cond_' + x.strip()])
     for x in ('non-taken', 'fusible', 'non-fusible', 'taken-not-first'):
-      print_stat(x + ' conditional', glob['cond_' + x], imix=True)
-    for x in Insts_global: print_stat(x, glob[x], imix=True)
+      print_imix_stat(x + ' conditional', glob['cond_' + x])
+    for x in Insts_global: print_imix_stat(x, glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')

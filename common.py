@@ -175,7 +175,7 @@ def check_executable(x):
 def dirname(): return os.path.dirname(__file__)
 def realpath(x): return os.path.join(dirname(), x)
 def env2int(x, default=0, base=10): y=os.getenv(x); return int(y, base) if y else default
-def env2str(x, default='', prefix=1): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
+def env2str(x, default=0, prefix=0): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
 def env2list(x, default): y = os.getenv(x); return y.split() if y else default
 def envfile(x): x = os.getenv(x); return x if x and os.path.isfile(x) else None
 

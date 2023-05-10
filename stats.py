@@ -207,9 +207,9 @@ def csv2stat(filename):
     d['knob.ncores'] = pmu.cpu('corecount')
     d['knob.nsockets'] = pmu.cpu('socketcount')
     d['knob.nthreads'] = 2 if pmu.cpu('smt-on') else 1
-    d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', '4.5-full-perf', prefix=False)
+    d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', '4.5-full-perf')
     d['knob.uarch'] = pmu.cpu('CPU')
-    return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK', prefix=False)
+    return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK')
   def patch_metrics(SLOTS='TOPDOWN.SLOTS'):
     if not (SLOTS in d and 'PERF_METRICS.FRONTEND_BOUND' in d): return
     slots = d[SLOTS]

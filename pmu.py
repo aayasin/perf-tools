@@ -102,8 +102,8 @@ def perf_format(es):
       f, n = None, e[1]
       if len(e[0])==5:   f='%s/event=0x%s,umask=0x%s,name=%s/' % (pmu(), e[0][3:5], e[0][1:3], n)
       elif len(e[0])==7: f='%s/event=0x%s,umask=0x%s,cmask=0x%s,name=%s/' % (pmu(), e[0][5:7], e[0][3:5], e[0][1:3], n)
-      elif len(e[0])==9: f='%s/event=0x%s,umask=0x%s,cmask=0x%s,edge=%d,name=%s/' % (pmu(),
-        e[0][7:9], e[0][5:7], e[0][3:5], (int(e[0][1:3], 16) >> 2) & 0x1, n)
+      elif len(e[0])==9: f='%s/event=0x%s,umask=0x%s,cmask=0x%s,edge=%d,inv=%d,name=%s/' % (pmu(),
+        e[0][7:9], e[0][5:7], e[0][1:3], (int(e[0][3:5], 16) >> 2) & 0x1, int(e[0][3:5], 16) >> 7, n)
       else: C.error("profile:perf-stat: invalid syntax in '%s'" % ':'.join(e))
       if len(e) == 3: f += e[2]
       elif len(e) == 2: pass

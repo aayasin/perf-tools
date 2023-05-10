@@ -12,6 +12,7 @@ set -xe
 if [ $GEN -eq 1 ]; then
 $PY ./gen-kernel.py jumpy-seq -n 13 -i JMP -a 15  > jumpy13b15.c
 $PY ./gen-kernel.py jumpy-seq -n 13 -i JMP -a 13  > jumpy13b13.c
+$PY ./gen-kernel.py jumpy-seq -n 9 -i JMP -a 17  > itlb-miss-stlb-hit.c
 $CC -S jumpy5p14.c
 #$CC -o jumpy5p14 jumpy5p14.c
 #perf stat -a --topdown -e instructions,BACLEARS.ANY --no-metric-only -C0 -- taskset 0x1 ./jumpy5p14 999999999
@@ -41,7 +42,7 @@ $PY ./gen-kernel.py -i 'testq $0x0,0x0(%rsp)' 'jg Lbl_end' -n 1 > ld-test-jcc-2i
 $PY ./gen-kernel.py -i 'testq %r12,0x0(%rsp)' 'jg Lbl_end' -n 1 -p 'movq $0x0,%r12' > ld-test-jcc-2i-reg.c
 fi
 
-ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-test-jcc-{3i,2i-{imm,reg}},memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx"
+ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-test-jcc-{3i,2i-{imm,reg}},memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c
@@ -49,4 +50,6 @@ done
 
 x=callchain
 $CC -O0 -fno-inline $x.c -o $x
+$CC -O0 -pthread false-sharing.c -o false-sharing
+
 

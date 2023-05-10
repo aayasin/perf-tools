@@ -658,8 +658,8 @@ def print_global_stats():
   if len(footprint): print_estimate(nc('code footprint [KB]'), '%.2f' % (len(footprint) / 16.0))
   if len(pages): print_stat(nc('code 4K-pages'), len(pages))
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
-  for n in (4, 5): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
-                              prefix='proxy count', ratio_of=('loops', len(loops)))
+  for n in (4, 5, 6): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
+                                 prefix='proxy count', ratio_of=('loops', len(loops)))
   if glob['size_stats_en']:
     for x in ('backward', ' forward'): print_imix_stat(x + ' taken conditional', glob['cond_' + x.strip()])
     for x in ('non-taken', 'fusible', 'non-fusible', 'taken-not-first'):

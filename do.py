@@ -18,8 +18,8 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-# pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step
-__version__ = 2.25
+# pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
+__version__ = 2.30
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -52,7 +52,7 @@ do = {'run':        C.RUN_DEF,
   'gen-kernel':     1,
   'help':           1,
   'interval':       10,
-  'imix':           0x1f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens
+  'imix':           0x3f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens, 5: misp report
   'loop-ideal-ipc': 0,
   'loops':          int(pmu.cpu('cpucount', 20) / 2),
   'log-stdout':     1,
@@ -590,6 +590,19 @@ def profile(mask, toplev_args=['mvl6', None]):
       hist_cmd = ''
       for h in hists: hist_cmd += " && %s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % h, info, '-A33'), h)
       exe("%s && tail %s | grep -v unique %s" % (C.grep('code footprint', info), info, hist_cmd), "@top loops & more in " + info)
+    def calc_misp_ratio():
+      misp_file, header, takens, mispreds = data + '.mispreds.log', 'Branch Misprediction Report', {}, {}
+      exe_v0(msg='@'+header.lower())
+      assert isfile(misp_file) and isfile(data+'.takens.log')
+      for l in C.file2lines(data+'.takens.log')[:-1]:
+        b = C.str2list(l)
+        takens[ b[2] ] = int(b[1])
+      for l in C.file2lines(misp_file)[:-1]:
+        b = C.str2list(l)
+        m = int(b[1])
+        mispreds[ (' '.join(b[2:]), C.ratio(m, takens[b[2]])) ] = m * takens[b[2]]
+      C.fappend('\n%s:\n' % header + '\t'.join(('significance', '%7s' % 'ratio', 'instruction addr & ASM')), misp_file)
+      for b in C.hist2slist(mispreds): C.fappend('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0])), misp_file)
     if not isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()
       exe_v0('printf "# processing %s%s\n"%s %s' % (data, C.flag2str(" filtered on ", comm), '>>' if do['size'] else '>', info))
@@ -605,12 +618,13 @@ def profile(mask, toplev_args=['mvl6', None]):
                       (clean, sort2uf, data), '@processing mispredicts', data)
         else:
           perf_script("-F +brstackinsn --xed | GREP_INST"
-            "| tee >(grep MISPRED | %s | tee >(egrep -v 'call|jmp|ret' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log)"
+            "| tee >(grep MISPRED | %s | tee >(egrep -v 'call|jmp|ret' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log) "
             "| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
             (clean, sort2uf, data, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data),
             '@processing taken branches', data)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'misp_tk_conds'))
+          if do['imix'] & 0x20 and args.mode != 'profile': calc_misp_ratio()
         exe(log_br_count('mispredicted taken', 'mispreds'))
     if do['xed']:
       ips = '%s.ips.log'%data
@@ -644,7 +658,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         perf_script(cmd, msg, data)
         if do['imix'] & 0x4: exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
             "@instruction-mix no operands")
-        if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
+        if args.verbose: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)
         report_info(info)
       else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and isfile(loops):

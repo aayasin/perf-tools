@@ -36,7 +36,7 @@ user_imix = C.env2list('LBR_IMIX', ['vpmovmskb', 'imul'])
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
-def ratio(a, b): return '%.2f%%' % (100.0 * a / b) if b else '-'
+def ratio(a, b): return C.ratio(a, b) if b else '-'
 def read_line(): return sys.stdin.readline()
 def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 4))
 

@@ -327,4 +327,6 @@ def command_basename(comm, iterations=None):
 
 # stats
 def inc(d, b, i=1): d[b] = d.get(b, 0) + i
-def ratio(x, hist, denom='total'): return '%s-ratio: %.1f%%'%(x, 100.0*hist[x]/max(hist[denom], 1))
+def ratio(a, b, denom='total'):
+  r = '%.1f%%' % (100.0 * b[a] / max(b[denom], 1) if type(b) is dict else 100.0 * a / b)
+  return '%s-ratio: %s' % (a, r) if type(b) is dict else r

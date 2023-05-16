@@ -42,6 +42,8 @@ def get_stat_int(s, c, val=-1, stat_file=None):
 
 debug = 0
 sDB = {}
+stats = {'verbose': 0}
+
 def rollup(c, perf_stat_file=None):
   if c in sDB: return
   if not perf_stat_file: perf_stat_file = c + '.perf_stat-r3.log'
@@ -114,7 +116,7 @@ def parse_perf(l):
     if name.count('_') > 1 and name.islower() and not name.startswith('perf_metrics'): # hack ocperf lower casing!
       ignore = 2 if name.startswith('br_') else 1
       Name = name.replace('_', '^', ignore).replace('_', '.', 1).replace('^', '_').upper()
-      print(name, '->', Name)
+      if stats['verbose']: print(name, '->', Name)
       name = Name
     val = items[0].replace(',', '')
     val = float(val) if name_idx == 2 else int(val)
@@ -258,6 +260,7 @@ def csv2stat(filename):
   return stat
 
 def main():
+  stats['verbose'] = 1
   s = csv2stat(C.arg(1))
   C.exe_cmd("echo scp $USER@`hostname -A | cut -d' ' -f1`:$PWD/%s ." % s)
 

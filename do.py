@@ -840,6 +840,7 @@ def main():
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
+    if not do['comm']: do['perf-filter'] = 1
     args.profile_mask &= ~0x4 # disable system-wide profile-step
   if do['container']:
     if profiling(): C.info('container profiling')

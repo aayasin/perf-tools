@@ -546,6 +546,8 @@ def is_callret(l):    return is_type(x86.CALL_RET, l)
 
 # TODO: re-design this function to return: event-name, timestamp, etc
 def is_header(line):  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
+# kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
+                              re.match(r"(\s?[\S]*)\s+([\d\[\]\.\s]+):\s+\d+\s+(\S*:)\s", line) or
 #AUX data lost 1 times out of 33!
                               re.match(r"(\w)([\w\s\d]+)(.)", line) or
 #         python3 105303 [000] 1021657.227299:          cbr:  cbr: 11 freq: 1100 MHz ( 55%)               55e235 PyObject_GetAttr+0x415 (/usr/bin/python3.6)

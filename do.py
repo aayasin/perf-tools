@@ -18,8 +18,8 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-# pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step
-__version__ = 2.25
+# pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
+__version__ = 2.31
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -344,8 +344,9 @@ def profile(mask, toplev_args=['mvl6', None]):
       elif len(tune): tune = '[--tune :%s:1]' % tune if 'stacks' in msg else 'setup-all --tune :%s:1' % tune
       profile_help[step] = '%x | %-50s | %s' % (2 ** step, msg, tune)
       return
-    if mode == 'log-setup': log_setup()
-    elif mode == 'perf-stat': exe1(cmd, msg, fail=False)
+    if mode == 'log-setup': return log_setup()
+    if args.sys_wide and not (' -a ' in cmd): C.error("Incorrect system wide in profile-step='%s' cmd='%s'" % (msg, cmd))
+    if mode == 'perf-stat': exe1(cmd, msg, fail=False)
     else: exe(cmd, msg)
   def profile_mask_help(filename = 'profile-mask-help.md'):
     hdr = ('%7s' % 'mask', '%-50s' % 'profile-step', 'additional [optional] arguments')
@@ -537,7 +538,9 @@ def profile(mask, toplev_args=['mvl6', None]):
       group = read_toplev(logs['tma'], 'Critical-Group')
       if group: C.info('detected group: %s' % group)
     if not group: group, x = 'Mem', C.warn("Could not auto-detect group; Minimize system-noise, e.g. try './do.py disable-smt'")
-    cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs=C.TOPLEV_DEF.replace('Summary', 'Summary,+' + group))
+    MG='--metric-group +Summary'
+    assert MG in args.toplev_args, "'%s' is missing in toplev-args! " % MG
+    cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs=args.toplev_args.replace(MG, ',+'.join((MG, group))))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
 

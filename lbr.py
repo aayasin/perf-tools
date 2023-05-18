@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.12
+__version__= 2.0 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -42,11 +42,11 @@ def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 4))
 
 def warn(mask, x): return C.warn(x) if edge_en and (verbose & mask) else None
 
+if debug: C.dump_stack_on_error = 1
 def exit(x, sample, label, n=0, msg=str(debug)):
   if x: C.annotate(x, label)
   print_sample(sample, n)
-  C.printf(msg+'\n')
-  sys.exit()
+  C.error(msg) if x else sys.exit(0)
 
 def str2int(ip, plist):
   try:
@@ -68,7 +68,7 @@ def header_ip_str(line):
   if header_ip_str.first:
     if '[' in x.group(1): header_ip_str.position += 1
     header_ip_str.first = False
-  return C.str2list(line)[header_ip_str.position]
+  return x.group(4) #C.str2list(line)[header_ip_str.position]
 header_ip_str.first = True
 header_ip_str.position = 5
 def header_ip(line): return str2int(header_ip_str(line), (line, None))
@@ -87,7 +87,7 @@ def line_ip(line, sample=None):
   try:
     return str2int(line_ip_hex(line), (line, sample))
   except:
-    exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line)
+    exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line.strip())
 
 def line_timing(line):
   x = re.match(r"[^#]+# (\S+) (\d+) cycles \[\d+\] ([0-9\.]+) IPC", line)
@@ -363,7 +363,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   glob['size_stats_en'] = skip_bad and not labels and not loop_ipc
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
-  edge_en = event.startswith(LBR_Event) and not ip_filter and not loop_ipc # config good for edge-profile
+  edge_en = C.any_in((LBR_Event, 'instructions:ppp'), event) and not ip_filter and not loop_ipc # config good for edge-profile
   if stat['total'] == 0:
     if edge_en: edge_en_init(indirect_en)
     if ret_latency: header_ip_str.position = 8
@@ -405,8 +405,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         if not ev in lbr_events:
           lbr_events += [ev]
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
-          if len(lbr_events) == 1: x += ' primary= %s%s%s' % (event, C.flag2str(' ', C.env2str('LBR_STOP')),
-            C.flag2str(' ', C.env2str('LBR_IMIX')))
+          def f2s(x): return C.flag2str(' ', C.env2str(x, prefix=True))
+          if len(lbr_events) == 1: x += ' primary= %s edge=%d%s%s' % (event, edge_en, f2s('LBR_STOP'), f2s('LBR_IMIX'))
           if ip_filter: x += ' ip_filter= %s' % str(ip_filter)
           if loop_ipc: x += ' loop= %s%s' % (hex(loop_ipc), C.flag2str(' history= ', C.env2int('LBR_PATH_HISTORY')))
           if verbose: x += ' verbose= %s' % hex(verbose)
@@ -544,12 +544,23 @@ read_sample.dump = C.env2int('LBR_DUMP', 0)
 def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
 def is_callret(l):    return is_type(x86.CALL_RET, l)
 
-# TODO: re-design this function to return: event-name, timestamp, etc
-def is_header(line):  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
+# TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictiorary if header or None otherwise
+def is_header(line):
+  def patch(x):
+    if debug: C.printf("\nhacking '%s' in: %s" % (x, line))
+    return line.replace(x, '-', 1)
+  if '[' in line[:50]:
+    p = line.split('[')[0]
+    assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()
+    if '::' in p: pass
+    elif ': ' in p: line = patch(': ')
+    elif ':' in p: line = patch(':')
+  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
+#    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
 # kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
-                              re.match(r"(\s?[\S]*)\s+([\d\[\]\.\s]+):\s+\d+\s+(\S*:)\s", line) or
+#                              re.match(r"(\s?[\S]*)\s+([\d\[\]\.\s]+):\s+\d+\s+(\S*:)\s", line) or
 #AUX data lost 1 times out of 33!
-                              re.match(r"(\w)([\w\s\d]+)(.)", line) or
+                              re.match(r"(\w)([\w\s]+)(.)", line) or
 #         python3 105303 [000] 1021657.227299:          cbr:  cbr: 11 freq: 1100 MHz ( 55%)               55e235 PyObject_GetAttr+0x415 (/usr/bin/python3.6)
                               re.match(r"([^:]*):(\s+)(\w+:)\s", line) or
 # instruction trace error type 1 time 1021983.206228655 cpu 1 pid 105468 tid 105468 ip 0 code 8: Lost trace data
@@ -655,7 +666,11 @@ def print_estimate(name, s): print_stat(name, s, 'estimate')
 def print_global_stats():
   def nc(x): return 'non-cold ' + x
   cycles, scl = os.getenv('PTOOLS_CYCLES'), 1e3
-  if cycles: print_estimate('LBR cycles coverage (x%d)' % scl, ratio(scl * stat['total_cycles'], int(cycles)))
+  if cycles:
+    lbr_ratio = ratio(scl * stat['total_cycles'], int(cycles))
+    print_estimate('LBR cycles coverage (x%d)' % scl, lbr_ratio)
+    stat['lbr-cov'] = float(lbr_ratio.split('%')[0])
+    if stat['lbr-cov'] < 3: C.warn('LBR poor coverage of overall time')
   if len(footprint): print_estimate(nc('code footprint [KB]'), '%.2f' % (len(footprint) / 16.0))
   if len(pages): print_stat(nc('code 4K-pages'), len(pages))
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
@@ -725,6 +740,7 @@ def print_all(nloops=10, loop_ipc=0):
     for l in ploops:
       print_loop(l[0], nloops)
       nloops -=  1
+    if 'lbr-cov' in stat and stat['lbr-cov'] < 1: C.error('LBR poor coverage (%.2f%%) of overall time' % stat['lbr-cov'])
 
 def print_br(br):
   print('[from: %s, to: %s, taken: %d]' % (hex(br['from']), hex(br['to']), br['taken']))

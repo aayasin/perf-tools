@@ -97,7 +97,7 @@ def period(): return 2000003
 def perf_format(es):
   rs = []
   for e in es.split(','):
-    if e.startswith('r') and ':' in e:
+    if e.startswith('r') and ':' in e and len(e) != len('rUUEE:u'):
       e = e.split(':')
       f, n = None, e[1]
       if len(e[0])==5:   f='%s/event=0x%s,umask=0x%s,name=%s/' % (pmu(), e[0][3:5], e[0][1:3], n)

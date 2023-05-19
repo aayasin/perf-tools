@@ -315,8 +315,13 @@ def commands_list():
 def command_basename(comm, iterations=None):
   if comm is None or comm.isdigit(): return 'run%d' % (int(comm) if comm else os.getpid())
   name = comm.strip().split(' ')
-  for x in ('taskset', 'bash', 'omp-bin', 'n-copies', 'n-loop'):
-    if x in name[0]: name = name[(4 if name[2].startswith('-') else 2):]
+  if not len(name) or not len(name[0]): error("empty command/name")
+  elif len(name) > 2:
+    for x in ('taskset', 'bash', 'omp-bin', 'n-copies', 'n-loop'):
+      if x == name[0] or name[0].endswith('/'+x):
+        assert (not name[2].startswith('-') or len(name) > 4), "invalid syntax for '%s'" % name[0]
+        name = name[(4 if name[2].startswith('-') else 2):]
+        break
   if '/' in name[0]:
     check_executable(name[0].replace("'", ''))
     name[0] = name[0].split('/')[-1].replace('.sh', '')

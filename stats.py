@@ -113,7 +113,7 @@ def parse_perf(l):
   elif '#' in l:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
-    if name.count('_') > 1 and name.islower() and not name.startswith('perf_metrics'): # hack ocperf lower casing!
+    if name.count('_') > 1 and name.islower() and not re.match('^(perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
       ignore = 2 if name.startswith('br_') else 1
       Name = name.replace('_', '^', ignore).replace('_', '.', 1).replace('^', '_').upper()
       if stats['verbose']: print(name, '->', Name)

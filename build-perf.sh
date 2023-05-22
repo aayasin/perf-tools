@@ -1,7 +1,8 @@
 #!/bin/sh
 CLONE=${CLONE:-2}
 PERFV=${PERFV:-5.15.17}
-LINUXV=${LINUXV:-5.17.15} # upgrade to 6.3 for JIT support, not 6.4!
+LINUXV=${LINUXV:-5.17.15} # upgrade to < 6.3 for JIT support, not 6.4!.
+                          # besides: https://github.com/andikleen/pmu-tools/issues/457
 OBJDUMP=${OBJDUMP:-0}
 
 perfdir=linux/tools/perf

@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.31
+__version__ = 2.50
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -550,8 +550,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     data = '%s_tpebs-perf.data' % record_name('_%s-%d' % (do['model'], nevents))
     cmd = "%s record %s -e %s -o %s -- %s" % (perf if raw else ocperf, flags, events, data, r)
     profile_exe(cmd, "TMA sampling (%s with %d events)" % (do['model'], nevents), 14)
-    if samples_count(data) < 1e4:
-      C.warn("Too little samples collected (%s in %s); rerun with: --tune :model:'MTLraw:2'" % (samples_count(data), data))
+    n = samples_count(data)
+    if n < 1e4: C.warn("Too little samples collected (%s in %s); rerun with: --tune :model:'MTLraw:2'" % (n, data))
     exe("%s script -i %s -F event,retire_lat > %s.retire_lat.txt" % (perf, data, data))
     exe("sort %s.retire_lat.txt | uniq -c | sort -n | ./ptage | tail" % (data, ))
 
@@ -566,11 +566,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     if n == 0: C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
     elif n < 1e4: C.warn("Too little samples collected (%s in %s); rerun with '--tune :calibrate:-1'" % (n, perf_data))
     elif n > 1e5: C.warn("Too many samples collected (%s in %s); rerun with '--tune :calibrate:1'" % (n, perf_data))
-    return perf_data
+    return perf_data, n
   
   if en(8) and do['sample'] > 1:
     assert pmu.lbr_event()[:-1] in do['perf-lbr'] or do['forgive'] > 2, 'Incorrect event for LBR in: ' + do['perf-lbr']
-    data = perf_record('lbr', 8)
+    data, nsamples = perf_record('lbr', 8)
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def static_stats():
@@ -613,8 +613,8 @@ def profile(mask, toplev_args=['mvl6', None]):
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(logs['stat']): exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, " egrep -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data,
-        log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')), '@processing samples', data, fail=0)
+      perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data, log_br_count('sampled taken',
+        'samples').replace('Count', '\\nCount')), '@processing %d samples' % nsamples, data, fail=0)
       if do['xed']:
         if (do['imix'] & 0x8) == 0:
           perf_script("-F +brstackinsn --xed | GREP_INST| grep MISPRED | %s | %s > %s.mispreds.log" %
@@ -681,7 +681,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       else: warn_file(loops)
   
   if en(9) and do['sample'] > 2:
-    data = perf_record('pebs', 9, pmu.event_name(do['perf-pebs']))
+    data = perf_record('pebs', 9, pmu.event_name(do['perf-pebs']))[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
     if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs, Insts", data)
     else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
@@ -713,7 +713,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       perf_script("-F +brstackinsn --xed %s > /dev/null" % cmd, "@ stats on PEBS", data)
 
   if en(10):
-    data = perf_record('ldlat', 10, record='record' if pmu.ldlat_aux() else 'mem record')
+    data = perf_record('ldlat', 10, record='record' if pmu.ldlat_aux() else 'mem record')[0]
     exe("%s mem report --stdio -i %s -F+symbol_iaddr -v " # workaround: missing -F+ip in perf-mem-report
         "-w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
         "| tee %s.ldlat.log | grep -A12 -B4 Overhead | tail -17" % (perf, data, data), "@ top-10 samples", redir_out=None)
@@ -732,7 +732,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       for e in args.events.split(','): exe('egrep -i %s %s > %s' % (e, csv_file, csv_file.replace('.csv', '-%s.csv' % e)))
 
   if en(19):
-    data = perf_record('pt', 19)
+    data = perf_record('pt', 19)[0]
     tag, info = 'pt', '%s.info.log' % data
     exe(perf + " script --no-itrace -F event,comm -i %s | %s | tee %s.modules.log | ./ptage | tail" % (data, sort2u, data))
     perf_script("--itrace=Le -F +brstackinsn --xed | tee >(egrep 'ppp|#' > %s.pt-takens.log) | %s %s > %s" %
@@ -837,6 +837,8 @@ def main():
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
     if args.profile_mask & 0x300: args.profile_mask |= 0x2
+  elif args.mode == 'both' and args.profile_mask & 0x100 and not (args.profile_mask & 0x2):
+    C.warn("Better enable 'per-app counting' profile-step with LBR; try '-pm %x'" % (args.profile_mask | 0x2))
   record_steps = ('record', 'lbr', 'pebs', 'ldlat', 'pt')
   if args.sys_wide:
     if profiling(): C.info('system-wide profiling')

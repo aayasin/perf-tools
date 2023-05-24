@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 2.02 # see version line of do.py
+__version__= 2.12 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -182,7 +182,7 @@ loop_stats.atts = ''
 
 bwd_br_tgts = [] # better make it local to read_sample..
 loop_cands = []
-def detect_loop(ip, lines, loop_ipc, lbr_takens,
+def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
                 MOLD=4e4): #Max Outer Loop Distance
   global bwd_br_tgts, loop_cands # unlike nonlocal, global works in python2 too!
   def find_block_ip(x = len(lines)-2):
@@ -244,8 +244,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens,
         if t and t in types: cnt[t] += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
-          loop['size'], loop['Conds'] = size, len(conds)
-          if fusion > 0: loop['macro-fusion'] = fusion
+          loop['size'], loop['Conds'], loop['macro-fusion'] = size, len(conds), fusion
           for i in types: loop[i] = cnt[i]
           if len(conds):
             loop['Cond_polarity'] = {}
@@ -286,6 +285,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens,
         'entry-block': 0 if xip > ip else find_block_ip()[0], #'BK': {hex(xip): 1, },
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
+      if srcline: loops[ip]['srcline'] = srcline.replace(':', ';')
       return
     elif use_cands and len(lines) > 2 and ip in bwd_br_tgts and has_ip(len(lines)-2):
       bwd_br_tgts.remove(ip)
@@ -361,6 +361,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     if not loop_ipc: C.warn('%s sample encountered (%s)' % (bad, msg))
   global lbr_events, bwd_br_tgts, edge_en
   valid, lines, bwd_br_tgts = 0, [], []
+  assert(not labels, "labels argument must be False!")
   glob['size_stats_en'] = skip_bad and not labels and not loop_ipc
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
@@ -375,7 +376,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
-    insts, takens, xip, timestamp = 0, [], None, None
+    insts, takens, xip, timestamp, srcline = 0, [], None, None, None
     tc_state = 'new'
     def update_size_stats():
       size = len(lines) - 1
@@ -460,6 +461,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         break
       # a line with a label
       if not labels and is_label(line):
+        srcline = get_srcline(line.strip())
         continue
       # e.g. "        00007ffff7afc6ca        <bad>" then "mismatch of LBR data and executable"
       tag = 'mismatch of LBR data'
@@ -468,6 +470,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         invalid('bad', tag)
         break
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
+      # TODO: replace with this line when labels is True
+      #if skip_bad and len(lines) and not is_label(line) and not line.strip().startswith('0'):
       if skip_bad and len(lines) and not line.strip().startswith('0'):
         if debug and debug == timestamp:
           exit(line, lines, "bad line")
@@ -526,7 +530,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           if xip in indirects:
             inc(hsts['indirect_%s_targets' % hex(xip)], ip)
             inc(hsts['indirect_%s_paths' % hex(xip)], '%s.%s.%s' % (hex(get_taken(lines, -2)['from']), hex(xip), hex(ip)))
-          detect_loop(ip, lines, loop_ipc, takens)
+          detect_loop(ip, lines, loop_ipc, takens, srcline)
         if skip_bad: tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
         line = line.rstrip('\r\n')
@@ -539,7 +543,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     if read_sample.dump: print_sample(lines, read_sample.dump)
     if read_sample.stop and stat['total'] >= int(read_sample.stop):
       C.info('stopping after %s valid samples' % read_sample.stop)
-      print_common(stat['total'])
+      print_common(stat['total'], print_summary=True)
       exit(None, lines, 'stop', msg="run:\t 'kill -9 $(pidof perf)'\t!")
   update_size_stats()
   return lines
@@ -582,7 +586,23 @@ def is_jmp_next(br, # a hacky implementation for now
 
 def has_timing(line): return line.endswith('IPC')
 def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else False
-def is_label(line):   return line.strip().endswith(':')
+
+def is_label(line):
+  line = line.strip()
+  return line.endswith(':') or (len(line.split()) == 1 and line.endswith(']')) or \
+      (len(line.split()) > 1 and line.split()[-2].endswith(':')) or \
+      (':' in line and line.split(':')[-1].isnumeric())
+
+def get_srcline(line):
+  if line.endswith(':') or line.startswith('['): return None
+  if line.endswith(']'):
+    label_split = line.split()[-1].split('[')
+    optional = '[' + label_split[-1]
+    return 'N/A (%s%s)' % (label_split[0], optional if verbose else '')
+  if len(line.split()) > 1 and line.split()[-2].endswith(':'): return line.split()[-1]
+  if ':' in line and line.split(':')[-1].isnumeric(): return line
+  return None
+
 def is_loop_by_ip(ip):  return ip in loops
 def is_loop(line):    return is_loop_by_ip(line_ip(line))
 def is_taken(line):   return '# ' in line
@@ -698,21 +718,23 @@ def print_global_stats():
         print_stat('branch at %s' % hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
                    prefix='misprediction-ratio', comment='paths histogram')
 
-def print_common(total):
+def print_common(total, print_summary=False):
   if glob['size_stats_en']:
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
   if edge_en and total: print_global_stats()
   print('\n'.join(['# CMP denotes CMP or TEST instructions', '#Global-stats-end', '']))
-  if verbose & 0xf00: C.warn_summary()
+  if print_summary:
+    if verbose & 0xf00: C.warn_summary()
 
 def print_all(nloops=10, loop_ipc=0):
   total = sum(stat['IPs'].values()) if glob['ip_filter'] else stat['total']
+  if not loop_ipc: print_common(total)
   if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5:
     if verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
     else: C.error('Too many LBR bad/bogus samples in profile')
-  if not loop_ipc: print_common(total)
+  if not loop_ipc and verbose & 0xf00: C.warn_summary()
   for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x, Threshold=.03)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:
@@ -782,7 +804,10 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
         top -= 1
       new.add('.. %d more'%n)
     loop[s] = C.chop(str(sorted(new, reverse=True)), (")", 'set('))
-  fixl = ('hotness', 'FL-cycles%', 'size') if glob['loop_cycles'] else ('hotness', 'size')
+  fixl = ['hotness']
+  if 'srcline' in loop: fixl.append('srcline')
+  if glob['loop_cycles']: fixl.append('FL-cycles%')
+  fixl.append('size')
   loop['hotness'] = '%6d' % loop['hotness']
   loop['size'] = str(loop['size']) if loop['size'] else '-'
   printl('%soop#%d: [ip: %s, ' % ('L' if detailed else 'l', num, hex(ip)))
@@ -790,7 +815,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   if not glob['loop_stats_en']: del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
-  dell = ['hotness', 'FL-cycles%', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
+  dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
   for x in paths_range(): dell += ['paths-%d'%x]
   if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)

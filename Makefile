@@ -102,8 +102,12 @@ test-study: study.py stats.py run.sh do.py
 	test -f BC2s-cfg1-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
 	test -f BC2s-cfg2-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
 test-stats: stats.py
-	@$(MAKE) test-default APP="$(APP) s" PM=1012 >> /dev/null 2>&1
+	@$(MAKE) test-default APP="$(APP) s" PM=1012 > /dev/null 2>&1
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
+test-srcline: lbr.py do.py common.py
+	cd kernels && clang -g -O2 pagefault.c -o pagefault-clang > /dev/null 2>&1
+	$(DO) $(CMD) -a './kernels/pagefault-clang 1000000' -pm 100 --tune :loop-srcline:1 > /dev/null 2>&1
+	grep -q 'srcline: pagefault.c;43' pagefault-clang-1000000*info.log || $(FAIL)
 
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
@@ -128,6 +132,7 @@ pre-push: help
 	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command
 	$(MAKE) test-study                                      # tests study script (errors only)
 	$(MAKE) test-stats                                      # tests stats module
+	$(MAKE) test-srcline                                    # tests srcline loop stat
 	$(PY3) $(DO) profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1  || echo skip
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC

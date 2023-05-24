@@ -361,7 +361,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     if not loop_ipc: C.warn('%s sample encountered (%s)' % (bad, msg))
   global lbr_events, bwd_br_tgts, edge_en
   valid, lines, bwd_br_tgts = 0, [], []
-  assert(not labels, "labels argument must be False!")
+  assert not labels, "labels argument must be False!"
   glob['size_stats_en'] = skip_bad and not labels and not loop_ipc
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter

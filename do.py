@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.50
+__version__ = 2.51
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -279,11 +279,18 @@ def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpu
       for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_%s_freq'%m):
         set_sysfile(f, freq)
 
+def msr_read(m): return exe_1line('sudo %s/msr.py 0x%x' % (args.pmu_tools, m), heavy=False)
+def msr_set(m, mask, set=True):
+  v = msr_read(m)
+  if C.is_num(v, 16):
+    v = int(v, 16)
+    return (v | mask) if set else (v & ~mask)
+def msr_clear(m, mask): return msr_set(m, mask, set=False)
+
 def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   def label(x, tool='dmesg'): return C.grep(x, flags='-H --label %s' % tool)
   def log_patch(x, patch='| sed s/=/:\ /'): return exe("%s %s >> %s" % (x, patch, out))
   def new_line(): return prn_line(out)
-  def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s' % (args.pmu_tools, m))
   def version(tool): C.fappend('%s: %s' % (tool, exe_1line('%s --version | head -1' % tool)), out)
   C.printc(do['pmu']) #OS
   if args.mode == 'process': return
@@ -297,8 +304,8 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
     for m in do['msrs']:
-      v = read_msr(m)
-      exe('echo "MSR %s: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
+      v = msr_read(m)
+      exe('echo "MSR 0x%x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x00000001', 'cpuid'), out))
   exe("sudo dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d, label('Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
@@ -314,7 +321,8 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   new_line()          #Devices, etc
   exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)
   exe("ulimit -a > setup-ulimit.log")
-  if do['dmidecode']: sudo('dmidecode > setup-memory.log')
+  if do['dmidecode']: exe("sudo dmidecode | tee setup-memory.log | egrep -A15 '^Memory Device' | "
+    "egrep '(Size|Type|Speed|Bank Locator):' | sort | uniq -c | sort -nr | %s >> %s" % (label('.', 'dmidecode'), out))
 
 def get_perf_toplev():
   perf, env, ptools = args.perf, '', {}
@@ -889,8 +897,8 @@ def main():
     elif c == 'disable-aslr': exe('echo 0 | sudo tee /proc/sys/kernel/randomize_va_space')
     elif c == 'disable-hugepages': exe('echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
     elif c == 'enable-hugepages':  exe('echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
-    elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0xf && sudo rdmsr 0x1a4')
-    elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0 && sudo rdmsr 0x1a4')
+    elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % msr_set(0x1a4, 0xf))
+    elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % msr_clear(0x1a4, 0xf))
     elif c == 'enable-fix-freq':    fix_frequency()
     elif c == 'disable-fix-freq':   fix_frequency('undo')
     elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')

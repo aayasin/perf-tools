@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.51
+__version__ = 2.52
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -829,8 +829,8 @@ def main():
         if args.verbose > 3: print(t)
         exec(t)
   if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
-  kernelv = exe_1line('uname -r', heavy=False)
-  if kernelv.startswith('6.4'): error('Unsupported kernel version: ' + kernelv)
+  perfv = exe_1line(args.perf + ' --version', heavy=False)
+  if '6.4' in perfv: error('Unsupported perf tool: ' + perfv)
   do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
   if do['perf-stat-add']:
     x = ',branches,branch-misses'
@@ -915,8 +915,8 @@ def main():
       do_logs('tar')
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
-    elif c == 'version':      print(os.path.basename(__file__), 'version =', version(),
-                                    '; '.join([''] + [module_version(x) for x in ('lbr', 'stats')]))
+    elif c == 'version':      print(os.path.basename(__file__), 'version =', version(), '; '.join([''] +
+      [module_version(x) for x in ('lbr', 'stats')] + [exe_1line(args.perf + ' --version').replace(' version ', '=')]))
     elif c.startswith('backup'):
       r = '../perf-tools-%s-%s-e%d.tar.gz' % (version(),
           '-'.join([module_version(x) for x in ('lbr', 'stats', 'study')]), len(param))

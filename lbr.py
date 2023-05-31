@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 2.0 # see version line of do.py
+__version__= 2.01 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -111,7 +111,7 @@ def line_inst(line):
     if 'lea' in line: return 'lea'
     elif 'lock' in line: return 'lock'
     elif 'prefetch' in line: return 'prefetch'
-    elif is_type(CISC_TEST, line) or 'gather' in line: return 'load'
+    elif is_type(CISC_CMP, line) or 'gather' in line: return 'load'
     elif re.match(r"\s+\S+\s+[^\(\),]+,", line) or 'scatter' in line: return 'store'
     else: return 'load'
   else:
@@ -303,14 +303,14 @@ stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
 
-CISC_TEST='_cisc-test/cmp'
+CISC_CMP= '_cisc-cmp'
 def inst2pred(i):
   i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
     'add-sub':        '(add|sub).*',
     'inc-dec':        '(inc|dec).*',
-    CISC_TEST:        '(cmp[^x]|test).*\(',
-    '_risc-test/cmp':  '(cmp[^x]|test)[^\(]*',
-  }
+         CISC_CMP: '(cmp[^x]|test).*\(',
+    '_risc-cmp':  '(cmp[^x]|test)[^\(]*',
+         }
   if i is None: return sorted(list(i2p.keys()))
   return i2p[i] if i in i2p else i
 
@@ -323,7 +323,8 @@ def is_imix(t):
 Insts = inst2pred(None) + ['cmov', 'lea', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
 Insts_global = Insts + is_imix(None) + ['all']
 Insts_all = ['cond_backward', 'cond_forward', 'cond_non-taken', 'cond_fusible',
-             'cond_non-fusible', 'cond_taken-not-first'] + Insts_global
+             'cond_non-fusible', 'cond_taken-not-first', 'cond_LD-CMP-JCC fusible',
+             'cond_non-fusible CISC_CMP_IMM-JCC'] + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + Insts_all}
 hsts = {}
@@ -508,8 +509,14 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           if edge_en and is_type(x86.COND_BR, line):
             if is_taken(line): glob['cond_taken-not-first'] += 1
             else: glob['cond_non-taken'] += 1
-            if x86.is_fusion(lines[-1], line): glob['cond_fusible'] += 1
-            else: glob['cond_non-fusible'] += 1
+            if x86.is_fusion(lines[-1], line):
+              glob['cond_fusible'] += 1
+              if is_type(x86.TEST_CMP, lines[-1]) and is_type(x86.LOAD, lines[-2]):
+                glob['cond_LD-CMP-JCC fusible'] += 1
+            else:
+              glob['cond_non-fusible'] += 1
+              if is_type(x86.TEST_CMP, lines[-1]) and x86.is_mem_imm(lines[-1]):
+                glob['cond_non-fusible CISC_CMP_IMM-JCC'] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)
@@ -660,7 +667,7 @@ def print_stat(name, count, prefix='count', comment='', ratio_of=None):
     return n
   if len(comment): comment = '\t:(see %s below)' % c(comment)
   elif ratio_of: comment = '\t: %7s of %s' % (ratio(count, ratio_of[1]), ratio_of[0])
-  print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 45 - len(prefix)), str(count), comment))
+  print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 60 - len(prefix)), str(count), comment))
 def print_estimate(name, s): print_stat(name, s, 'estimate')
 def print_imix_stat(n, c): print_stat(n, c, ratio_of=('ALL', glob['all']))
 
@@ -679,7 +686,8 @@ def print_global_stats():
                                  prefix='proxy count', ratio_of=('loops', len(loops)))
   if glob['size_stats_en']:
     for x in ('backward', ' forward'): print_imix_stat(x + ' taken conditional', glob['cond_' + x.strip()])
-    for x in ('non-taken', 'fusible', 'non-fusible', 'taken-not-first'):
+    for x in ('non-taken', 'fusible', 'non-fusible', 'taken-not-first', 
+			  'LD-CMP-JCC fusible', 'non-fusible CISC_CMP_IMM-JCC'):
       print_imix_stat(x + ' conditional', glob['cond_' + x])
     for x in Insts_global: print_imix_stat(x, glob[x])
   if 'indirect-x2g' in hsts:
@@ -691,11 +699,14 @@ def print_global_stats():
                    prefix='misprediction-ratio', comment='paths histogram')
 
 def print_common(total):
+  def print_notes():
+    print('# CMP denotes cmp or test instructions\n')
   if glob['size_stats_en']:
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
   if edge_en and total: print_global_stats()
+  print_notes()
   print('#Global-stats-end\n')
   if verbose & 0xf00: C.warn_summary()
 

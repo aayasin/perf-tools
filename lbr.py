@@ -699,15 +699,12 @@ def print_global_stats():
                    prefix='misprediction-ratio', comment='paths histogram')
 
 def print_common(total):
-  def print_notes():
-    print('# CMP denotes CMP or TEST instructions\n')
   if glob['size_stats_en']:
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
   if edge_en and total: print_global_stats()
-  print_notes()
-  print('#Global-stats-end\n')
+  print('\n'.join(['# CMP denotes CMP or TEST instructions', '#Global-stats-end', '']))
   if verbose & 0xf00: C.warn_summary()
 
 def print_all(nloops=10, loop_ipc=0):

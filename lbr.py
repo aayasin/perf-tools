@@ -511,7 +511,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
             else: glob['cond_non-taken'] += 1
             if x86.is_fusion(lines[-1], line):
               glob['cond_fusible'] += 1
-              if is_type(x86.TEST_CMP, lines[-1]) and is_type(x86.LOAD, lines[-2]):
+              if len(lines) > 1 and is_type(x86.TEST_CMP, lines[-1]) and is_type(x86.LOAD, lines[-2]):
                 glob['cond_LD-CMP-JCC fusible'] += 1
             else:
               glob['cond_non-fusible'] += 1
@@ -700,7 +700,7 @@ def print_global_stats():
 
 def print_common(total):
   def print_notes():
-    print('# CMP denotes cmp or test instructions\n')
+    print('# CMP denotes CMP or TEST instructions\n')
   if glob['size_stats_en']:
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1

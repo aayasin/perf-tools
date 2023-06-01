@@ -308,9 +308,9 @@ def inst2pred(i):
   i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
     'add-sub':        '(add|sub).*',
     'inc-dec':        '(inc|dec).*',
-         CISC_CMP: '(cmp[^x]|test).*\(',
-    '_risc-cmp':  '(cmp[^x]|test)[^\(]*',
-         }
+    CISC_CMP:         '(cmp[^x]|test).*\(',
+    '_risc-cmp':      '(cmp[^x]|test)[^\(]*',
+  }
   if i is None: return sorted(list(i2p.keys()))
   return i2p[i] if i in i2p else i
 

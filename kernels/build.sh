@@ -51,5 +51,7 @@ done
 x=callchain
 $CC -O0 -fno-inline $x.c -o $x
 $CC -O0 -pthread false-sharing.c -o false-sharing
+$CC -march=native tpause_c0_1.c -o tpause_c0_1
+$CC -march=native tpause_c0_2.c -o tpause_c0_2
 
 

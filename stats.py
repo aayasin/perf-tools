@@ -42,6 +42,8 @@ def get_stat_int(s, c, val=-1, stat_file=None):
 
 debug = 0
 sDB = {}
+stats = {'verbose': 0}
+
 def rollup(c, perf_stat_file=None):
   if c in sDB: return
   if not perf_stat_file: perf_stat_file = c + '.perf_stat-r3.log'
@@ -111,10 +113,10 @@ def parse_perf(l):
   elif '#' in l:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
-    if name.count('_') > 1 and name.islower() and not name.startswith('perf_metrics'): # hack ocperf lower casing!
+    if name.count('_') > 1 and name.islower() and not re.match('^(perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
       ignore = 2 if name.startswith('br_') else 1
       Name = name.replace('_', '^', ignore).replace('_', '.', 1).replace('^', '_').upper()
-      print(name, '->', Name)
+      if stats['verbose']: print(name, '->', Name)
       name = Name
     val = items[0].replace(',', '')
     val = float(val) if name_idx == 2 else int(val)
@@ -163,7 +165,7 @@ def read_toplev(filename, metric=None):
       elif l.startswith('warning'):
         d['zero-counts'] = l.split(':')[2].strip()
       else:
-        for m in ('IpTB', 'UopPI'):
+        for m in ('IpTB', 'UopPI', 'SMT_on'):
           if m in items[1]: d[items[1]] = float(items[3])
     except ValueError:
       C.warn("cannot parse: '%s'" % l)
@@ -203,13 +205,13 @@ def read_perf_toplev(filename):
 def csv2stat(filename):
   if not filename.endswith('.csv'): C.error("Expecting csv format: '%s'" % filename)
   d = read_perf_toplev(filename)
-  def params():
+  def params(smt_on):
     d['knob.ncores'] = pmu.cpu('corecount')
     d['knob.nsockets'] = pmu.cpu('socketcount')
-    d['knob.nthreads'] = 2 if pmu.cpu('smt-on') else 1
-    d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', '4.5-full-perf', prefix=False)
+    d['knob.nthreads'] = 2 if smt_on else 1
+    d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', '4.5-full-perf')
     d['knob.uarch'] = pmu.cpu('CPU')
-    return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK', prefix=False)
+    return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK')
   def patch_metrics(SLOTS='TOPDOWN.SLOTS'):
     if not (SLOTS in d and 'PERF_METRICS.FRONTEND_BOUND' in d): return
     slots = d[SLOTS]
@@ -246,7 +248,8 @@ def csv2stat(filename):
     if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
     return filename.replace('toplev-%s-perf.csv' % x.group(1), '')
   patch_metrics()
-  uarch, base = params(), basename()
+  base = basename()
+  uarch = params(read_toplev(filename.replace('-perf.csv', '.log'), 'SMT_on'))
   if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
   d.update(user_events(base + 'perf_stat-r3.log'))
   stat = base + uarch + '.stat'
@@ -257,6 +260,7 @@ def csv2stat(filename):
   return stat
 
 def main():
+  stats['verbose'] = 1
   s = csv2stat(C.arg(1))
   C.exe_cmd("echo scp $USER@`hostname -A | cut -d' ' -f1`:$PWD/%s ." % s)
 

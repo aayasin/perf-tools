@@ -18,8 +18,8 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-# pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step
-__version__ = 2.22
+# pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
+__version__ = 2.51
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -52,7 +52,7 @@ do = {'run':        C.RUN_DEF,
   'gen-kernel':     1,
   'help':           1,
   'interval':       10,
-  'imix':           0x1f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens
+  'imix':           0x3f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens, 5: misp report
   'loop-ideal-ipc': 0,
   'loops':          int(pmu.cpu('cpucount', 20) / 2),
   'log-stdout':     1,
@@ -74,6 +74,7 @@ do = {'run':        C.RUN_DEF,
   'objdump':        'binutils-gdb/binutils/objdump' if isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
   'packages':       ['cpuid', 'dmidecode', 'numactl'] + list(tunable2pkg.keys()),
+  'perf-ann-top':   3,
   'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
@@ -140,12 +141,12 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
         if not 'perf record ' in x: msg = None
     elif args.mode == 'profile':
         x, run, debug = '# ' + x, False, args.verbose > 2
-    elif '--xed' in x and not isfile(C.GLOBAL_PATHS['xed']): C.error('!\n'.join(('xed was not installed',
+    elif '--xed' in x and not isfile(C.Globals['xed']): C.error('!\n'.join(('xed was not installed',
       "required by '%s' in perf-script of '%s'" % (msg, x), 'try: ./do.py setup-all --tune :xed:1 ')))
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], do['pmu']):
       C.warn('CPU model is unrecognized; consider Linux kernel update (https://intelpedia.intel.com/IntelNext#Intel_Next_OS)', suppress_after=1)
-    if (not x.startswith('#') or args.verbose > 2) and (not 'loop_stats' in x or args.verbose > 3):
+    if do['cmds_file'] and (not 'loop_stats' in x or args.verbose > 3) and (not x.startswith('#') or args.verbose > 2 or do['batch']):
       do['cmds_file'].write(x + '\n')
       do['cmds_file'].flush()
   return C.exe_cmd(x, msg, redir_out, debug, run, log, fail, background)
@@ -158,7 +159,7 @@ def prn_line(f): exe_v0('echo >> %s' % f)
 
 def print_cmd(x, show=True):
   if show and not do['batch']: C.printc(x)
-  if len(vars(args))>0: do['cmds_file'].write('# ' + x + '\n')
+  if len(vars(args))>0 and do['cmds_file']: do['cmds_file'].write('# ' + x + '\n')
 
 def exe_1line(x, f=None, heavy=True):
   return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(x, f, args.verbose > 1)
@@ -181,6 +182,7 @@ def module_version(mod_name):
     mod = study
   else: C.error('Unsupported module: ' + mod_name)
   return '%s=%.2f' % (mod_name, mod.__version__)
+def profiling(): return args.mode != 'process'
 def user_app(): return args.output or args.app != C.RUN_DEF
 def uniq_name(): return args.output or C.command_basename(args.app, args.app_iterations if args.gen_args else None)[:200]
 def toplev_describe(m, msg=None, mod='^'):
@@ -209,7 +211,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']:
-    if do['xed'] < 2 and isfile(C.GLOBAL_PATHS['xed']): exe_v0(msg='xed is already installed')
+    if do['xed'] < 2 and isfile(C.Globals['xed']): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
     pip = 'pip3' if python_version().startswith('3') else 'pip'
     for x in do['python-pkgs']: exe('%s install %s' % (pip, x), '@installing %s' % x)
@@ -217,7 +219,7 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
   if do['loop-ideal-ipc']:
-    if isfile(C.GLOBAL_PATHS['llvm-mca']): exe_v0(msg='llvm is already installed')
+    if isfile(C.Globals['llvm-mca']): exe_v0(msg='llvm is already installed')
     else: exe('./build-llvm.sh', 'installing llvm')
 
 def tools_update(kernels=[], level=3):
@@ -277,43 +279,50 @@ def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpu
       for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_%s_freq'%m):
         set_sysfile(f, freq)
 
+def msr_read(m): return exe_1line('sudo %s/msr.py 0x%x' % (args.pmu_tools, m), heavy=False)
+def msr_set(m, mask, set=True):
+  v = msr_read(m)
+  if C.is_num(v, 16):
+    v = int(v, 16)
+    return (v | mask) if set else (v & ~mask)
+def msr_clear(m, mask): return msr_set(m, mask, set=False)
+
 def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
+  def label(x, tool='dmesg'): return C.grep(x, flags='-H --label %s' % tool)
+  def log_patch(x, patch='| sed s/=/:\ /'): return exe("%s %s >> %s" % (x, patch, out))
   def new_line(): return prn_line(out)
-  def read_msr(m): return C.exe_one_line('sudo %s/msr.py %s' % (args.pmu_tools, m))
+  def version(tool): C.fappend('%s: %s' % (tool, exe_1line('%s --version | head -1' % tool)), out)
   C.printc(do['pmu']) #OS
   if args.mode == 'process': return
-  exe('uname -a > ' + out, 'logging setup')
-  exe("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME' >> " + out)
+  exe('uname -a | sed s/Linux/Linux:/ > ' + out, 'logging setup')
+  log_patch("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME'")
   for f in ('/sys/kernel/mm/transparent_hugepage/enabled', ):
     prn_sysfile(f, out)
-  exe("sudo sysctl -a | tee setup-sysctl.log | egrep 'randomize_va_space|hugepages =' >> %s" % out)
+  log_patch("sudo sysctl -a | tee setup-sysctl.log | egrep 'randomize_va_space|hugepages ='")
   exe("env > setup-env.log")
   new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
     for m in do['msrs']:
-      v = read_msr(m)
-      exe('echo "MSR %s: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
-  if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | grep ' 0x00000001' >> %s"%(c, c, out))
-  exe("sudo dmesg -T | tee %s | %s >> %s && %s | tail -1 >> %s" % (d, C.grep('Performance E|micro'), out, C.grep('BIOS ', d), out))
+      v = msr_read(m)
+      exe('echo "MSR 0x%x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
+  if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x00000001', 'cpuid'), out))
+  exe("sudo dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d, label('Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
   new_line()          #PMU
-  exe('echo "PMU: %s" >> %s'%(do['pmu'], out))
-  with open(out, "a") as f: f.write('TMA version:\t%s\n' % pmu.cpu('TMA version'))
-  exe('%s --version >> ' % args.perf + out)
-  setup_perf('log', out)
+  C.fappend('PMU: %s\nTMA version:\t%s' % (do['pmu'], pmu.cpu('TMA version')), out)
+  version(args.perf); setup_perf('log', out)
   new_line()          #Tools
-  exe('echo "python version: %s" >> %s' % (python_version(), out))
-  for x in (do['compiler'], 'as'): exe('%s --version | head -1 >> ' % x + out)
-  exe1('ldd --version | head -1 >> %s' % out, log=False)
-  if do['loop-ideal-ipc']: exe('echo "llvm-mca version: %s" >> %s' % (exe_1line(('%s --version | grep version') %
-                                                                      C.GLOBAL_PATHS['llvm-mca']), out))
+  C.fappend('python version: ' + python_version(), out)
+  for x in (do['compiler'].split()[0], 'as', 'ldd'): version(x)
+  if do['loop-ideal-ipc']: log_patch('%s --version | %s >> %s' % (C.Globals['llvm-mca'], label('version', 'llvm-mca'), out))
   new_line()          #Memory
   if do['numactl']: exe('numactl -H >> ' + out)
   new_line()          #Devices, etc
   exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)
   exe("ulimit -a > setup-ulimit.log")
-  if do['dmidecode']: exe('sudo dmidecode > setup-memory.log')
+  if do['dmidecode']: exe("sudo dmidecode | tee setup-memory.log | egrep -A15 '^Memory Device' | "
+    "egrep '(Size|Type|Speed|Bank Locator):' | sort | uniq -c | sort -nr | %s >> %s" % (label('.', 'dmidecode'), out))
 
 def get_perf_toplev():
   perf, env, ptools = args.perf, '', {}
@@ -343,8 +352,9 @@ def profile(mask, toplev_args=['mvl6', None]):
       elif len(tune): tune = '[--tune :%s:1]' % tune if 'stacks' in msg else 'setup-all --tune :%s:1' % tune
       profile_help[step] = '%x | %-50s | %s' % (2 ** step, msg, tune)
       return
-    if mode == 'log-setup': log_setup()
-    elif mode == 'perf-stat': exe1(cmd, msg, fail=False)
+    if mode == 'log-setup': return log_setup()
+    if args.sys_wide and not (' -a ' in cmd): C.error("Incorrect system wide in profile-step='%s' cmd='%s'" % (msg, cmd))
+    if mode == 'perf-stat': exe1(cmd, msg, fail=False)
     else: exe(cmd, msg)
   def profile_mask_help(filename = 'profile-mask-help.md'):
     hdr = ('%7s' % 'mask', '%-50s' % 'profile-step', 'additional [optional] arguments')
@@ -448,7 +458,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     data = '%s.perf.data' % record_name(do['perf-record'])
     profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.period(), data, do['perf-record'], r),
                 'sampling %s' % do['perf-record'].replace(' -g ', 'w/ stacks'), 3, tune='sample')
-    if do['log-stdout'] and args.mode != 'process' and do['forgive'] < 2:
+    if do['log-stdout'] and profiling() and do['forgive'] < 2:
       record_out = C.file2lines(C.log_stdio)
       for l in reversed(record_out):
         if 'sampling ' in l: break
@@ -456,16 +466,15 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe(perf_report + " --header-only -i %s | grep duration" % data)
     print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_view(), data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
-    exe(perf_report_syms + " -n --no-call-graph -i %s | tee %s-funcs.log | grep -A7 Overhead "
-      "| egrep -v '^# \.|^\s+$|^$' | head | sed 's/[ \\t]*$//' | nl -v-1" % (data, base), '@report functions')
-    exe(perf_report + " --stdio --hierarchy --header -i %s | grep -v ' 0\.0.%%' | tee "%data+
-      base+"-modules.log | grep -A22 Overhead", '@report modules')
+    def show(n=7): return "| grep -wA%d Overhead | cut -c-150 | egrep -v '^[#\s]*$| 0\.0.%%' | sed 's/[ \\t]*$//' " % n
+    exe(perf_report_syms + " -n --no-call-graph -i %s | tee %s-funcs.log %s| nl -v-1" % (data, base, show()), '@report functions')
+    exe(perf_report + " --stdio --hierarchy --header -i %s | tee %s-modules.log %s" % (data, base, show(22)), '@report modules')
     exe("%s --stdio -n -l -i %s | c++filt | tee %s "
         "| tee >(egrep '^\s+[0-9]+ :' | sort -n | ./ptage > %s-code-ips.log) "
         "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
         logs['code'], base, base), '@annotate code', redir_out='2>/dev/null', timeit=(args.verbose > 2))
-    exe("grep -w -5 '%s :' %s" % (exe_1line("egrep '\s+[0-9]+ :' %s | sort -n | tail -1" % logs['code'], 0),
-                                  logs['code']), '@hottest block(s), all commands')
+    exe("egrep -w -5 '(%s) :' %s" % ('|'.join(exe2list("egrep '\s+[0-9]+ :' %s | cut -d: -f1 | sort -n | uniq | tail -%d" %
+      (logs['code'], do['perf-ann-top']))), logs['code']), '@hottest %d+ blocks, all commands' % do['perf-ann-top'])
     if do['xed']: perf_script("-F insn --xed | grep . | %s | tee %s-hot-insts.log | tail" % (sort2up, base),
                               '@time-consuming instructions', data)
   
@@ -497,6 +506,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd, logs['tma'] = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']),
       tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % do['tma-dedup-nodes']))
     profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk), 'topdown full tree + All Bottlenecks', 4)
+    if profiling(): C.fappend('Info.PerfTools SMT_on - %d' % (1 if pmu.cpu('smt-on') else 0), logs['tma'])
     zeros = read_toplev(logs['tma'], 'zero-counts')
     if zeros and len([m for m in zeros.split() if m not in do['tma-zero-ok'].split()]):
       # https://github.com/andikleen/pmu-tools/issues/455
@@ -536,7 +546,9 @@ def profile(mask, toplev_args=['mvl6', None]):
       group = read_toplev(logs['tma'], 'Critical-Group')
       if group: C.info('detected group: %s' % group)
     if not group: group, x = 'Mem', C.warn("Could not auto-detect group; Minimize system-noise, e.g. try './do.py disable-smt'")
-    cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs=C.TOPLEV_DEF.replace('Summary', 'Summary,+' + group))
+    MG='--metric-group +Summary'
+    assert MG in args.toplev_args, "'%s' is missing in toplev-args! " % MG
+    cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs=args.toplev_args.replace(MG, ',+'.join((MG, group))))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
 
@@ -546,8 +558,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     data = '%s_tpebs-perf.data' % record_name('_%s-%d' % (do['model'], nevents))
     cmd = "%s record %s -e %s -o %s -- %s" % (perf if raw else ocperf, flags, events, data, r)
     profile_exe(cmd, "TMA sampling (%s with %d events)" % (do['model'], nevents), 14)
-    if samples_count(data) < 1e4:
-      C.warn("Too little samples collected (%s in %s); rerun with: --tune :model:'MTLraw:2'" % (samples_count(data), data))
+    n = samples_count(data)
+    if n < 1e4: C.warn("Too little samples collected (%s in %s); rerun with: --tune :model:'MTLraw:2'" % (n, data))
     exe("%s script -i %s -F event,retire_lat > %s.retire_lat.txt" % (perf, data, data))
     exe("sort %s.retire_lat.txt | uniq -c | sort -n | ./ptage | tail" % (data, ))
 
@@ -562,11 +574,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     if n == 0: C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
     elif n < 1e4: C.warn("Too little samples collected (%s in %s); rerun with '--tune :calibrate:-1'" % (n, perf_data))
     elif n > 1e5: C.warn("Too many samples collected (%s in %s); rerun with '--tune :calibrate:1'" % (n, perf_data))
-    return perf_data
+    return perf_data, n
   
   if en(8) and do['sample'] > 1:
     assert pmu.lbr_event()[:-1] in do['perf-lbr'] or do['forgive'] > 2, 'Incorrect event for LBR in: ' + do['perf-lbr']
-    data = perf_record('lbr', 8)
+    data, nsamples = perf_record('lbr', 8)
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def static_stats():
@@ -589,6 +601,19 @@ def profile(mask, toplev_args=['mvl6', None]):
       hist_cmd = ''
       for h in hists: hist_cmd += " && %s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % h, info, '-A33'), h)
       exe("%s && tail %s | grep -v unique %s" % (C.grep('code footprint', info), info, hist_cmd), "@top loops & more in " + info)
+    def calc_misp_ratio():
+      misp_file, header, takens, mispreds = data + '.mispreds.log', 'Branch Misprediction Report', {}, {}
+      exe_v0(msg='@'+header.lower())
+      assert isfile(misp_file) and isfile(data+'.takens.log')
+      for l in C.file2lines(data+'.takens.log')[:-1]:
+        b = C.str2list(l)
+        takens[ b[2] ] = int(b[1])
+      for l in C.file2lines(misp_file)[:-1]:
+        b = C.str2list(l)
+        m = int(b[1])
+        mispreds[ (' '.join(b[2:]), C.ratio(m, takens[b[2]])) ] = m * takens[b[2]]
+      C.fappend('\n%s:\n' % header + '\t'.join(('significance', '%7s' % 'ratio', 'instruction addr & ASM')), misp_file)
+      for b in C.hist2slist(mispreds): C.fappend('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0])), misp_file)
     if not isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()
       exe_v0('printf "# processing %s%s\n"%s %s' % (data, C.flag2str(" filtered on ", comm), '>>' if do['size'] else '>', info))
@@ -596,20 +621,21 @@ def profile(mask, toplev_args=['mvl6', None]):
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(logs['stat']): exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, " egrep -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data,
-        log_br_count('sampled taken', 'samples').replace('Count', '\\nCount')), '@processing samples', data, fail=0)
+      perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data, log_br_count('sampled taken',
+        'samples').replace('Count', '\\nCount')), '@processing %d samples' % nsamples, data, fail=0)
       if do['xed']:
         if (do['imix'] & 0x8) == 0:
           perf_script("-F +brstackinsn --xed | GREP_INST| grep MISPRED | %s | %s > %s.mispreds.log" %
                       (clean, sort2uf, data), '@processing mispredicts', data)
         else:
           perf_script("-F +brstackinsn --xed | GREP_INST"
-            "| tee >(grep MISPRED | %s | tee >(egrep -v 'call|jmp|ret' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log)"
+            "| tee >(grep MISPRED | %s | tee >(egrep -v 'call|jmp|ret' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log) "
             "| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
             (clean, sort2uf, data, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data),
             '@processing taken branches', data)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'misp_tk_conds'))
+          if do['imix'] & 0x20 and args.mode != 'profile': calc_misp_ratio()
         exe(log_br_count('mispredicted taken', 'mispreds'))
     if do['xed']:
       ips = '%s.ips.log'%data
@@ -643,7 +669,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         perf_script(cmd, msg, data)
         if do['imix'] & 0x4: exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
             "@instruction-mix no operands")
-        if args.verbose > 0: exe("tail -4 " + ips, "@top-3 hitcounts of basic-blocks to examine in " + hits)
+        if args.verbose: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)
         report_info(info)
       else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and isfile(loops):
@@ -663,13 +689,13 @@ def profile(mask, toplev_args=['mvl6', None]):
       else: warn_file(loops)
   
   if en(9) and do['sample'] > 2:
-    data = perf_record('pebs', 9, pmu.event_name(do['perf-pebs']))
+    data = perf_record('pebs', 9, pmu.event_name(do['perf-pebs']))[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
     if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs, Insts", data)
     else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
-      if pmu.cpu('smt-on') and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')
+      if pmu.cpu('smt-on') and not do['batch'] and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')
       else:
         is_dsb = 1
         perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
@@ -695,7 +721,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       perf_script("-F +brstackinsn --xed %s > /dev/null" % cmd, "@ stats on PEBS", data)
 
   if en(10):
-    data = perf_record('ldlat', 10, record='record' if pmu.ldlat_aux() else 'mem record')
+    data = perf_record('ldlat', 10, record='record' if pmu.ldlat_aux() else 'mem record')[0]
     exe("%s mem report --stdio -i %s -F+symbol_iaddr -v " # workaround: missing -F+ip in perf-mem-report
         "-w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
         "| tee %s.ldlat.log | grep -A12 -B4 Overhead | tail -17" % (perf, data, data), "@ top-10 samples", redir_out=None)
@@ -714,7 +740,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       for e in args.events.split(','): exe('egrep -i %s %s > %s' % (e, csv_file, csv_file.replace('.csv', '-%s.csv' % e)))
 
   if en(19):
-    data = perf_record('pt', 19)
+    data = perf_record('pt', 19)[0]
     tag, info = 'pt', '%s.info.log' % data
     exe(perf + " script --no-itrace -F event,comm -i %s | %s | tee %s.modules.log | ./ptage | tail" % (data, sort2u, data))
     perf_script("--itrace=Le -F +brstackinsn --xed | tee >(egrep 'ppp|#' > %s.pt-takens.log) | %s %s > %s" %
@@ -803,6 +829,8 @@ def main():
         if args.verbose > 3: print(t)
         exec(t)
   if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
+  kernelv = exe_1line('uname -r', heavy=False)
+  if kernelv.startswith('6.4'): error('Unsupported kernel version: ' + kernelv)
   do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
   if do['perf-stat-add']:
     x = ',branches,branch-misses'
@@ -817,26 +845,30 @@ def main():
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
     if args.profile_mask & 0x300: args.profile_mask |= 0x2
+  elif args.mode == 'both' and args.profile_mask & 0x100 and not (args.profile_mask & 0x2):
+    C.warn("Better enable 'per-app counting' profile-step with LBR; try '-pm %x'" % (args.profile_mask | 0x2))
   record_steps = ('record', 'lbr', 'pebs', 'ldlat', 'pt')
   if args.sys_wide:
-    if args.mode != 'process': C.info('system-wide profiling')
+    if profiling(): C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
+    if not do['comm']: do['perf-filter'] = 1
     args.profile_mask &= ~0x4 # disable system-wide profile-step
   if do['container']:
-    if args.mode != 'process': C.info('container profiling')
+    if profiling(): C.info('container profiling')
     for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'
   if args.verbose > 2: C.info('timing perf tool post-processing')
   do_cmd = '%s # version %s' % (C.argv2str(), version())
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   if args.app and '|' in args.app: C.error("Invalid use of pipe in app: '%s'. try putting it in a .sh file" % args.app)
-  cmds_file = '.%s.cmd' % uniq_name()
-  if isfile(cmds_file):
-    C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)
-  do['cmds_file'] = open(cmds_file, 'w')
-  do['cmds_file'].write('# %s\n' % do_cmd)
+  if not do['batch'] or args.mode == 'profile':
+    cmds_file = '.%s.cmd' % uniq_name()
+    if isfile(cmds_file):
+      C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)
+    do['cmds_file'] = open(cmds_file, 'w')
+    do['cmds_file'].write('# %s\n' % do_cmd)
   if args.verbose > 5: C.printc(str(args))
   if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1
@@ -865,8 +897,8 @@ def main():
     elif c == 'disable-aslr': exe('echo 0 | sudo tee /proc/sys/kernel/randomize_va_space')
     elif c == 'disable-hugepages': exe('echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
     elif c == 'enable-hugepages':  exe('echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
-    elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0xf && sudo rdmsr 0x1a4')
-    elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0 && sudo rdmsr 0x1a4')
+    elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % msr_set(0x1a4, 0xf))
+    elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % msr_clear(0x1a4, 0xf))
     elif c == 'enable-fix-freq':    fix_frequency()
     elif c == 'disable-fix-freq':   fix_frequency('undo')
     elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
@@ -909,4 +941,4 @@ def get(param):
 
 if __name__ == "__main__":
   main()
-  do['cmds_file'].close()
+  if do['cmds_file']: do['cmds_file'].close()

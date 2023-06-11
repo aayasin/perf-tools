@@ -30,20 +30,20 @@ class color:
   UNDERLINE = '\033[4m'
   END = '\033[0m'
 
+Globals = {'llvm-mca': '/usr/local/bin/llvm-mca',
+  'xed':           '/usr/local/bin/xed'
+}
 
-GLOBAL_PATHS = {'llvm-mca':      '/usr/local/bin/llvm-mca',
-                'xed':           '/usr/local/bin/xed'
-                }
+# append to a file
+def fappend(text, filename):
+  with open(filename, 'a') as f: f.write(text + '\n')
 
 # colored printing, writes to outfile or log_stdio
 def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   msg = col + msg + color.END
   if not log_only: print(msg)
   if not outfile: outfile = log_stdio
-  if outfile:
-    file1 = open(outfile, "a")
-    file1.write(msg+'\n')
-    file1.close()
+  if outfile: fappend(msg, outfile)
 log_stdio=None
 
 def info(msg, bold=False, col=color.GREY):
@@ -68,9 +68,9 @@ def error(msg):
   if dump_stack_on_error: print(let_python_fail)
   sys.exit(' !')
 
-def exit(msg=''):
-  printc('%s ..'%msg, color.GREEN)
-  sys.exit('exiting')
+def exit(msg=None):
+  printc('%s ..' % str(msg), color.GREEN)
+  sys.exit('exiting' if msg else 0)
 
 #debug
 #
@@ -175,7 +175,7 @@ def check_executable(x):
 def dirname(): return os.path.dirname(__file__)
 def realpath(x): return os.path.join(dirname(), x)
 def env2int(x, default=0, base=10): y=os.getenv(x); return int(y, base) if y else default
-def env2str(x, default='', prefix=1): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
+def env2str(x, default=0, prefix=0): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
 def env2list(x, default): y = os.getenv(x); return y.split() if y else default
 def envfile(x): x = os.getenv(x); return x if x and os.path.isfile(x) else None
 
@@ -315,8 +315,13 @@ def commands_list():
 def command_basename(comm, iterations=None):
   if comm is None or comm.isdigit(): return 'run%d' % (int(comm) if comm else os.getpid())
   name = comm.strip().split(' ')
-  for x in ('taskset', 'bash', 'omp-bin', 'n-copies', 'n-loop'):
-    if x in name[0]: name = name[(4 if name[2].startswith('-') else 2):]
+  if not len(name) or not len(name[0]): error("empty command/name")
+  elif len(name) > 2:
+    for x in ('taskset', 'bash', 'omp-bin', 'n-copies', 'n-loop'):
+      if x == name[0] or name[0].endswith('/'+x):
+        assert (not name[2].startswith('-') or len(name) > 4), "invalid syntax for '%s'" % name[0]
+        name = name[(4 if name[2].startswith('-') else 2):]
+        break
   if '/' in name[0]:
     check_executable(name[0].replace("'", ''))
     name[0] = name[0].split('/')[-1].replace('.sh', '')
@@ -327,4 +332,6 @@ def command_basename(comm, iterations=None):
 
 # stats
 def inc(d, b, i=1): d[b] = d.get(b, 0) + i
-def ratio(x, hist, denom='total'): return '%s-ratio: %.1f%%'%(x, 100.0*hist[x]/max(hist[denom], 1))
+def ratio(a, b, denom='total'):
+  r = '%.1f%%' % (100.0 * b[a] / max(b[denom], 1) if type(b) is dict else 100.0 * a / b)
+  return '%s-ratio: %s' % (a, r) if type(b) is dict else r

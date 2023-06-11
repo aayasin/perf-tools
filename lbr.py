@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.12
+__version__= 2.01 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -36,17 +36,17 @@ user_imix = C.env2list('LBR_IMIX', ['vpmovmskb', 'imul'])
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
-def ratio(a, b): return '%.2f%%' % (100.0 * a / b) if b else '-'
+def ratio(a, b): return C.ratio(a, b) if b else '-'
 def read_line(): return sys.stdin.readline()
 def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 4))
 
 def warn(mask, x): return C.warn(x) if edge_en and (verbose & mask) else None
 
+if debug: C.dump_stack_on_error = 1
 def exit(x, sample, label, n=0, msg=str(debug)):
   if x: C.annotate(x, label)
   print_sample(sample, n)
-  C.printf(msg+'\n')
-  sys.exit()
+  C.error(msg) if x else sys.exit(0)
 
 def str2int(ip, plist):
   try:
@@ -68,7 +68,7 @@ def header_ip_str(line):
   if header_ip_str.first:
     if '[' in x.group(1): header_ip_str.position += 1
     header_ip_str.first = False
-  return C.str2list(line)[header_ip_str.position]
+  return x.group(4) #C.str2list(line)[header_ip_str.position]
 header_ip_str.first = True
 header_ip_str.position = 5
 def header_ip(line): return str2int(header_ip_str(line), (line, None))
@@ -87,7 +87,7 @@ def line_ip(line, sample=None):
   try:
     return str2int(line_ip_hex(line), (line, sample))
   except:
-    exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line)
+    exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line.strip())
 
 def line_timing(line):
   x = re.match(r"[^#]+# (\S+) (\d+) cycles \[\d+\] ([0-9\.]+) IPC", line)
@@ -111,7 +111,7 @@ def line_inst(line):
     if 'lea' in line: return 'lea'
     elif 'lock' in line: return 'lock'
     elif 'prefetch' in line: return 'prefetch'
-    elif is_type(CISC_TEST, line) or 'gather' in line: return 'load'
+    elif is_type(CISC_CMP, line) or 'gather' in line: return 'load'
     elif re.match(r"\s+\S+\s+[^\(\),]+,", line) or 'scatter' in line: return 'store'
     else: return 'load'
   else:
@@ -303,13 +303,13 @@ stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
 
-CISC_TEST='_cisc-test/cmp'
+CISC_CMP= '_cisc-cmp'
 def inst2pred(i):
   i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
     'add-sub':        '(add|sub).*',
     'inc-dec':        '(inc|dec).*',
-    CISC_TEST:        '(cmp[^x]|test).*\(',
-    '_risc-test/cmp':  '(cmp[^x]|test)[^\(]*',
+    CISC_CMP:         '(cmp[^x]|test).*\(',
+    '_risc-cmp':      '(cmp[^x]|test)[^\(]*',
   }
   if i is None: return sorted(list(i2p.keys()))
   return i2p[i] if i in i2p else i
@@ -323,7 +323,8 @@ def is_imix(t):
 Insts = inst2pred(None) + ['cmov', 'lea', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
 Insts_global = Insts + is_imix(None) + ['all']
 Insts_all = ['cond_backward', 'cond_forward', 'cond_non-taken', 'cond_fusible',
-             'cond_non-fusible', 'cond_taken-not-first'] + Insts_global
+             'cond_non-fusible', 'cond_taken-not-first', 'cond_LD-CMP-JCC fusible',
+             'cond_non-fusible CISC_CMP_IMM-JCC'] + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + Insts_all}
 hsts = {}
@@ -363,7 +364,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   glob['size_stats_en'] = skip_bad and not labels and not loop_ipc
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
-  edge_en = event.startswith(LBR_Event) and not ip_filter and not loop_ipc # config good for edge-profile
+  edge_en = C.any_in((LBR_Event, 'instructions:ppp'), event) and not ip_filter and not loop_ipc # config good for edge-profile
   if stat['total'] == 0:
     if edge_en: edge_en_init(indirect_en)
     if ret_latency: header_ip_str.position = 8
@@ -405,8 +406,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         if not ev in lbr_events:
           lbr_events += [ev]
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
-          if len(lbr_events) == 1: x += ' primary= %s%s%s' % (event, C.flag2str(' ', C.env2str('LBR_STOP')),
-            C.flag2str(' ', C.env2str('LBR_IMIX')))
+          def f2s(x): return C.flag2str(' ', C.env2str(x, prefix=True))
+          if len(lbr_events) == 1: x += ' primary= %s edge=%d%s%s' % (event, edge_en, f2s('LBR_STOP'), f2s('LBR_IMIX'))
           if ip_filter: x += ' ip_filter= %s' % str(ip_filter)
           if loop_ipc: x += ' loop= %s%s' % (hex(loop_ipc), C.flag2str(' history= ', C.env2int('LBR_PATH_HISTORY')))
           if verbose: x += ' verbose= %s' % hex(verbose)
@@ -508,8 +509,14 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           if edge_en and is_type(x86.COND_BR, line):
             if is_taken(line): glob['cond_taken-not-first'] += 1
             else: glob['cond_non-taken'] += 1
-            if x86.is_fusion(lines[-1], line): glob['cond_fusible'] += 1
-            else: glob['cond_non-fusible'] += 1
+            if x86.is_fusion(lines[-1], line):
+              glob['cond_fusible'] += 1
+              if len(lines) > 2 and is_type(x86.TEST_CMP, lines[-1]) and is_type(x86.LOAD, lines[-2]):
+                glob['cond_LD-CMP-JCC fusible'] += 1
+            else:
+              glob['cond_non-fusible'] += 1
+              if is_type(x86.TEST_CMP, lines[-1]) and x86.is_mem_imm(lines[-1]):
+                glob['cond_non-fusible CISC_CMP_IMM-JCC'] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)
@@ -544,10 +551,23 @@ read_sample.dump = C.env2int('LBR_DUMP', 0)
 def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
 def is_callret(l):    return is_type(x86.CALL_RET, l)
 
-# TODO: re-design this function to return: event-name, timestamp, etc
-def is_header(line):  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
+# TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictiorary if header or None otherwise
+def is_header(line):
+  def patch(x):
+    if debug: C.printf("\nhacking '%s' in: %s" % (x, line))
+    return line.replace(x, '-', 1)
+  if '[' in line[:50]:
+    p = line.split('[')[0]
+    assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()
+    if '::' in p: pass
+    elif ': ' in p: line = patch(': ')
+    elif ':' in p: line = patch(':')
+  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
+#    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
+# kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
+#                              re.match(r"(\s?[\S]*)\s+([\d\[\]\.\s]+):\s+\d+\s+(\S*:)\s", line) or
 #AUX data lost 1 times out of 33!
-                              re.match(r"(\w)([\w\s\d]+)(.)", line) or
+                              re.match(r"(\w)([\w\s]+)(.)", line) or
 #         python3 105303 [000] 1021657.227299:          cbr:  cbr: 11 freq: 1100 MHz ( 55%)               55e235 PyObject_GetAttr+0x415 (/usr/bin/python3.6)
                               re.match(r"([^:]*):(\s+)(\w+:)\s", line) or
 # instruction trace error type 1 time 1021983.206228655 cpu 1 pid 105468 tid 105468 ip 0 code 8: Lost trace data
@@ -635,10 +655,10 @@ def print_hist(hist_t, Threshold=0.01):
 def print_hist_sum(name, h):
   s = sum(hsts[h].values())
   print_stat(name, s, comment='histogram' if s else '')
-def print_stat(name, count, prefix='count', comment='', imix=False):
+def print_stat(name, count, prefix='count', comment='', ratio_of=None):
   def c(x): return x.replace(':', '-')
   def nm(x):
-    if not imix: return x
+    if not ratio_of or ratio_of[0] != 'ALL': return x
     n = (x if 'cond' in name else x.upper()) + ' '
     if x.startswith('vec'): n += 'comp '
     if x in is_imix(None):  n += 'insts-class'
@@ -646,22 +666,30 @@ def print_stat(name, count, prefix='count', comment='', imix=False):
     else: n += 'instructions'
     return n
   if len(comment): comment = '\t:(see %s below)' % c(comment)
-  elif imix: comment = '\t: %7s of ALL' % ratio(count, glob['all'])
-  print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 45 - len(prefix)), str(count), comment))
+  elif ratio_of: comment = '\t: %7s of %s' % (ratio(count, ratio_of[1]), ratio_of[0])
+  print('%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 60 - len(prefix)), str(count), comment))
 def print_estimate(name, s): print_stat(name, s, 'estimate')
+def print_imix_stat(n, c): print_stat(n, c, ratio_of=('ALL', glob['all']))
 
 def print_global_stats():
   def nc(x): return 'non-cold ' + x
   cycles, scl = os.getenv('PTOOLS_CYCLES'), 1e3
-  if cycles: print_estimate('LBR cycles coverage (x%d)' % scl, ratio(scl * stat['total_cycles'], int(cycles)))
+  if cycles:
+    lbr_ratio = ratio(scl * stat['total_cycles'], int(cycles))
+    print_estimate('LBR cycles coverage (x%d)' % scl, lbr_ratio)
+    stat['lbr-cov'] = float(lbr_ratio.split('%')[0])
+    if stat['lbr-cov'] < 3: C.warn('LBR poor coverage of overall time')
   if len(footprint): print_estimate(nc('code footprint [KB]'), '%.2f' % (len(footprint) / 16.0))
   if len(pages): print_stat(nc('code 4K-pages'), len(pages))
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
+  for n in (4, 5, 6): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
+                                 prefix='proxy count', ratio_of=('loops', len(loops)))
   if glob['size_stats_en']:
-    for x in ('backward', ' forward'): print_stat(x + ' taken conditional', glob['cond_' + x.strip()], imix=True)
-    for x in ('non-taken', 'fusible', 'non-fusible', 'taken-not-first'):
-      print_stat(x + ' conditional', glob['cond_' + x], imix=True)
-    for x in Insts_global: print_stat(x, glob[x], imix=True)
+    for x in ('backward', ' forward'): print_imix_stat(x + ' taken conditional', glob['cond_' + x.strip()])
+    for x in ('non-taken', 'fusible', 'non-fusible', 'taken-not-first', 
+			  'LD-CMP-JCC fusible', 'non-fusible CISC_CMP_IMM-JCC'):
+      print_imix_stat(x + ' conditional', glob['cond_' + x])
+    for x in Insts_global: print_imix_stat(x, glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')
@@ -676,7 +704,7 @@ def print_common(total):
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
   if edge_en and total: print_global_stats()
-  print('#Global-stats-end\n')
+  print('\n'.join(['# CMP denotes CMP or TEST instructions', '#Global-stats-end', '']))
   if verbose & 0xf00: C.warn_summary()
 
 def print_all(nloops=10, loop_ipc=0):
@@ -723,6 +751,7 @@ def print_all(nloops=10, loop_ipc=0):
     for l in ploops:
       print_loop(l[0], nloops)
       nloops -=  1
+    if 'lbr-cov' in stat and stat['lbr-cov'] < 1: C.error('LBR poor coverage (%.2f%%) of overall time' % stat['lbr-cov'])
 
 def print_br(br):
   print('[from: %s, to: %s, taken: %d]' % (hex(br['from']), hex(br['to']), br['taken']))

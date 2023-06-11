@@ -24,6 +24,8 @@ IMUL      = r"imul.*"
 INDIRECT  = r"(jmp|call).*%"
 CALL_RET  = '(call|ret)'
 COND_BR   = 'j[^m][^ ]*'
+TEST_CMP  = r"(test|cmp).?\s"
+LOAD      = r"mov.?\s.*\).*,"
 M_FUSION_INSTS = ['cmp', 'test', 'add', 'sub', 'inc', 'dec', 'and']
 
 def bytes(x): return '.byte 0x' + ', 0x'.join(x.split(' '))
@@ -90,5 +92,6 @@ def is_fusion(line1, line2):
   if jcc in JCC_GROUP2 and C.any_in(['cmp', 'add', 'sub'], line1): return True
   return False
 
-def is_memory(line):
-  return '(' in line and 'lea' not in line
+def is_memory(line): return '(' in line and 'lea' not in line
+
+def is_mem_imm(line): return is_memory(line) and '$' in line

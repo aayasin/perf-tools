@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.52
+__version__ = 2.53
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -473,7 +473,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         "| tee >(egrep '^\s+[0-9]+ :' | sort -n | ./ptage > %s-code-ips.log) "
         "| egrep -v -E '^(\-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
         logs['code'], base, base), '@annotate code', redir_out='2>/dev/null', timeit=(args.verbose > 2))
-    exe("egrep -w -5 '(%s) :' %s" % ('|'.join(exe2list("egrep '\s+[0-9]+ :' %s | cut -d: -f1 | sort -n | uniq | tail -%d" %
+    exe("egrep -w -5 '(%s) :' %s" % ('|'.join(exe2list("egrep '\s+[0-9]+ :' %s | cut -d: -f1 | sort -n | uniq | tail -%d | egrep -vw '^\s+0'" %
       (logs['code'], do['perf-ann-top']))), logs['code']), '@hottest %d+ blocks, all commands' % do['perf-ann-top'])
     if do['xed']: perf_script("-F insn --xed | grep . | %s | tee %s-hot-insts.log | tail" % (sort2up, base),
                               '@time-consuming instructions', data)

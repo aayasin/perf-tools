@@ -1,6 +1,7 @@
 #!/bin/sh
 CLONE=${CLONE:-2}
 PERFV=${PERFV:-5.15.17}
+LINUXK=${LINUXK:-5}
 LINUXV=${LINUXV:-5.17.15} # upgrade to < 6.3 for JIT support, not 6.4!.
                           # besides: https://github.com/andikleen/pmu-tools/issues/457
 OBJDUMP=${OBJDUMP:-0}
@@ -10,7 +11,7 @@ set -xe
 if [ $CLONE -eq 1 ]; then
   git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 elif [ $CLONE -eq 2 ]; then
-  wget https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-$LINUXV.tar.xz
+  wget https://cdn.kernel.org/pub/linux/kernel/v$LINUXK.x/linux-$LINUXV.tar.xz
   tar -vxf linux-$LINUXV.tar.xz
   perfdir=linux-$LINUXV/tools/perf
 else

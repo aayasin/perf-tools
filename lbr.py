@@ -324,7 +324,7 @@ Insts = inst2pred(None) + ['cmov', 'lea', 'jmp', 'call', 'ret', 'push', 'pop', '
 Insts_global = Insts + is_imix(None) + ['all']
 Insts_all = ['cond_backward', 'cond_forward', 'cond_non-taken', 'cond_fusible',
              'cond_non-fusible', 'cond_taken-not-first', 'cond_LD-CMP-JCC fusible',
-             'cond_non-fusible CISC_CMP_IMM-JCC'] + Insts_global
+             'cond_CISC_CMP_IMM-JCC non-fusible'] + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + Insts_all}
 hsts = {}
@@ -516,7 +516,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
             else:
               glob['cond_non-fusible'] += 1
               if is_type(x86.TEST_CMP, lines[-1]) and x86.is_mem_imm(lines[-1]):
-                glob['cond_non-fusible CISC_CMP_IMM-JCC'] += 1
+                glob['cond_CISC_CMP_IMM-JCC non-fusible'] += 1
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)
@@ -687,7 +687,7 @@ def print_global_stats():
   if glob['size_stats_en']:
     for x in ('backward', ' forward'): print_imix_stat(x + ' taken conditional', glob['cond_' + x.strip()])
     for x in ('non-taken', 'fusible', 'non-fusible', 'taken-not-first', 
-			  'LD-CMP-JCC fusible', 'non-fusible CISC_CMP_IMM-JCC'):
+			  'LD-CMP-JCC fusible', 'CISC_CMP_IMM-JCC non-fusible'):
       print_imix_stat(x + ' conditional', glob['cond_' + x])
     for x in Insts_global: print_imix_stat(x, glob[x])
   if 'indirect-x2g' in hsts:

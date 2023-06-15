@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.53
+__version__ = 2.54
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -32,7 +32,7 @@ if Uname_a.startswith('Darwin'): C.error("Are you on MacOS? it is not supported 
 tunable2pkg = {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python3-pip'}
 
 def isfile(f): return f and os.path.isfile(f)
-Find_perf = 'sudo find / -name perf -executable -type f'
+Find_perf = 'sudo find / -name perf -executable -type f | grep ^/'
 LDLAT_DEF = '7'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
@@ -235,6 +235,11 @@ def tools_update(kernels=[], level=3):
 
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
 def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' % (p, C.file2str(p), C.flag2str(' >> ', out)))
+def find_perf():
+  exe(Find_perf + " | tee find-perf.txt", fail=False)
+  for x in C.file2lines('find-perf.txt'):
+    print('%s: %s' % (x, exe_1line('%s --version' % x)))
+
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): set_sysfile(p, str(v))
   TIME_MAX = '/proc/sys/kernel/perf_cpu_time_max_percent'
@@ -648,6 +653,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
         cycles = get_stat(pmu.event('cycles'), 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
+        if args.verbose > 2: lbr_env += " LBR_VERBOSE=0x800"
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         misp, cmd, msg = '', "-F +brstackinsn --xed", '@info'
@@ -885,7 +891,7 @@ def main():
     elif c == 'build-perf':   exe('%s ./do.py setup-all --install-perf build -v%d --tune %s' % (do['python'],
       args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+['xed', 'tee', 'loop-ideal-ipc'])])))
     elif c == 'setup-perf':   setup_perf()
-    elif c == 'find-perf':    exe(Find_perf)
+    elif c == 'find-perf':    find_perf()
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(level=int(param[0]))
     # TODO: generalize disable/enable/suspend of things that follow

@@ -238,7 +238,7 @@ def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' % (p, C.file2str(p
 def find_perf():
   exe(Find_perf + " | tee find-perf.txt", fail=False)
   for x in C.file2lines('find-perf.txt'):
-    print('%s: %s' % (x, exe_1line('%s --version' % x)))
+    C.printc('%s: %s' % (x, exe_1line('%s --version' % x)), col=C.color.BLACK)
 
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): set_sysfile(p, str(v))

@@ -17,6 +17,7 @@ import os, pickle, re, subprocess, sys
 # logging
 #
 class color:
+  BLACK     = '\033[0m'
   BLUE      = '\033[94m'
   CYAN      = '\033[96m'
   DARKCYAN  = '\033[36m'

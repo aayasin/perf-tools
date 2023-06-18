@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.74
+__version__= 0.80
 
 import common as C, pmu
 import csv, re, os.path
@@ -114,8 +114,9 @@ def parse_perf(l):
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
     if name.count('_') > 1 and name.islower() and not re.match('^(perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
-      ignore = 2 if name.startswith('br_') else 1
-      Name = name.replace('_', '^', ignore).replace('_', '.', 1).replace('^', '_').upper()
+      base_event = name.split(':')[0]
+      Name = name.replace(base_event, pmu.toplev2intel_name(base_event))
+      Name = Name.replace(':C1', ':c1')
       if stats['verbose']: print(name, '->', Name)
       name = Name
     val = items[0].replace(',', '')

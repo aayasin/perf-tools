@@ -105,6 +105,6 @@ Rocket Lake | 5.11 |
 Alder Lake | 5.13 | 5.17
 Raptor Lake | 5.18 |
 Sapphire Rapids | 5.18 |
-Meteor Lake | 6.3-rc3 | 6.3
+Meteor Lake | 6.4 | 6.3 or 6.5 onwards
 
 Besides, perf tool version 5.14 or newer is required (except 6.4 which is broken). See `do.py --install-perf` for more.

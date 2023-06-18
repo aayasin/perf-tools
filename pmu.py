@@ -12,7 +12,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 
-import os, platform, sys
+import json, os, platform, sys
 import common as C
 if sys.version_info[0] < 3:
   from multiprocessing import cpu_count
@@ -112,6 +112,20 @@ def perf_format(es):
     else: rs += [ e ]
   return ','.join(rs)
 
+def eventlist():
+  f = cpu('name') or name()
+  if cpu('CPU').endswith('X'): f += 'x'
+  print('%s/.cache/pmu-events/%s_core.json' % (os.getenv("HOME"), f))
+  return '%s/.cache/pmu-events/%s_core.json' % (os.getenv("HOME"), f)
+
+Toplev2Intel = {}
+def toplev2intel_name(e):
+  if not len(Toplev2Intel):
+    with open(eventlist()) as file:
+      db = json.load(file)['Events']
+      for event in db:
+        Toplev2Intel[event['EventName'].lower().replace('.', '_')] = event['EventName']
+  return Toplev2Intel[e]
 #
 # CPU, cpu_ prefix
 #
@@ -142,6 +156,7 @@ def cpu(what, default=None):
     cpu.state = {
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
+      'name':         cs.true_name,
       'smt-on':       cs.ht,
       'socketcount':  cs.sockets,
       'x86':          int(platform.machine().startswith('x86')),

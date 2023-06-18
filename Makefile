@@ -23,7 +23,9 @@ all: tramp3d-v4
 	@echo done
 git:
 	$(MGR) -y -q install git
-install: link-python llvm
+openmp:
+	$(MGR) -y -q install libomp-dev
+install: link-python llvm openmp
 	make -s -C workloads/mmm install
 link-python:
 	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
@@ -42,6 +44,7 @@ tramp3d-v4: pmu-tools/workloads/CLTRAMP3D
 	./CLTRAMP3D
 run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
+	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s1 --tune :perf-stat:"'-C2'" # for profiling
 test-mem-bw: run-mem-bw
 	sleep 2s
 	set -o pipefail; $(DO) profile -s2 $(ST) -o $< $(RERUN) | $(SHOW)

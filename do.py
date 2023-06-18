@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.54
+__version__ = 2.55
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -312,7 +312,8 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
       v = msr_read(m)
       exe('echo "MSR 0x%x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x00000001', 'cpuid'), out))
-  exe("sudo dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d, label('Performance E|micro'), out, d, label('BIOS '), out))
+  exe("sudo dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d,
+    label('Command line|Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
   new_line()          #PMU
   C.fappend('PMU: %s\nTMA version:\t%s' % (do['pmu'], pmu.cpu('TMA version')), out)

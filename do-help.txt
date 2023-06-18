@@ -35,8 +35,8 @@ optional arguments:
   -v VERBOSE, --verbose VERBOSE
                         verbose level; 0:none, 1:commands, 2:+verbose-on
                         metrics|build|sub-commands, 3:+toplev --perf|ASM on
-                        kernel build, 4:+args parsing, 5:+event-groups,
-                        6:ocperf verbose, .. 9:anything (default: 0)
+                        kernel build|greedy lbr.py, 4:+args parsing, 5:+event-
+                        groups, 6:ocperf verbose, .. 9:anything (default: 0)
   -pm PROFILE_MASK, --profile-mask PROFILE_MASK
                         mask to control stages in the profile command. See
                         profile-mask-help.md for details (default: 12671)

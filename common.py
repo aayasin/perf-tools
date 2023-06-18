@@ -27,6 +27,7 @@ class color:
   PURPLE    = '\033[95m'
   RED       = '\033[91m'
   YELLOW    = '\033[93m'
+  BLINK = '\033[5m'
   BOLD = '\033[1m'
   UNDERLINE = '\033[4m'
   END = '\033[0m'

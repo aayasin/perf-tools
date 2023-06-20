@@ -44,7 +44,7 @@ tramp3d-v4: pmu-tools/workloads/CLTRAMP3D
 	./CLTRAMP3D
 run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
-	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s1 --tune :perf-stat:"'-C2'" # for profiling
+	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s1 --tune :perf-stat:\"\'-C2\'\" # for profiling
 test-mem-bw: run-mem-bw
 	sleep 2s
 	set -o pipefail; $(DO) profile -s2 $(ST) -o $< $(RERUN) | $(SHOW)

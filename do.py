@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.56
+__version__ = 2.57
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -537,8 +537,10 @@ def profile(mask, toplev_args=['mvl6', None]):
         exe("%s --stdio -i %s > %s " % (perf_view(c), perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
   if en(12):
-    cmd, log = toplev_V('-mvl2', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']).replace('+', '-'))
+    cmd, log = toplev_V('-mvl2%s' % ('' if args.sys_wide else ' --no-uncore'),
+                        nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']).replace('+', '-'))
     profile_exe(cmd + ' | sort | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
+    if args.profile_mask & 0x1012 and args.repeat == 3: stats.csv2stat(logs['tma'].replace('.log', '-perf.csv'))
 
   if en(13):
     cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')

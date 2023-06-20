@@ -6,7 +6,6 @@
 #   This program is distributed in the hope it will be useful, but WITHOUT ANY WARRANTY; without even the implied
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-from __future__ import print_function
 import common as C
 import pmu
 import os
@@ -74,22 +73,25 @@ regs = (('w', ('%ax', '%bx', '%cx', '%dx', '%di', '%si', '%bp', '%sp')),
 
 
 def run_llvm(hitcounts, llvm_log, loop, loop_ipc):
-  llvm_input_name = ".ipc_%s.txt" % str(hex(loop_ipc))
-  C.exe_cmd(C.grep('0%x' % loop_ipc, hitcounts, '-A%d' % (loop['size'] - 1)),
+  if os.path.getsize(hitcounts) == 0: C.error(f"{hitcounts} file is empty")
+  llvm_input_name = ".ipc_%s.txt" % loop_ipc
+  C.exe_cmd(C.grep('0%x' % int(loop_ipc, 16), hitcounts, '-A%d' % (loop['size'] - 1)),
             redir_out=' | sed -e "s/^[ \t]*//" | cut -d " " -f 2- > %s' % llvm_input_name)
   lbrmca(llvm_input_name, llvm_log=llvm_log, loop_ipc=loop_ipc)
 
 
 def get_llvm(hitcounts, llvm_log, loop, loop_ipc, info='IPC'):
-  output = C.exe_one_line(C.grep(str(hex(loop_ipc)), llvm_log, '-c'))
+  output = C.exe_one_line(C.grep(loop_ipc, llvm_log, '-c'))
   if int(output) == 0:
     run_llvm(hitcounts, llvm_log, loop, loop_ipc)
-
   result = None
   # TODO: think how to change the fixed number of lines (10) for future usages
-  result_str = C.exe_one_line('%s | %s' % (C.grep(str(hex(loop_ipc)), llvm_log, '-A10'), C.grep(info)))
+  result_str = C.exe_one_line('%s | %s' % (C.grep(loop_ipc, llvm_log, '-A10'), C.grep(info)))
   if info == 'IPC':
-    result = float(result_str.split()[1])
+    try:
+      result = float(result_str.split()[1])
+    except IndexError:
+      C.error(f"bogus IPC line:\n{result_str}\nat {llvm_log} for loop {loop_ipc}")
   return result
 
 
@@ -138,7 +140,7 @@ def lbrmca(input_file_path, args='', llvm_log=None, loop_ipc=None):
       reg = reg.replace("%", "%%")
       cmd = "printf '%s' | %s %s" % (reg, LLVM, args)
       if llvm_log and loop_ipc:
-        C.printc('llvm-mca output of loop at %s:\n' % str(hex(loop_ipc)),
+        C.printc('llvm-mca output of loop at %s:\n' % loop_ipc,
                    C.color.BOLD + C.color.UNDERLINE, log_only=True, outfile=llvm_log)
         cmd += ">> %s && printf '\n\n' >> %s" % (llvm_log, llvm_log)
         cmd_print = ">> %s\n" % cmd.replace('\n', '\\n')

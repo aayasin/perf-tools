@@ -731,7 +731,7 @@ def print_all(nloops=10, loop_ipc=0):
         if lp['taken'] == 0:
           C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
           'Hitcounts & ASM of loop %s' % hex(loop_ipc))
-          if llvm_log: lp['IPC-ideal'] = llvm_mca_lbr.get_llvm(hitcounts, llvm_log, lp, loop_ipc)
+          if llvm_log: lp['IPC-ideal'] = llvm_mca_lbr.get_llvm(hitcounts, llvm_log, lp, hex(loop_ipc))
         else: lp['attributes'] += ';likely_non-contiguous'
       find_print_loop(loop_ipc, sloops)
     else:

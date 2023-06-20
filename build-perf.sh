@@ -34,8 +34,8 @@ make clean
 #make PYTHON=false PYTHON_CONFIG=false
 make NO_JEVENTS=1 # a perf tool overhead bug in Intel event names handling
 ls -l $PWD/perf
-cp perf ../../../../
 cd -
+ln -sf $perfdir/perf ../perf
 
 if [ $OBJDUMP -eq 1 ]; then
   sudo apt-get install -y libgmp-dev

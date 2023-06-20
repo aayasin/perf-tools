@@ -262,6 +262,7 @@ def csv2stat(filename):
 
 def main():
   stats['verbose'] = 1
+  print(pmu.cpu('eventlist'))
   s = csv2stat(C.arg(1))
   C.exe_cmd("echo scp $USER@`hostname -A | cut -d' ' -f1`:$PWD/%s ." % s)
 

@@ -112,16 +112,10 @@ def perf_format(es):
     else: rs += [ e ]
   return ','.join(rs)
 
-def eventlist():
-  f = cpu('name') or name()
-  if cpu('CPU').endswith('X'): f += 'x'
-  print('%s/.cache/pmu-events/%s_core.json' % (os.getenv("HOME"), f))
-  return '%s/.cache/pmu-events/%s_core.json' % (os.getenv("HOME"), f)
-
 Toplev2Intel = {}
 def toplev2intel_name(e):
   if not len(Toplev2Intel):
-    with open(eventlist()) as file:
+    with open(cpu('eventlist')) as file:
       db = json.load(file)['Events']
       for event in db:
         Toplev2Intel[event['EventName'].lower().replace('.', '_')] = event['EventName']
@@ -135,7 +129,12 @@ def cpu_has_feature(feature):
 
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
-  if cpu.state: return cpu.state if what == 'all' else (cpu.state[what] if what in cpu.state else warn())
+  if cpu.state:
+    if what == 'all':
+      s = cpu.state.copy()
+      for x in ('eventlist', 'x86'): del s[x]
+      return s
+    return cpu.state if what == 'ALL' else (cpu.state[what] if what in cpu.state else warn())
   pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
   if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
       'git clone --recurse-submodules https://github.com/aayasin/perf-tools'))
@@ -150,13 +149,14 @@ def cpu(what, default=None):
     return d
   try:
     sys.path.append(pmutools)
-    import tl_cpu
+    import tl_cpu, event_download
     cs = tl_cpu.CPU((), False, tl_cpu.Env()) # cpu.state
     if what == 'get-cs': return cs
     cpu.state = {
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
-      'name':         cs.true_name,
+      'eventlist':    event_download.eventlist_name(),
+      #'name':         cs.true_name,
       'smt-on':       cs.ht,
       'socketcount':  cs.sockets,
       'x86':          int(platform.machine().startswith('x86')),
@@ -203,13 +203,9 @@ def dsb_set_index(ip):
   return None
 
 def main():
-  d = cpu('all')
-  if len(sys.argv) > 1:
-    k = sys.argv[1]
-    if k in d:
-      print(d[k])
-      return
-  print(d)
+  ALL = len(sys.argv) > 1 and sys.argv[1] == 'ALL'
+  if len(sys.argv) > 1 and not ALL: return print(cpu(sys.argv[1]))
+  print(cpu('ALL' if ALL else 'all'))
 
 if __name__ == "__main__":
   main()

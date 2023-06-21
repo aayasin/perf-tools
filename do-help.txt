@@ -51,9 +51,12 @@ optional arguments:
   --stdout              keep profiling unfiltered results in stdout (default:
                         False)
   --power               collect power metrics/events as well (default: False)
-  -s SYS_WIDE, --sys-wide SYS_WIDE
-                        profile system-wide for x seconds. disabled by default
+  -d DELAY, --delay DELAY
+                        delay profiling for x seconds. disabled by default
                         (default: 0)
+  -s SYS_WIDE, --sys-wide SYS_WIDE
+                        system-wide profiling for x seconds. disabled by
+                        default (default: 0)
   -o OUTPUT, --output OUTPUT
                         basename to use for output files (default: None)
   -g GEN_ARGS, --gen-args GEN_ARGS

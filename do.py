@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.57
+__version__ = 2.60
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -494,7 +494,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def toplev_V(v, tag='', nodes=do['nodes'],
                tlargs = toplev_args[1] if toplev_args[1] else args.toplev_args):
     o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
-    c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, o.replace('.log', '-perf.csv'), tlargs, r)
+    c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, C.toplev_log2csv(o), tlargs, r)
     if ' --global' in c:
       # https://github.com/andikleen/pmu-tools/issues/453
       C.warn('Global counting is subject to system noise (cpucount=%d)' % pmu.cpu('cpucount'))
@@ -540,7 +540,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd, log = toplev_V('-mvl2%s' % ('' if args.sys_wide else ' --no-uncore'),
                         nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']).replace('+', '-'))
     profile_exe(cmd + ' | sort | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
-    if args.profile_mask & 0x1012 and args.repeat == 3: stats.csv2stat(logs['tma'].replace('.log', '-perf.csv'))
+    if args.profile_mask & 0x1012 and args.repeat == 3 and do['help']>=0: stats.csv2stat(C.toplev_log2csv(logs['tma']))
 
   if en(13):
     cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
@@ -799,6 +799,7 @@ def build_kernel(dir='./kernels/'):
   if args.verbose > 2: exe(fixup("%s -dw ./%s | grep -A%d pause | egrep '[ 0-9a-f]+:'" % (do['objdump'], app, do['asm-dump'])), '@kernel ASM')
 
 def parse_args():
+  def help_s_arg(x): return x + ' profiling for x seconds. disabled by default'
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
     defs={'perf': 'perf', 'pmu-tools': '%s %s/pmu-tools' % (do['python'], C.dirname()),
@@ -810,7 +811,8 @@ def parse_args():
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('--stdout', action='store_const', const=True, default=False, help='keep profiling unfiltered results in stdout')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
-  ap.add_argument('-s', '--sys-wide', type=int, default=0, help='profile system-wide for x seconds. disabled by default')
+  ap.add_argument('-d', '--delay', type=int, default=0, help=help_s_arg('delay'))
+  ap.add_argument('-s', '--sys-wide', type=int, default=0, help=help_s_arg('system-wide'))
   ap.add_argument('-o', '--output', help='basename to use for output files')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
@@ -850,6 +852,9 @@ def main():
     do['python-pkgs'] += ['matplotlib', 'brewer2mpl']
   if do['super']:
     do['perf-stat-def'] += ',syscalls:sys_enter_sched_yield'
+  do_cmd = '%s # version %s' % (C.argv2str(), version())
+  if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
+  C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   if args.mode == 'process':
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
@@ -864,13 +869,16 @@ def main():
     args.toplev_args += ' -a'
     if not do['comm']: do['perf-filter'] = 1
     args.profile_mask &= ~0x4 # disable system-wide profile-step
+  if args.delay:
+    if profiling(): C.info('delay profiling by %d seconds' % args.delay)
+    delay = ' -D %d' % (args.delay * 1000)
+    for x in ('stat', 'stat-ipc'): do['perf-'+x] += delay
+    for x in record_steps: do['perf-'+x] += delay
+    args.toplev_args += delay
   if do['container']:
     if profiling(): C.info('container profiling')
     for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'
   if args.verbose > 2: C.info('timing perf tool post-processing')
-  do_cmd = '%s # version %s' % (C.argv2str(), version())
-  if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
-  C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   if args.app and '|' in args.app: C.error("Invalid use of pipe in app: '%s'. try putting it in a .sh file" % args.app)
   if not do['batch'] or args.mode == 'profile':
     cmds_file = '.%s.cmd' % uniq_name()

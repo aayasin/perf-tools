@@ -250,7 +250,7 @@ def csv2stat(filename):
     return filename.replace('toplev-%s-perf.csv' % x.group(1), '')
   patch_metrics()
   base = basename()
-  uarch = params(read_toplev(filename.replace('-perf.csv', '.log'), 'SMT_on'))
+  uarch = params(read_toplev(C.toplev_log2csv(filename), 'SMT_on'))
   if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
   d.update(user_events(base + 'perf_stat-r3.log'))
   stat = base + uarch + '.stat'

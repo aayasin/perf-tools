@@ -5,7 +5,7 @@ CMD = profile
 CPU = $(shell ./pmu.py CPU)
 DO = ./do.py
 DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10 $(DO_ARGS)
-DO2 = $(DO) profile -a pmu-tools/workloads/BC2s $(DO_ARGS)
+DO2 = $(DO) profile -a 'workloads/BC.sh 3' $(DO_ARGS)
 FAIL = (echo "failed! $$?"; exit 1)
 MAKE = make --no-print-directory
 METRIC = -m IpCall
@@ -106,7 +106,7 @@ test-stats: stats.py
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
 
 clean:
-	rm -rf {run,BC2s,datadep,$(AP)}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
+	rm -rf {run,BC,datadep,$(AP),openssl}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
 pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
@@ -118,6 +118,7 @@ pre-push: help
 	$(MAKE) test-default PM=313e                            # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
+	$(DO) profile -a './workloads/BC.sh 7' -d1 > BC-7.log 2>&1 || $(FAIL) # tests --delay
 	$(MAKE) test-default DO_ARGS=":calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \
 	    CMD='suspend-smt profile tar' PM=1931a &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\

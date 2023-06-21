@@ -228,6 +228,7 @@ def iter2str(x, sep=",\n\t"):
 def dict2str(d, sep=",\n\t"): return iter2str(sorted(d.items()), sep)
 def hist2str(h, top=20): return iter2str(hist2slist(h)[-top:])
 def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])
+def toplev_log2csv(f): return f.replace('.log', '-perf.csv')
 
 # chop - clean a list of charecters from a string
 # @s:     input string
@@ -246,6 +247,11 @@ def chop(source, stuff=CHOP_STUFF):
 def any_in(l, s):
   for i in l:
     if i in s: return 1
+  return 0
+
+def startswith(l, s):
+  for i in l:
+    if s.startswith(i): return 1
   return 0
 
 def is_num(x, hex=False):

@@ -2,7 +2,7 @@
 CLONE=${CLONE:-2}
 PERFV=${PERFV:-5.15.17}
 LINUXK=${LINUXK:-5}
-LINUXV=${LINUXV:-5.17.15} # upgrade to < 6.3 for JIT support, not 6.4!.
+LINUXV=${LINUXV:-5.13.19} # upgrade to < 6.3 for JIT support, not 6.4!.
                           # besides: https://github.com/andikleen/pmu-tools/issues/457
 OBJDUMP=${OBJDUMP:-0}
 
@@ -35,7 +35,7 @@ make clean
 make NO_JEVENTS=1 # a perf tool overhead bug in Intel event names handling
 ls -l $PWD/perf
 cd -
-ln -sf $perfdir/perf ../perf
+ln -sf $PWD/$perfdir/perf ../perf
 
 if [ $OBJDUMP -eq 1 ]; then
   sudo apt-get install -y libgmp-dev

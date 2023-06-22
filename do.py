@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.60
+__version__ = 2.61
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -401,7 +401,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       if pmu.hybrid(): evts = evts.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
       if do['perf-stat-add']: evts += append(pmu.basic_events(), evts)
     if args.events: evts += append(pmu.perf_format(args.events), evts)
-    if args.events or args.metrics: grep = '' #keep output unfiltered with user-defined events
+    if args.events or args.metrics: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
     if evts != '': perf_args += ' -e "%s,%s"' % (do['perf-stat-def'], evts)
     log = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log')
     stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
@@ -841,7 +841,7 @@ def main():
         exec(t)
   if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
   perfv = exe_1line(args.perf + ' --version', heavy=False)
-  if '6.4' in perfv: error('Unsupported perf tool: ' + perfv)
+  if C.any_in([x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')], perfv): C.error('Unsupported perf tool: ' + perfv)
   do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
   if do['perf-stat-add']:
     x = ',branches,branch-misses'

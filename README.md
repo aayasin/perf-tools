@@ -107,4 +107,4 @@ Raptor Lake | 5.18 |
 Sapphire Rapids | 5.18 |
 Meteor Lake | 6.4 | 6.3 or 6.5 onwards
 
-Besides, perf tool version 5.14 or newer is required (except 6.4 which is broken). See `do.py --install-perf` for more.
+Besides, perf tool version 5.13 or newer is required (except observed [broken perf versions](settings/perf-bad.txt)). See `do.py --install-perf` for more.

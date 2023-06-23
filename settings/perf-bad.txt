@@ -1,2 +1,4 @@
-5.17 	# perf -D option is broken
+5.13 	# perf -D option is broken
+5.17
+5.18
 6.4     # perf-stat default output got busted

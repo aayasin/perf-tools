@@ -301,8 +301,9 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   if args.mode == 'process': return
   exe('uname -a | sed s/Linux/Linux:/ > ' + out, 'logging setup')
   log_patch("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME'")
-  for f in ('/sys/kernel/mm/transparent_hugepage/enabled', ):
-    prn_sysfile(f, out)
+  for f in ('/sys/kernel/mm/transparent_hugepage/enabled',
+            '/sys/devices/system/node/node0/memory_side_cache/index1/size'):
+    if isfile(f): prn_sysfile(f, out)
   log_patch("sudo sysctl -a | tee setup-sysctl.log | egrep 'randomize_va_space|hugepages ='")
   exe("env > setup-env.log")
   new_line()          #CPU
@@ -323,6 +324,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   for x in (do['compiler'].split()[0], 'as', 'ldd'): version(x)
   if do['loop-ideal-ipc']: log_patch('%s --version | %s >> %s' % (C.Globals['llvm-mca'], label('version', 'llvm-mca'), out))
   new_line()          #Memory
+  exe('find /sys/devices/system/node > setup-node.log')
   if do['numactl']: exe('numactl -H >> ' + out)
   new_line()          #Devices, etc
   exe("lsmod | tee setup-lsmod.log | egrep 'Module|kvm' >> " + out)

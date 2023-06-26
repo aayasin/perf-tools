@@ -51,6 +51,5 @@ done
 x=callchain
 $CC -O0 -fno-inline $x.c -o $x
 $CC -O0 -pthread false-sharing.c -o false-sharing
+$CC -march=native -DRDTSC_ONLY tpause.c -o rdtsc
 $CC -march=native tpause.c -o tpause
-
-

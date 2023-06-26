@@ -1,4 +1,5 @@
-// Microbenchmark for TPAUSE instruction for optimized waiting from user-land
+// Microbenchmark for TPAUSE for optimized waiting from user-land
+//   as well as RDTSC instruction
 // Original author:  Grant Zhou
 // modified by Sinduri Gundu, Ahmad Yasin
 // June 2023
@@ -23,6 +24,10 @@ int main(int argc, char *argv[])
     state = (state == 1) ? C0_1 : C0_2;
     const unsigned long long tsc_tgt = atol(argv[2]) + __rdtsc();
     while (__rdtsc() < tsc_tgt) {            //run for specified tsc
+#ifndef RDTSC_ONLY
         _tpause(state, tsc_tgt);             //put proc in C0.x substate
+#else
+        asm("	NOP");
+#endif
     }
 }

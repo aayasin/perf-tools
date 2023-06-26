@@ -40,9 +40,11 @@ $PY ./gen-kernel.py -i 'xor %eax,%eax' 'xor %ecx,%ecx' cpuid -n1 > cpuid.c
 $PY ./gen-kernel.py -i 'movl 0x0(%rsp),%ecx' 'test %ecx,%ecx' 'jg Lbl_end' -n 1 > ld-test-jcc-3i.c
 $PY ./gen-kernel.py -i 'testq $0x0,0x0(%rsp)' 'jg Lbl_end' -n 1 > ld-test-jcc-2i-imm.c
 $PY ./gen-kernel.py -i 'testq %r12,0x0(%rsp)' 'jg Lbl_end' -n 1 -p 'movq $0x0,%r12' > ld-test-jcc-2i-reg.c
+$PY ./gen-kernel.py -i 'VSHUFPS $0xFF,%YMM1,%YMM2,%YMM3' -n 5 > vshufps.c
+$PY ./gen-kernel.py -i 'VPSHUFB %YMM1,%YMM2,%YMM3' -n 5 > vpshufb.c
 fi
 
-ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-test-jcc-{3i,2i-{imm,reg}},memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit"
+ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-test-jcc-{3i,2i-{imm,reg}},memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit,vshufps,vpshufb"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

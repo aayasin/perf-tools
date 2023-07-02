@@ -699,8 +699,6 @@ def print_global_stats():
                    prefix='misprediction-ratio', comment='paths histogram')
 
 def print_common(total):
-  def print_notes():
-    print('# CMP denotes cmp or test instructions\n')
   if glob['size_stats_en']:
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1

@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.80
+__version__= 0.81
 
 import common as C, pmu
 import csv, re, os.path
@@ -32,7 +32,7 @@ def print_metrics(app):
 def write_stat(app): return csv2stat(C.command_basename(app) + '.toplev-vl6-perf.csv')
 
 # internal methods
-def get_stat_int(s, c, val=-1, stat_file=None):
+def get_stat_int(s, c, stat_file=None, val=-1):
   rollup(c, stat_file)
   try:
     val = sDB[c][s]
@@ -105,7 +105,7 @@ def parse_perf(l):
     name = 'App'
     val = l.split("'")[1]
     name2 = '#-runs'
-    val2 = int(l.split("(")[1].split(' ')[0])
+    val2 = int(l.split("(")[1].split(' ')[0]) if '(' in l else 1
   elif 'time elapsed' in l:
     name = 'time'
     val = float(items[0])

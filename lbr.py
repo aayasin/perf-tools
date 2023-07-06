@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 2.01 # see version line of do.py
+__version__= 2.02 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -33,12 +33,13 @@ debug = os.getenv('LBR_DBG')
 verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings
 use_cands = os.getenv('LBR_USE_CANDS')
 user_imix = C.env2list('LBR_IMIX', ['vpmovmskb', 'imul'])
+user_loop_imix = C.env2list('LBR_LOOP_IMIX', ['zcnt'])
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 def ratio(a, b): return C.ratio(a, b) if b else '-'
 def read_line(): return sys.stdin.readline()
-def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 4))
+def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 3))
 
 def warn(mask, x): return C.warn(x) if edge_en and (verbose & mask) else None
 
@@ -103,8 +104,8 @@ vec_size = 3 if pmu.cpu_has_feature('avx512vl') else 2
 def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
 def vec_len(i, t='int'): return 'vec%d-%s' % (128 * (2 ** i), t)
 def line_inst(line):
-  pInsts = ('cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper', 'zcnt')
-  allInsts = ['nop', 'lea', 'cisc-test'] + MEM_INSTS + list(pInsts)
+  pInsts = ['cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper'] + user_loop_imix
+  allInsts = ['nop', 'lea', 'cisc-test'] + MEM_INSTS + pInsts
   if not line: return allInsts
   if 'nop' in line: return 'nop'
   elif '(' in line:  # load/store take priority in CISC insts
@@ -231,8 +232,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens,
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds, fusion = 1, {}, [], 0
-      # TODO: Add env to generalize zcnt as loop identifier here and in line_inst()
-      types = ['taken', 'lea', 'cmov'] + MEM_INSTS + ['zcnt']
+      types = ['taken', 'lea', 'cmov'] + MEM_INSTS + user_loop_imix
       for i in types: cnt[i] = 0
       x = len(lines)-2
       while x >= 1:

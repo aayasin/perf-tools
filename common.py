@@ -310,7 +310,7 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   if not usg: return common_args
   ap.add_argument('-r', '--repeat', default=3, type=int, help='times to run per-app counting and topdown-primary profile steps')
   ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
-  ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; 0:none, 1:commands, '
+  ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; -1: quiet; 0:info, 1:commands, '
     '2:+verbose-on metrics|build|sub-commands, 3:+toplev --perf|ASM on kernel build|greedy lbr.py, 4:+args parsing, '
     '5:+event-groups, 6:ocperf verbose, .. 9:anything')
   add_hex_arg(ap, '-pm', '--profile-mask', mask, 'stages in the profile command. See profile-mask-help.md for details')

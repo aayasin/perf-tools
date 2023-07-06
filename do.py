@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.62
+__version__ = 2.63
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -158,7 +158,7 @@ def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) # don't append to cmds_
 def prn_line(f): exe_v0('echo >> %s' % f)
 
 def print_cmd(x, show=True):
-  if show and not do['batch']: C.printc(x)
+  if show and not do['batch'] and args.verbose >= 0: C.printc(x)
   if len(vars(args))>0 and do['cmds_file']: do['cmds_file'].write('# ' + x + '\n')
 
 def exe_1line(x, f=None, heavy=True):
@@ -458,7 +458,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     return record_name(do[x])
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
-  if args.profile_mask & ~0x1: C.info('App: ' + r)
+  if args.profile_mask & ~0x1 and args.verbose >= 0: C.info('App: ' + r)
   if en(1): logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
   if en(2): perf_stat('-a', 'system-wide counting', 2, a_events(), grep='| egrep "seconds|insn|topdown|pkg"')
   
@@ -680,7 +680,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         perf_script(cmd, msg, data)
         if do['imix'] & 0x4: exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
             "@instruction-mix no operands")
-        if args.verbose: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)
+        if args.verbose > 0: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)
         report_info(info)
       else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and isfile(loops):
@@ -831,7 +831,7 @@ def main():
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
-  if args.print_only and args.verbose == 0: args.verbose = 1
+  if args.print_only and args.verbose <= 0: args.verbose = 1
   do['nodes'] += ("," + args.nodes)
   if args.tune:
     for tlists in args.tune:
@@ -861,7 +861,7 @@ def main():
     C.info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
     if args.profile_mask & 0x300: args.profile_mask |= 0x2
-  elif args.mode == 'both' and args.profile_mask & 0x100 and not (args.profile_mask & 0x2):
+  elif args.mode == 'both' and args.verbose >= 0 and args.profile_mask & 0x100 and not (args.profile_mask & 0x2):
     C.warn("Better enable 'per-app counting' profile-step with LBR; try '-pm %x'" % (args.profile_mask | 0x2))
   record_steps = ('record', 'lbr', 'pebs', 'ldlat', 'pt')
   if args.sys_wide:

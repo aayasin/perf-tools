@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.53
+__version__= 0.6
 
 import common as C, pmu, stats
 import argparse, os, sys, time
@@ -38,19 +38,23 @@ log=.$B-$2-$$.log
 $cmd > $log 2>&1
 grep -F Puzzle, $log 
 """)
-  sys.exit(0)
+  C.exit()
 
-DM='cond-misp' #'imix-loops'
+DM=C.env2str('STUDY_MODE', 'imix-loops')
 Conf = {
   'Events': {'imix-loops': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r10c4:BR_INST_RETIRED.COND_NTAKEN',
-    #'r11c4:BR_INST_RETIRED.COND'
+    'imix-dsb': 'r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r0262:DSB_FILL.OTHER_CANCEL,r01470261:DSB2MITE_SWITCHES.COUNT,'
+                'FRONTEND_RETIRED.DSB_MISS,FRONTEND_RETIRED.ANY_DSB_MISS,BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN,'
+                'branches,IDQ.MS_CYCLES_ANY,ASSISTS.ANY,INT_MISC.CLEARS_COUNT,MACHINE_CLEARS.COUNT,MACHINE_CLEARS.MEMORY_ORDERING,UOPS_RETIRED.MS:c1',  # 4.6-nda+
+             #'r11c4:BR_INST_RETIRED.COND'
     #r02c0:INST_RETIRED.NOP,r10c0:INST_RETIRED.MACRO_FUSED,'\
     #,r01e5:MEM_UOP_RETIRED.LOAD,r02e5:MEM_UOP_RETIRED.STA'
     'cond-misp': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r01c5:BR_MISP_RETIRED.COND_TAKEN'
-                ',r10c4:BR_INST_RETIRED.COND_NTAKEN,r10c5:BR_MISP_RETIRED.COND_NTAKEN',
+                 ',r10c4:BR_INST_RETIRED.COND_NTAKEN,r10c5:BR_MISP_RETIRED.COND_NTAKEN',
+    'openmp': 'r0106,r10d1:MEM_LOAD_RETIRED.L2_MISS,r3f24:L2_RQSTS.MISS,r70ec:CPU_CLK_UNHALTED.PAUSE'
+              ',syscalls:sys_enter_sched_yield', # TODO Add sudo
   },
-  'Toplev': {'imix-loops': ' --single-thread',
-    'cond-misp': None,
+  'Toplev': {'imix-loops': ' --frequency --metric-group +Summary --single-thread',
   },
   'Pebs': {'all-misp': '-b -e %s/event=0xc5,umask=0,name=BR_MISP_RETIRED/ppp -c 20003' % pmu.pmu(),
     'cond-misp': '-b -e %s/event=0xc5,umask=0x11,name=BR_MISP_RETIRED.COND/ppp -c 20003' % pmu.pmu(),
@@ -63,8 +67,10 @@ def modes_list():
   return list(set(ms))
 
 def parse_args():
+  C.printc('mode: %s' % DM)
   ap = C.argument_parser('analyze two or more modes (configs)', mask=0x911a,
-                         defs={'toplev-args': Conf['Toplev'][DM], 'events': Conf['Events'][DM]})
+                         defs={'toplev-args': Conf['Toplev'][DM] if DM in Conf['Toplev'] else None,
+                               'events': Conf['Events'][DM]})
   ap.add_argument('config', nargs='*', default=[])
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)
   ap.add_argument('-t', '--attempt', default='1')
@@ -72,7 +78,7 @@ def parse_args():
   ap.add_argument('--dump', action='store_const', const=True, default=False)
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
-  ap.add_argument('--dis-smt', action='store_const', const=True, default=True)
+  ap.add_argument('--smt', action='store_const', const=True, default=False)
   args = ap.parse_args()
   def fassert(x, msg): assert x or args.forgive, msg
   if args.dump: dump_sample()
@@ -95,6 +101,8 @@ def main():
   x = 'tune'
   a = getattr(args, x) or []
   extra = ' :sample:3 :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode] if 'misp' in args.mode else ''
+  if args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
+  if args.mode == 'openmp': extra += ' :perf-stat-ipc:"\'stat -e instructions,cycles,r0106\'"'
   a.insert(0, [':batch:1 :help:0 :loops:9 :msr:1%s ' % extra])
   do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
@@ -106,10 +114,13 @@ def main():
   if args.stages & 0x8: exe(do.replace('profile', 'log').replace('batch:1', 'batch:0'))
 
   if args.stages & 0x1:
-    if args.dis_smt and pmu.cpu('smt-on'): exe('%s disable-smt -v1' % do0)
+    enable_it=0
+    if not args.smt and pmu.cpu('smt-on'):
+      exe('%s disable-smt -v1' % do0)
+      enable_it=1
     if 'misp' in args.mode: args.profile_mask |= 0x200
     for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
-    if args.dis_smt and not pmu.cpu('smt-on'): exe('%s enable-smt -v1' % do0)
+    if enable_it: exe('%s enable-smt -v1' % do0)
 
   if args.stages & 0x2:
     jobs = []

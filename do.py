@@ -19,7 +19,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.62
+__version__ = 2.63
 
 import argparse, os.path, sys
 import common as C, pmu, stats
@@ -54,6 +54,7 @@ do = {'run':        C.RUN_DEF,
   'interval':       10,
   'imix':           0x3f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens, 5: misp report
   'loop-ideal-ipc': 0,
+  'loop-srcline':   0,
   'loops':          int(pmu.cpu('cpucount', 20) / 2),
   'log-stdout':     1,
   'lbr-branch-stats': 1,
@@ -607,7 +608,12 @@ def profile(mask, toplev_args=['mvl6', None]):
       'non-cold ' if do['imix'] & 0x10 else '', x, info, l, info)
     def log_br_count(x, s): return log_count("%s branches" % x, "%s.%s.log" % (data, s))
     def tail(f=''): return "tail %s | grep -v total" % f
-    def report_info(info, hists=['IPC', 'IpTB']):
+    def check_err(err):
+      if not os.path.getsize(err) == 1:
+        C.error("perf script failed to extract srcline info! Check errors at '%s'. "
+                "Try to use a newer or a different compiler" % err)
+    def report_info(info, err, hists=['IPC', 'IpTB']):
+      if do['loop-srcline']: check_err(err)
       hist_cmd = ''
       for h in hists: hist_cmd += " && %s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % h, info, '-A33'), h)
       exe("%s && tail %s | grep -v unique %s" % (C.grep('code footprint', info), info, hist_cmd), "@top loops & more in " + info)
@@ -652,6 +658,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       hits = '%s.hitcounts.log'%data
       loops = '%s.loops.log' % data
       llvm_mca = '%s.llvm_mca.log' % data
+      err = '%s.error.log' % data
       lbr_hdr = '# LBR-based Statistics:'
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       if not isfile(hits) or do['reprocess']:
@@ -661,7 +668,9 @@ def profile(mask, toplev_args=['mvl6', None]):
         if args.verbose > 2: lbr_env += " LBR_VERBOSE=0x800"
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
-        misp, cmd, msg = '', "-F +brstackinsn --xed", '@info'
+        exe('echo > %s' % err)
+        misp, cmd, msg = '', "-F +brstackinsn%s --xed%s" % (',+srcline' if do['loop-srcline'] else '',
+                                                            ' 2>>' + err if do['loop-srcline'] else ''), '@info'
         if do['imix']:
           print_cmd(' '.join(('4debug', perf, 'script', perf_ic(data, perf_script.comm), cmd, '| less')), False)
           cmd += " | tee >(%s %s %s >> %s) %s | GREP_INST | %s " % (
@@ -681,7 +690,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         if do['imix'] & 0x4: exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
             "@instruction-mix no operands")
         if args.verbose: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)
-        report_info(info)
+        report_info(info, err)
       else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and isfile(loops):
         prn_line(info)
@@ -694,11 +703,12 @@ def profile(mask, toplev_args=['mvl6', None]):
         cmd += ' | ./loop_stats %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], info)
         print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, C.realpath('loop_stats'),
           exe_1line('tail -1 %s' % loops, 2)[:-1], info))
-        perf_script("-F +brstackinsn --xed %s && %s" % (cmd, C.grep('FL-cycles...[1-9][0-9]?', info, color=1)),
-                    "@detailed stats for hot loops", data,
+        perf_script("-F +brstackinsn%s --xed%s %s && %s" % (',+srcline' if do['loop-srcline'] else '',
+                                                            ' 2>>' + err if do['loop-srcline'] else '', cmd,
+                    C.grep('FL-cycles...[1-9][0-9]?', info, color=1)), "@detailed stats for hot loops", data,
                     export='PTOOLS_HITS=%s %s' % (hits, ('LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] else ''))
       else: warn_file(loops)
-  
+
   if en(9) and do['sample'] > 2:
     data = perf_record('pebs', 9, pmu.event_name(do['perf-pebs']))[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")

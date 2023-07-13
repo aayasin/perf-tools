@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.81
+__version__= 0.82
 
 import common as C, pmu
 import csv, re, os.path
@@ -116,7 +116,7 @@ def parse_perf(l):
     if name.count('_') > 1 and name.islower() and not re.match('^(perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
       base_event = name.split(':')[0]
       Name = name.replace(base_event, pmu.toplev2intel_name(base_event))
-      Name = Name.replace(':C1', ':c1')
+      assert not ':C1' in Name # Name = Name.replace(':C1', ':c1')
       if stats['verbose']: print(name, '->', Name)
       name = Name
     val = items[0].replace(',', '')
@@ -134,9 +134,11 @@ def parse_perf(l):
       name2 = '-'.join(items[metric_idx:]).split('(')[0][:-1]
       if '%' in val2:
         val2 = val2.replace('%', '')
-        name2 = name2.replace('-', ' ').title()
+        name2 = name2.title()
       elif name2 in Renames: name2 = Renames[name2]
+      name2 = name2.replace('-', '_')
       val2 = float(val2)
+  if debug > 4: print('debug:', name, val, var, name2, val2, name3, val3)
   return name, val, var, name2, val2, name3, val3
 
 # Should move this to a new analysis module
@@ -238,8 +240,9 @@ def csv2stat(filename):
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
     if debug > 2: print('reading %s' % f)
     for l in C.file2lines(f):
-      name, val = parse_perf(l)[0:2]
+      name, val, etc, name2, val2 = parse_perf(l)[0:5]
       if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
+      if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2
     return ue
   NOMUX = 'toplev-mvl6-nomux-perf.csv'
   def nomux(): return filename.endswith(NOMUX)

@@ -10,7 +10,6 @@
 # Misc utilities for CPU performance profiling on Linux
 #
 # TODO list:
-#   move TMA code to a seperate tma/tma.py folder/module
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a seperate module, arg for output dir
 #   quiet mode
@@ -22,7 +21,7 @@ __author__ = 'ayasin'
 __version__ = 2.63
 
 import argparse, os.path, sys
-import common as C, pmu, stats
+import common as C, pmu, stats, tma
 from datetime import datetime
 from math import log10
 from platform import python_version
@@ -54,7 +53,7 @@ do = {'run':        C.RUN_DEF,
   'interval':       10,
   'imix':           0x3f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens, 5: misp report
   'loop-ideal-ipc': 0,
-  'loops':          int(pmu.cpu('cpucount', 20) / 2),
+  'loops':          min(pmu.cpu('corecount'), 30),
   'log-stdout':     1,
   'lbr-branch-stats': 1,
   'lbr-verbose':    0,
@@ -86,7 +85,7 @@ do = {'run':        C.RUN_DEF,
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
   'perf-stat-add':  1, # additional events using general counters
-  'perf-stat-def':  'cpu-clock,context-switches,cpu-migrations,page-faults,instructions,cycles,ref-cycles', # ,cycles:G
+  'perf-stat-def':  'context-switches,cpu-migrations,page-faults',
   'perf-stat-ipc':  'stat -e instructions,cycles',
   'pin':            'taskset 0x4',
   'plot':           0,
@@ -393,18 +392,14 @@ def profile(mask, toplev_args=['mvl6', None]):
     evts, perf_args = events, [flags, '-x,' if csv else '--log-fd=1', do['perf-stat'] ]
     if args.metrics: perf_args += ['--metric-no-group', '-M', args.metrics] # 1st is workaround bug 4804e0111662 in perf-stat -r2 -M
     perf_args = ' '.join(perf_args)
-    if perfmetrics and pmu.perfmetrics():
-      prefix = ',topdown-'
-      evts += prefix.join([append('{slots', evts), 'retiring', 'bad-spec', 'fe-bound', 'be-bound'])
-      if pmu.goldencove():
-        evts += prefix.join(['', 'heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound}'])
-        perf_args += ' --td-level=2'
-      else: evts += '}'
-      if pmu.hybrid(): evts = evts.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
-      if do['perf-stat-add']: evts += append(pmu.basic_events(), evts)
+    if perfmetrics:
+      es, fs = tma.fixed_metrics()
+      evts += append(es, evts)
+      if fs: perf_args += [fs]
+    if do['perf-stat-add']: evts += append(pmu.basic_events(), evts)
     if args.events: evts += append(pmu.perf_format(args.events), evts)
     if args.events or args.metrics: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
-    if evts != '': perf_args += ' -e "%s,%s"' % (do['perf-stat-def'], evts)
+    if evts != '': perf_args += ' -e "cpu-clock,%s,%s"' % (evts, do['perf-stat-def'])
     log = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log')
     stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
     profile_exe(perf + stat, msg, step, mode='perf-stat')
@@ -576,7 +571,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def perf_record(tag, step, msg=None, record='record', track_ipc=do['perf-stat-ipc']):
     perf_data, flags = '%s.perf.data' % record_calibrate('perf-%s' % tag), do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or (do['forgive'] > 1), 'No unfiltered LBRs! for %s: %s' % (tag, flags)
-    cmd = 'bash -c "%s %s %s"' % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
+    cmd = "bash -c '%s %s %s'" % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
     profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
     warn_file(perf_data)
     if not tag in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))

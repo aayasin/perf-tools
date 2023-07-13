@@ -542,7 +542,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(12):
     cmd, log = toplev_V('-mvl2%s' % ('' if args.sys_wide else ' --no-uncore'),
                         nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']).replace('+', '-'))
-    profile_exe(cmd + ' | sort | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
+    profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
     if args.profile_mask & 0x1012 and args.repeat == 3 and do['help']>=0: stats.csv2stat(C.toplev_log2csv(logs['tma']))
 
   if en(13):

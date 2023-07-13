@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.81
+__version__= 0.82
 
 import common as C, pmu
 import csv, re, os.path
@@ -96,6 +96,7 @@ def read_perf(f):
 
 def parse_perf(l):
   Renames = {'insn-per-cycle': 'IPC',
+             'CPUs-utilized': 'CPUs_Utilized',
              'GHz': 'Frequency'}
   def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if '+-' in l else None
   items = l.strip().split()
@@ -137,6 +138,7 @@ def parse_perf(l):
         name2 = name2.replace('-', ' ').title()
       elif name2 in Renames: name2 = Renames[name2]
       val2 = float(val2)
+  if debug > 4: print('debug:', name, val, var, name2, val2, name3, val3)
   return name, val, var, name2, val2, name3, val3
 
 # Should move this to a new analysis module
@@ -238,8 +240,9 @@ def csv2stat(filename):
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
     if debug > 2: print('reading %s' % f)
     for l in C.file2lines(f):
-      name, val = parse_perf(l)[0:2]
+      name, val, etc, name2, val2 = parse_perf(l)[0:5]
       if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
+      if name2 in ('CPUs_Utilized', 'Frequency'): ue[name2] = val2
     return ue
   NOMUX = 'toplev-mvl6-nomux-perf.csv'
   def nomux(): return filename.endswith(NOMUX)

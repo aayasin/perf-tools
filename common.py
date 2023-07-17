@@ -268,7 +268,7 @@ def str2list(s):  return ' '.join(s.split()).split(' ')
 
 def arg(num, default=None):
   if len(sys.argv) <= num and not default: error("must provide %d parameters" % num)
-  a = sys.argv[num] if len(sys.argv) > num else default
+  a = sys.argv[num] if len(sys.argv) > num and sys.argv[num] != '-' else default
   return a.replace('./', '') if num == 0 else a
 
 def argv2str(start=0):

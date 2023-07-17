@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.63
+__version__ = 2.64
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -538,7 +538,6 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd, log = toplev_V('-mvl2%s' % ('' if args.sys_wide else ' --no-uncore'),
                         nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']).replace('+', '-'))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
-    if args.profile_mask & 0x1012 and args.repeat == 3 and do['help']>=0: stats.csv2stat(C.toplev_log2csv(logs['tma']))
 
   if en(13):
     cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
@@ -747,9 +746,9 @@ def profile(mask, toplev_args=['mvl6', None]):
     perf_script_ldlat('ip,addr', 'DLA-IP')
 
   if en(7):
-    cmd, log = toplev_V('-%s --no-multiplex' % toplev_args[0], '-nomux', ','.join((do['nodes'], do['extra-metrics'])))
-    profile_exe(cmd + " | tee %s | %s" % (log, grep_nz), 'topdown-%s no multiplexing' % toplev_args[0], 7)
-  
+    cmd, logs['tma'] = toplev_V('-%s --no-multiplex' % toplev_args[0], '-nomux', ','.join((do['nodes'], do['extra-metrics'])))
+    profile_exe(cmd + " | tee %s | %s" % (logs['tma'], grep_nz), 'topdown-%s no multiplexing' % toplev_args[0], 7)
+
   if en(16):
     csv_file = perf_stat('-I%d' % do['interval'], 'over-time counting at %dms interval' % do['interval'], 16, csv=True)
     if args.events:
@@ -779,6 +778,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     print('firefox %s.svg &' % perf_data)
 
   if do['help'] < 0: profile_mask_help()
+  else:
+    if args.repeat == 3 and (args.profile_mask & 0x1012 or args.profile_mask & 0x82): stats.csv2stat(C.toplev_log2csv(logs['tma']))
   #profile-end
 
 def do_logs(cmd, ext=[], tag=''):

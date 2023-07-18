@@ -478,6 +478,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         valid = skip_sample(lines[0])
         invalid('bogus', 'instruction address missing')
         break
+      if skip_bad and len(lines) and not is_label(line) and is_taken(line) and not is_branch(line):
+        valid = skip_sample(lines[0])
+        invalid('bogus', 'non-branch instruction "%s" marked as taken' % get_inst(line))
+        break
       ip = None if header or is_label(line) or 'not reaching sample' in line else line_ip(line, lines)
       new_line = is_line_start(ip, xip)
       if edge_en and new_line:
@@ -554,6 +558,7 @@ read_sample.dump = C.env2int('LBR_DUMP', 0)
 
 def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
 def is_callret(l):    return is_type(x86.CALL_RET, l)
+def is_branch(l):     return is_type(x86.BR, l)
 
 # TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictiorary if header or None otherwise
 def is_header(line):

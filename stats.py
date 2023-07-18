@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.82
+__version__= 0.83
 
 import common as C, pmu
 import csv, re, os.path
@@ -244,13 +244,12 @@ def csv2stat(filename):
       if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2
     return ue
-  NOMUX = 'toplev-mvl6-nomux-perf.csv'
+  NOMUX = 'vl6-nomux-perf.csv'
   def nomux(): return filename.endswith(NOMUX)
   def basename():
-    if nomux(): return filename.replace(NOMUX, '')
-    x = re.match(r'.*\.toplev\-([m]?vl\d)\-perf\.csv', filename)
+    x = re.match(r'.*\.(toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
     if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
-    return filename.replace('toplev-%s-perf.csv' % x.group(1), '')
+    return filename.replace(x.group(1), '')
   patch_metrics()
   base = basename()
   uarch = params(read_toplev(C.toplev_log2csv(filename), 'SMT_on'))

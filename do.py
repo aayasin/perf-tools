@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.64
+__version__ = 2.65
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -509,7 +509,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(4):
     cmd, logs['tma'] = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']),
       tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % do['tma-dedup-nodes']))
-    profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk), 'topdown full tree + All Bottlenecks', 4)
+    profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk if args.verbose <= 0 else grep_nz), 'topdown full tree + All Bottlenecks', 4)
     if profiling(): C.fappend('Info.PerfTools SMT_on - %d' % (1 if pmu.cpu('smt-on') else 0), logs['tma'])
     zeros = read_toplev(logs['tma'], 'zero-counts')
     if zeros and len([m for m in zeros.split() if m not in do['tma-zero-ok'].split()]):
@@ -783,7 +783,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   #profile-end
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', 'csv', 'log', 'txt', 'stat', 'xlsx', 'svg'] + ext
+  log_files = ['', 'csv', 'log', 'pyc', 'stat', 'xlsx', 'svg'] + ext
   if cmd == 'tar':
     r = '.'.join((tag, pmu.cpu('CPU'), 'results.tar.gz')) if len(tag) else C.error('do_logs(tar): expecting tag')
     if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
@@ -793,7 +793,7 @@ def do_logs(cmd, ext=[], tag=''):
     for f in C.glob(s+'*'):
       if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
     exe('tar -czvf %s run.sh ' % r + ' '.join(files), 'tar into %s' % r, log=False)
-  if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files + ['pyc']) + ' *perf.data* __pycache__ results.tar.gz ')
+  if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + ' *-out.txt *perf.data* __pycache__ results.tar.gz')
 
 def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)

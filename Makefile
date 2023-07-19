@@ -9,7 +9,7 @@ DO2 = $(DO) profile -a 'workloads/BC.sh 3' $(DO_ARGS)
 FAIL = (echo "failed! $$?"; exit 1)
 MAKE = make --no-print-directory
 METRIC = -m IpCall
-MGR = sudo $(shell python -c 'import common; print(common.os_installer())')
+MGR = sudo $(shell python -c 'import common; print(common.os_installer())') -y -q
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
 PM = $(shell python -c 'import common; print("0x%x" % common.PROF_MASK_DEF)')
 PY2 = python2.7
@@ -22,9 +22,14 @@ ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 all: tramp3d-v4
 	@echo done
 git:
-	$(MGR) -y -q install git
+	$(MGR) install git
 openmp:
-	$(MGR) -y -q install libomp-dev
+	$(MGR) install libomp-dev
+gcc11:
+	$(MGR) update
+	$(MGR) install gcc-11
+	sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110 --slave /usr/bin/g++ g++ /usr/bin/g++-11 --slave /usr/bin/gcov gcov /usr/bin/gcov-11
+	gcc --version
 install: link-python llvm openmp
 	make -s -C workloads/mmm install
 link-python:
@@ -36,7 +41,7 @@ diff:
 intel:
 	git clone https://gitlab.devtools.intel.com/micros/dtlb
 	cd dtlb; ./build.sh
-	git clone https://github.com/intel-innersource/applications.benchmarking.cpu-micros.inst-lat-bw
+	#git clone https://github.com/intel-innersource/applications.benchmarking.cpu-micros.inst-lat-bw
 	#wget https://downloadmirror.intel.com/763324/mlc_v3.10.tgz
 tramp3d-v4: pmu-tools/workloads/CLTRAMP3D
 	cd pmu-tools/workloads; ./CLTRAMP3D; cp tramp3d-v4.cpp CLTRAMP3D ../..; rm tramp3d-v4.cpp
@@ -123,6 +128,7 @@ pre-push: help
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
 	$(DO) profile -a './workloads/BC.sh 7' -d1 > BC-7.log 2>&1 || $(FAIL) # tests --delay
+	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
 	$(MAKE) test-default DO_ARGS=":calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \
 	    CMD='suspend-smt profile tar' PM=1931a &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\

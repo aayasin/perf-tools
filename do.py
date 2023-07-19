@@ -374,6 +374,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       for k in sorted(profile_help.keys()): f1.write(profile_help[k] + '\n')
       f1.write('\n')
     C.info('wrote: %s' % filename)
+  def mask_eq(mask): return args.profile_mask & mask == mask
   def perf_view(cmd='report', src=True):
     append = '%s%s' % (do['perf-report-append'], ' --objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else '')
     return ' '.join((perf, cmd, append if src else ''))
@@ -445,7 +446,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def get_stat(s, default): return stats.get_stat_log(s, logs['stat']) if isfile(logs['stat']) else default
   def record_calibrate(x):
     factor = do['calibrate']
-    if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs-utilized', 1)))
+    if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs_utilized', 1)))
     if factor:
       if not '000' in C.flag_value(do[x], '-c'): error("cannot calibrate '%s' with '%s'" % (x, do[x]))
       else:
@@ -779,7 +780,7 @@ def profile(mask, toplev_args=['mvl6', None]):
 
   if do['help'] < 0: profile_mask_help()
   else:
-    if args.repeat == 3 and (args.profile_mask & 0x1012 or args.profile_mask & 0x82): stats.csv2stat(C.toplev_log2csv(logs['tma']))
+    if args.repeat == 3 and (mask_eq(0x1012) or mask_eq(0x82)): stats.csv2stat(C.toplev_log2csv(logs['tma']))
   #profile-end
 
 def do_logs(cmd, ext=[], tag=''):

@@ -29,9 +29,9 @@ red_cmd() {
 }
 
 if [ -f /etc/os-release ]; then
-    DIST=$(grep '^ID=' /etc/os-release | cut -d= -f2-)
+    DIST=$(grep '^ID=' /etc/os-release | cut -d= -f2- | sed 's/"//g')
 else
-    DIST=$(red_cmd lsb_release -i)
+    DIST=$(red_cmd lsb_release -i | sed 's/"//g')
 fi
 
 case $DIST in

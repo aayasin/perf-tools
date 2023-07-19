@@ -72,6 +72,11 @@ def basic_events():
   if goldencove(): events += ['r0160', 'r0262']
   return ','.join(events)
 
+# TODO: lookup Metric's attribute in pmu-tools/ratio; no hardcoding!
+def is_uncore_metric(m):
+  return m in ('DRAM_BW_Use', 'Power', 'Socket_CLKS') or C.startswith(
+    [x+'_' for x in ('MEM', 'PMM', 'HBM', 'Uncore', 'UPI', 'IO')], m)
+
 TPEBS = {'MTL':
   "MEM_LOAD_RETIRED.L3_HIT,MEM_LOAD_L3_HIT_RETIRED.XSNP_NO_FWD,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD,"
   "FRONTEND_RETIRED.L2_MISS,BR_MISP_RETIRED.RET_COST,BR_MISP_RETIRED.COND_TAKEN_COST,BR_MISP_RETIRED.COND_NTAKEN_COST,"
@@ -132,19 +137,20 @@ def cpu(what, default=None):
   if cpu.state:
     if what == 'all':
       s = cpu.state.copy()
-      for x in ('eventlist', 'x86'): del s[x]
+      for x in ('eventlist', 'model', 'x86'): del s[x]
       return s
     return cpu.state if what == 'ALL' else (cpu.state[what] if what in cpu.state else warn())
   pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
   if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
       'git clone --recurse-submodules https://github.com/aayasin/perf-tools'))
   def versions():
+    def Cpu(m): M={'sprmax': 'spr-hbm'}; return (M[m] if m in M else m).upper()
     d, v = {}, C.exe_one_line("%s/toplev.py --version 2>&1 | tail -1" % pmutools).strip()
     for x in v.split(','):
       xs = x.split(':')
       if len(xs) > 1:
         k, v = str(xs[0].strip()), str(xs[1].strip())
-        d[k] = v.upper() if k == 'CPU' else v
+        d[k] = Cpu(v) if k == 'CPU' else v
       elif xs[0] != 'toplev': C.warn('toplev --version: %s' % xs[0])
     return d
   try:
@@ -156,6 +162,7 @@ def cpu(what, default=None):
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
       'eventlist':    event_download.eventlist_name(),
+      'model':        cs.model,
       #'name':         cs.true_name,
       'smt-on':       cs.ht,
       'socketcount':  cs.sockets,

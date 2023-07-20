@@ -15,10 +15,10 @@ __author__ = 'ayasin'
 import common as C, pmu
 
 def fixed_metrics():
-  events, flags = 'instructions,cycles,ref-cycles,', None
+  events, flags = 'instructions,cycles,ref-cycles', None
   if pmu.perfmetrics():
     prefix = ',topdown-'
-    events += prefix.join(['{slots', 'retiring', 'bad-spec', 'fe-bound', 'be-bound'])
+    events += prefix.join([',{slots', 'retiring', 'bad-spec', 'fe-bound', 'be-bound'])
     if pmu.goldencove():
       events += prefix.join(['', 'heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound}'])
       flags = ' --td-level=2'

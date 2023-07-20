@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.65
+__version__ = 2.66
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -385,8 +385,8 @@ def profile(mask, toplev_args=['mvl6', None]):
   sort2up = sort2u + ' | ./ptage'
   def en(n): return mask & 2**n
   def a_events():
-    def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')+1):] + px.join(rapl) + ('/' if '/' in px else '')
-    return power() if args.power and not pmu.v5p() else ''
+    def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')):] + px.join(rapl) + ('/' if '/' in px else '')
+    return 'msr/tsc/' + (power() if args.power and not pmu.v5p() else '')
   def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'], csv=False,
                 grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
@@ -832,8 +832,9 @@ def main():
   global args
   args = parse_args()
   #args sanity checks
-  if (args.gen_args or 'build' in args.command) and not user_app():
-    C.error('must specify --app-name with any of: --gen-args, build')
+  if args.gen_args or 'build' in args.command:
+    if not user_app(): C.error('must specify --app-name with any of: --gen-args, build')
+    if not 'build' in args.command: C.error('must use build command with --gen-args')
   if args.output and ' ' in args.output: C.error('--output must not have spaces')
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'

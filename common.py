@@ -290,7 +290,7 @@ import argparse
 RUN_DEF = './run.sh'
 TOPLEV_DEF=' --frequency --metric-group +Summary'
   #' --no-uncore' # https://github.com/andikleen/pmu-tools/issues/450
-PROF_MASK_DEF=0x317F
+PROF_MASK_DEF=0x313F
 def add_hex_arg(ap, n, fn, d, h):
   ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
 def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefaultsHelpFormatter):

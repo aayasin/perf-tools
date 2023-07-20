@@ -40,7 +40,7 @@ optional arguments:
                         9:anything (default: 0)
   -pm PROFILE_MASK, --profile-mask PROFILE_MASK
                         mask to control stages in the profile command. See
-                        profile-mask-help.md for details (default: 12671)
+                        profile-mask-help.md for details (default: 12607)
   --mode [{profile,process,both}]
                         analysis mode options: profile-only, (post)process-
                         only or both (default: both)

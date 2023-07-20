@@ -397,7 +397,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if perfmetrics:
       es, fs = tma.fixed_metrics()
       evts += append(es, evts)
-      if fs: perf_args += [fs]
+      if fs: perf_args += fs
     if do['perf-stat-add']: evts += append(pmu.basic_events(), evts)
     if args.events: evts += append(pmu.perf_format(args.events), evts)
     if args.events or args.metrics: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events

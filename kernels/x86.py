@@ -26,6 +26,7 @@ CALL_RET  = '(call|ret)'
 COND_BR   = 'j[^m][^ ]*'
 TEST_CMP  = r"(test|cmp).?\s"
 LOAD      = r"mov.?\s.*\).*,"
+BR = '(j|%s|sys%s)' % (CALL_RET, CALL_RET)
 M_FUSION_INSTS = ['cmp', 'test', 'add', 'sub', 'inc', 'dec', 'and']
 
 def bytes(x): return '.byte 0x' + ', 0x'.join(x.split(' '))

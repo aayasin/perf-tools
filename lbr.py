@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 2.12 # see version line of do.py
+__version__= 2.13 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -320,7 +320,7 @@ def is_imix(t):
   IMIX_LIST = MEM_INSTS + ['logic']
   if not t: return IMIX_LIST + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
   return t in IMIX_LIST or t.startswith('vec')
-Insts = inst2pred(None) + ['cmov', 'lea', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
+Insts = inst2pred(None) + ['cmov', 'lea', 'lea-scaled', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
 Insts_global = Insts + is_imix(None) + ['all']
 Insts_all = ['cond_backward', 'cond_forward', 'cond_non-taken', 'cond_fusible',
              'cond_non-fusible', 'cond_taken-not-first', 'cond_LD-CMP-JCC fusible',
@@ -492,7 +492,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           glob['all'] += 1
           # An instruction may be counted individually and/or per imix class
           for x in Insts:
-            if is_type(x, line): glob[x] += 1
+            if is_type(x, line):
+              if x == 'lea' and is_type(x86.LEA_S, line): glob['lea-scaled'] += 1
+              glob[x] += 1
           t = line_inst(line)
           if t and is_imix(t): glob[t] += 1
         if len(lines) == 1:

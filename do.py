@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.7
+__version__ = 2.74
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -216,16 +216,17 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
     if isfile(C.Globals['llvm-mca']): exe_v0(msg='llvm is already installed')
     else: exe('./build-llvm.sh', 'installing llvm')
 
-def tools_update(kernels=[], level=3):
-  ks = [''] + C.exe2list("git status | grep 'modified.*kernels' | cut -d/ -f2") + kernels
-  exe('git checkout HEAD run.sh' + ' kernels/'.join(ks))
-  if level > 0: exe('git pull')
-  if level > 1: exe('git submodule update --remote')
-  if level > 2:
+def tools_update(kernels=[], mask=0x7):
+  if mask & 0x1: 
+    ks = [''] + C.exe2list("git status | grep 'modified.*kernels' | cut -d/ -f2") + kernels
+    exe('git checkout HEAD run.sh' + ' kernels/'.join(ks))
+  if mask & 0x2: exe('git pull')
+  if mask & 0x4:
     exe(args.pmu_tools + "/event_download.py ")
     if do['super']:
-      if level > 3: exe('mv ~/.cache/pmu-events /tmp')
+      if mask & 0x8: exe('mv ~/.cache/pmu-events /tmp')
       exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs
+  if mask & 0x10: exe('git submodule update --remote')
 
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
 def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' % (p, C.file2str(p), C.flag2str(' >> ', out)))
@@ -913,7 +914,7 @@ def main():
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    find_perf()
     elif c == 'tools-update': tools_update()
-    elif c.startswith('tools-update:'): tools_update(level=int(param[0]))
+    elif c.startswith('tools-update:'): tools_update(level=int(param[0], 16))
     # TODO: generalize disable/enable/suspend of things that follow
     elif c == 'disable-smt':  smt()
     elif c == 'enable-smt':   smt('on')

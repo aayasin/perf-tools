@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 2.13 # see version line of do.py
+__version__= 2.14 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -305,7 +305,9 @@ stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
 
 CISC_CMP= '_cisc-cmp'
 def inst2pred(i):
-  i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
+i2p = {'st-stack':    'mov\S*\s+[^\(\),]+, [0-9a-fx]*\(%.sp\)',
+    'st-reg-stack':   'mov\S*\s+%[^\(\),]+, [0-9a-fx]*\(%.sp\)',
+    'ld-stack':       'mov\S*\s+[0-9a-fx]*\(%.sp\),',
     'add-sub':        '(add|sub).*',
     'inc-dec':        '(inc|dec).*',
     CISC_CMP:         '(cmp[^x]|test).*\(',

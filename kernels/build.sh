@@ -1,6 +1,6 @@
 #!/bin/sh
 # Author: Ahmad Yasin
-# Aug 2022
+# July 2023
 #
 CC=${CC:-gcc -g -O2}
 GEN=${GEN:-1}
@@ -43,11 +43,12 @@ $PY ./gen-kernel.py -i NOP#2 'cmpq %r12,0x0(%rsp)' 'jg Lbl_end' -n 106 -p 'movq 
 $PY ./gen-kernel.py -i 'mov 0x0(%rsp),%r12' 'test %r12,%r12' 'jg Lbl_end' 'inc %rsp' 'dec %rsp' -n 1 > ld-cmp-jcc-3i-inc.c
 $PY ./gen-kernel.py -i 'cmpq $0x0,0x0(%rsp)' 'jg Lbl_end' 'inc %rsp' 'dec %rsp' -n 1 > ld-cmp-jcc-2i-imm-inc.c
 $PY ./gen-kernel.py -i 'cmpq %r12,0x0(%rsp)' 'jg Lbl_end' 'inc %r12' 'dec %r12' -p 'movq $0x0,%r12' -n 1 > ld-cmp-jcc-2i-reg-inc.c
+$PY ./gen-kernel.py -p "mov %rsp,%rdx" "sub \$0x40000,%rdx" -i "cmpl \$0,0x40000(,%rdx,1)" -n 100 > cmp0-mem-index.c
 $PY ./gen-kernel.py -i 'VSHUFPS $0xFF,%YMM1,%YMM2,%YMM3' -n 5 > vshufps.c
 $PY ./gen-kernel.py -i 'VPSHUFB %YMM1,%YMM2,%YMM3' -n 5 > vpshufb.c
 fi
 
-ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-cmp-jcc-{3i,2i-{imm,reg}}{,-inc},memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit,vshufps,vpshufb"
+ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-cmp-jcc-{3i,2i-{imm,reg}}{,-inc},cmp0-mem-index,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit,vshufps,vpshufb"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

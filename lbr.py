@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 2.15 # see version line of do.py
+__version__= 2.16 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -325,15 +325,28 @@ def is_imix(t):
   return t in IMIX_LIST or t.startswith('vec')
 Insts = inst2pred(None) + ['cmov', 'lea', 'lea-scaled', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
 Insts_global = Insts + is_imix(None) + ['all']
-Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first',
-              'LD-CMP-JCC fusible', 'CISC_CMP_IMM-JCC non-fusible'] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
+Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first'
+              ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
 Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_global
 
-glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + Insts_all}
+glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}
 hsts = {}
 footprint = set()
 pages = set()
 indirects = set()
+
+def inc_JCC(i, suffix='non-fusible'):
+  c = '%s-JCC %s' % (i, suffix)
+  k = 'cond_%s' % c
+  if k in glob: glob[k] += 1
+  else:
+    glob[k] = 1
+    global Insts_cond
+    Insts_cond += [c]
+  if suffix == 'non-fusible':
+    glob['counted_non-fusible'] += 1
+    return True
+  return False
 
 IPTB  = 'inst-per-taken-br--IpTB'
 FUNCP = 'Params_of_func'
@@ -525,14 +538,19 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
             if x86.is_fusion(lines[-1], line):
               glob['cond_fusible'] += 1
               if len(lines) > 2 and is_type(x86.TEST_CMP, lines[-1]) and is_type(x86.LOAD, lines[-2]):
-                glob['cond_LD-CMP-JCC fusible'] += 1
+                inc_JCC('LD-CMP', 'fusible')
             else:
               glob['cond_non-fusible'] += 1
-              if is_type(x86.TEST_CMP, lines[-1]) and x86.is_mem_imm(lines[-1]):
-                glob['cond_CISC_CMP_IMM-JCC non-fusible'] += 1
+              if x86.is_mem_imm(lines[-1]):
+                inc_JCC('CISC_%s_IMM' % ('CMP' if is_type(x86.TEST_CMP, lines[-1]) else 'OTHER'))
               else:
+                counted = False
                 for x in user_jcc_pair:
-                  if is_type(x.lower(), lines[-1]): glob['cond_%s-JCC non-fusible' % x] += 1
+                  if is_type(x.lower(), lines[-1]):
+                    counted = inc_JCC(x)
+                    break
+                if counted: pass
+                elif is_type(x86.COND_BR, lines[-1]): counted = inc_JCC('JCC')
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)
@@ -719,6 +737,7 @@ def print_global_stats():
                                  prefix='proxy count', ratio_of=('loops', len(loops)))
   if glob['size_stats_en']:
     for x in Insts_cond: print_imix_stat(x + ' conditional', glob['cond_' + x])
+    print_imix_stat('unaccounted non-fusible conditional', glob['cond_non-fusible'] - glob['counted_non-fusible'])
     for x in Insts_global: print_imix_stat(x, glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

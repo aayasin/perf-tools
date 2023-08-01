@@ -299,13 +299,13 @@ def csv2stat(filename):
   print('wrote:', stat)
   return stat
 
-def print_candidate_stats(hitcounts, info):
+def inst_fusions(hitcounts, info):
   stats_data = {'LD-OP': 0,
                 'MOV-OP': 0}
   def calc_stats():
     block = hotness_key = None
     hotness = lambda s: C.str2list(s)[0]
-    condition = lambda l: 'mov' in l and not x86.is_mem_store(l)
+    is_mov = lambda l: 'mov' in l and not x86.is_mem_store(l)
     cands_log = hitcounts.replace(".log", "-candidates.log")
     def find_cand(lines):
       patch = lambda s: s.replace(s.split()[0], '')
@@ -348,20 +348,18 @@ def print_candidate_stats(hitcounts, info):
     # for each hotness block, create a list of the lines then check
     with open(hitcounts, "r") as hits:
       for line in hits:
+        def restart(): return [[line], hotness(line)] if is_mov(line) else [None, None]
         # check blocks starting with not store MOV
-        if not condition(line) and not block: continue
+        if not is_mov(line) and not block: continue
         if not block:  # new block first line found
-          block = [line]
-          hotness_key = hotness(line)
+          block, hotness_key = restart()
           continue
         # append lines from the same basic block (by hotness)
         if hotness(line) == hotness_key: block.append(line)
         else:  # basic block end, check candidates
           for i, block_line in enumerate(block):
-            if condition(block_line): find_cand(block[i:])
-          if condition(line):
-            hotness_key, block = hotness(line), [line]  # restart for next block
-          else: hotness_key, block = None, None
+            if is_mov(block_line): find_cand(block[i:])
+          hotness_key, block = restart()  # restart for next block
   total = int(C.exe_one_line(C.grep(' ALL instructions:', info)).split(':')[1].strip())
   calc_stats()
   for stat, value in stats_data.items():

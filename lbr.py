@@ -342,8 +342,8 @@ Insts = inst2pred(None) + ['cmov', 'lea', 'lea-scaled', 'jmp', 'call', 'ret', 'p
 Insts_global = Insts + is_imix(None) + ['all']
 Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first'
               ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
-Insts_MF2 = [x + '-OP fusible' for x in ['MOV', 'LD']]
-Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_MF2 + Insts_global
+Insts_Fusions = [x + '-OP fusible' for x in ['MOV', 'LD']]
+Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}
 hsts = {}
@@ -386,6 +386,39 @@ def edge_en_init(indirect_en):
       hsts['indirect_%s_targets' % x] = {}
       hsts['indirect_%s_paths' % x] = {}
   if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'] = {}
+
+def edge_stats(line, lines, ip, xip):
+  if is_type(x86.COND_BR, lines[-1]) and is_taken(lines[-1]):
+    glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
+  # checks all lines but first
+  if is_type(x86.COND_BR, line):
+    if is_taken(line): glob['cond_taken-not-first'] += 1
+    else: glob['cond_non-taken'] += 1
+    if x86.is_jcc_fusion(lines[-1], line):
+      glob['cond_fusible'] += 1
+      if len(lines) > 2 and is_type(x86.TEST_CMP, lines[-1]) and is_type(x86.LOAD, lines[-2]):
+        inc_pair('LD-CMP', suffix='fusible')
+    else:
+      glob['cond_non-fusible'] += 1
+      if x86.is_mem_imm(lines[-1]):
+        inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if is_type(x86.TEST_CMP, lines[-1]) else 'OTHER',
+                                      '' if is_type(x86.MEM_IDX, lines[-1]) else 'NO'))
+      else:
+        counted = False
+        for x in user_jcc_pair:
+          if is_type(x.lower(), lines[-1]):
+            counted = inc_pair(x)
+            break
+        if counted: pass
+        elif is_type(x86.COND_BR, lines[-1]): counted = inc_pair('JCC')
+        elif is_type(x86.COMI, lines[-1]): counted = inc_pair('COMI')
+        if len(lines) > 2 and x86.is_jcc_fusion(lines[-2], line):
+          def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
+          if is_type(x86.MOV, lines[-1]): inc_pair2('MOV')
+          elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", lines[-1]): inc_pair2('LEA-1')
+  if len(lines) > 2 and not x86.is_jcc_fusion(lines[-1], line):
+    if x86.is_ld_op_fusion(lines[-2], lines[-1]): inc_pair('LD', 'OP', suffix='fusible')
+    elif x86.is_mov_op_fusion(lines[-2], lines[-1]): inc_pair('MOV', 'OP', suffix='fusible')
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_latency=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
@@ -583,7 +616,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
                 if x >= 0:
                   if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
                   if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
-          if edge_en: edge_stats()
+          if edge_en: edge_stats(line, lines, ip, xip)
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)
@@ -758,8 +791,7 @@ def print_stat(name, count, prefix='count', comment='', ratio_of=None, log=None)
   if len(comment): comment = '\t:(see %s below)' % c(comment)
   elif ratio_of: comment = '\t: %7s of %s' % (ratio(count, ratio_of[1]), ratio_of[0])
   res = '%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 60 - len(prefix)), str(count), comment)
-  if log: C.fappend(res, log)
-  else: print(res)
+  C.fappend(res, log) if log else print(res)
 def print_estimate(name, s): print_stat(name, s, 'estimate')
 def print_imix_stat(n, c): print_stat(n, c, ratio_of=('ALL', glob['all']))
 
@@ -779,7 +811,7 @@ def print_global_stats():
   if glob['size_stats_en']:
     for x in Insts_cond: print_imix_stat(x + ' conditional', glob['cond_' + x])
     print_imix_stat('unaccounted non-fusible conditional', glob['cond_non-fusible'] - glob['counted_non-fusible'])
-    for x in Insts_MF2: print_imix_stat(x, glob[x])
+    for x in Insts_Fusions: print_imix_stat(x, glob[x])
     for x in Insts_global: print_imix_stat(x, glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

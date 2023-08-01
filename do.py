@@ -691,7 +691,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         if (do['imix'] & 0x4) == 0:
           cmd += ' > /dev/null'
         perf_script(cmd, msg, data)
-        if args.mode != "profile": stats.print_candidate_stats(hits, info)
+        if args.mode != "profile": stats.inst_fusions(hits, info)
         if do['imix'] & 0x4: exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
             "@instruction-mix no operands")
         if args.verbose > 0: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)

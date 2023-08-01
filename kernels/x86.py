@@ -38,8 +38,8 @@ MEM_IDX = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
 M_FUSION_INSTS = ['cmp', 'test', 'add', 'sub', 'inc', 'dec', 'and']
 REGS_32 = ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp', 'esp'] + \
           ['r' + str(n) + 'd' for n in range(8, 16)]
-REGS_64 = ['rax', 'rbx', 'rcx', 'rdx', 'rsi', 'rdi', 'rbp', 'rsp'] + \
-          ['r' + str(n) for n in range(8, 16)]
+REGS_64 = [x.replace('e', 'r') for x in REGS_32 if x.startswith('e')] + \
+          [x.replace('d', '') for x in REGS_32 if x.startswith('r')]
 
 def bytes(x): return '.byte 0x' + ', 0x'.join(x.split(' '))
 
@@ -179,7 +179,7 @@ def is_ld_op_fusion(line1, line2):
   if 'imul' in line2 and op_dest in REGS_64: return False
   return True
 
-def is_memory(line): return '(' in line and 'lea' not in line
+def is_memory(line): return '(' in line and 'lea' not in line and 'nop' not in line
 def is_imm(line): return '$' in line
 def is_mem_imm(line): return is_memory(line) and is_imm(line)
 def is_mem_store(line): return is_memory(line) and re.match(STORE, line) and C.any_in(('mov', EXTRACT), line)

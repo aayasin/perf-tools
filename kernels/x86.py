@@ -28,7 +28,7 @@ TEST_CMP  = r"(test|cmp).?\s"
 LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"mov.?\s.*\).*,"
 BR = '(j|%s|sys%s)' % (CALL_RET, CALL_RET)
-MEM_IDX = r"\(%[a-z0-9]+,%[a-z0-9]+,?(1|2|4|8)?\)"
+MEM_IDX = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
 M_FUSION_INSTS = ['cmp', 'test', 'add', 'sub', 'inc', 'dec', 'and']
 
 def bytes(x): return '.byte 0x' + ', 0x'.join(x.split(' '))

@@ -442,38 +442,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     if loop_ipc:
       read_sample.tick *= 10
       read_sample.stop = None
-  def edge_stats():
-    if is_type(x86.COND_BR, lines[-1]) and is_taken(lines[-1]):
-      glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
-    # checks all lines but first
-    if is_type(x86.COND_BR, line):
-      if is_taken(line): glob['cond_taken-not-first'] += 1
-      else: glob['cond_non-taken'] += 1
-      if x86.is_jcc_fusion(lines[-1], line):
-        glob['cond_fusible'] += 1
-        if len(lines) > 2 and is_type(x86.TEST_CMP, lines[-1]) and is_type(x86.LOAD, lines[-2]):
-          inc_pair('LD-CMP', suffix='fusible')
-      else:
-        glob['cond_non-fusible'] += 1
-        if x86.is_mem_imm(lines[-1]):
-          inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if is_type(x86.TEST_CMP, lines[-1]) else 'OTHER',
-                                        '' if is_type(x86.MEM_IDX, lines[-1]) else 'NO'))
-        else:
-          counted = False
-          for x in user_jcc_pair:
-            if is_type(x.lower(), lines[-1]):
-              counted = inc_pair(x)
-              break
-          if counted: pass
-          elif is_type(x86.COND_BR, lines[-1]): counted = inc_pair('JCC')
-          elif is_type(x86.COMI, lines[-1]): counted = inc_pair('COMI')
-          if len(lines) > 2 and x86.is_jcc_fusion(lines[-2], line):
-            def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
-            if is_type(x86.MOV, lines[-1]): inc_pair2('MOV')
-            elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", lines[-1]): inc_pair2('LEA-1')
-    if len(lines) > 2 and not x86.is_jcc_fusion(lines[-1], line):
-      if x86.is_ld_op_fusion(lines[-2], lines[-1]): inc_pair('LD', 'OP', suffix='fusible')
-      elif x86.is_mov_op_fusion(lines[-2], lines[-1]): inc_pair('MOV', 'OP', suffix='fusible')
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []

@@ -542,7 +542,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
             else:
               glob['cond_non-fusible'] += 1
               if x86.is_mem_imm(lines[-1]):
-                inc_JCC('CISC_%s_IMM' % ('CMP' if is_type(x86.TEST_CMP, lines[-1]) else 'OTHER'))
+                inc_JCC('%s_MEM%sIDX_IMM' % ('CMP' if is_type(x86.TEST_CMP, lines[-1]) else 'OTHER',
+                                             '' if x86.is_mem_idx(lines[-1]) else 'NO'))
               else:
                 counted = False
                 for x in user_jcc_pair:

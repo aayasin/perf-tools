@@ -28,6 +28,7 @@ TEST_CMP  = r"(test|cmp).?\s"
 LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"mov.?\s.*\).*,"
 BR = '(j|%s|sys%s)' % (CALL_RET, CALL_RET)
+MEM_IDX = r"\(%[a-z0-9]+,%[a-z0-9]+,?(1|2|4|8)?\)"
 M_FUSION_INSTS = ['cmp', 'test', 'add', 'sub', 'inc', 'dec', 'and']
 
 def bytes(x): return '.byte 0x' + ', 0x'.join(x.split(' '))
@@ -95,5 +96,5 @@ def is_fusion(line1, line2):
   return False
 
 def is_memory(line): return '(' in line and 'lea' not in line
-
 def is_mem_imm(line): return is_memory(line) and '$' in line
+def is_mem_idx(line): return re.search(MEM_IDX, line)

@@ -44,8 +44,8 @@ $PY ./gen-kernel.py -i 'mov 0x0(%rsp),%r12' 'test %r12,%r12' 'jg Lbl_end' 'inc %
 $PY ./gen-kernel.py -i 'cmpq $0x0,0x0(%rsp)' 'jg Lbl_end' 'inc %rsp' 'dec %rsp' -n 1 > ld-cmp-jcc-2i-imm-inc.c
 $PY ./gen-kernel.py -i 'cmpq %r12,0x0(%rsp)' 'jg Lbl_end' 'inc %r12' 'dec %r12' -p 'movq $0x0,%r12' -n 1 > ld-cmp-jcc-2i-reg-inc.c
 $PY ./gen-kernel.py -p "mov %rsp,%rdx" "sub \$0x40000,%rdx" -i "cmpl \$0,0x40000(,%rdx,1)" -n 100 > cmp0-mem-index.c
-$PY ./gen-kernel.py -i 'VSHUFPS $0xFF,%YMM1,%YMM2,%YMM3' -n 5 > vshufps.c
-$PY ./gen-kernel.py -i 'VPSHUFB %YMM1,%YMM2,%YMM3' -n 5 > vpshufb.c
+$PY ./gen-kernel.py -i 'vshufps $0xff,%ymm0,%ymm1,%ymm2' 'vshufps $0xff,%ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' > vshufps.c
+$PY ./gen-kernel.py -i 'vpshufb %ymm0,%ymm1,%ymm2' 'vpshufb %ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' > vpshufb.c
 fi
 
 ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-cmp-jcc-{3i,2i-{imm,reg}}{,-inc},cmp0-mem-index,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit,vshufps,vpshufb"

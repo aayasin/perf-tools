@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 2.16 # see version line of do.py
+__version__= 2.17 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -552,6 +552,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
                     break
                 if counted: pass
                 elif is_type(x86.COND_BR, lines[-1]): counted = inc_JCC('JCC')
+                if len(lines) > 2 and x86.is_fusion(lines[-2], line):
+                  def inc_JCC2(x): return inc_JCC(x, suffix='non-fusible-IS')
+                  if is_type(x86.MOVE, lines[-1]): inc_JCC2('MOV')
+                  elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", lines[-1]): inc_JCC2('LEA-1')
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)

@@ -65,6 +65,10 @@ test-bc2:
 test-metric:
 	$(DO) profile $(METRIC) --stdout -pm 2
 	$(DO) profile -pm 40 | $(SHOW)
+FSI = 400000000
+test-false-sharing: kernels/false-sharing
+	$(DO) profile --tune :help:0 -a "$< $(FSI)" -pm 40
+	egrep -q '^BE.*False_Sharing.*<==' $<-$(FSI)-out.txt
 
 clean-all: clean
 	rm tramp3d-v4{,.cpp} CLTRAMP3D
@@ -109,9 +113,11 @@ test-study: study.py stats.py run.sh do.py
 test-stats: stats.py
 	@$(MAKE) test-default APP="$(APP) s" PM=1012 > /dev/null 2>&1
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
-test-srcline: lbr.py do.py common.py
+../perf:
+	$(DO) build-perf
+test-srcline: ../perf lbr.py do.py common.py
 	cd kernels && clang -g -O2 pagefault.c -o pagefault-clang > /dev/null 2>&1
-	$(DO) $(CMD) -a './kernels/pagefault-clang 1000000' -pm 100 --tune :loop-srcline:1 > /dev/null 2>&1
+	$(DO) $(CMD) -a './kernels/pagefault-clang 1000000' --perf ../perf -pm 100 --tune :loop-srcline:1 > /dev/null 2>&1
 	grep -q 'srcline: pagefault.c;43' pagefault-clang-1000000*info.log || $(FAIL)
 
 clean:
@@ -122,6 +128,7 @@ pre-push: help
 	$(MAKE) test-metric SHOW="grep --color -E '^|Ret.*<=='" # tests perf -M IpCall & colored TMA, then toplev --drilldown
 	$(DO) log                                               # prompt for sudo soon after
 	$(MAKE) test-bc2 SHOW="grep --color -E '^|Mispredict'"	# tests topdown across-tree tagging; Mispredict
+	echo skip: $(MAKE) test-false-sharing                              # tests topdown ~overlap in Threshold attribute
 	$(MAKE) test-build SHOW="grep --color -E '^|build|DSB|Ports'" # tests build command, perf -e, toplev --nodes; Ports_*
 	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'                 # tests load-latency profile-step + verbose:1
 	$(MAKE) test-default PM=313e                            # tests default non-MUX sensitive profile-steps

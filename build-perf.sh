@@ -7,20 +7,21 @@ LINUXV=${LINUXV:-5.15.111} # upgrade to < 6.3 for JIT support, not 6.4!.
 OBJDUMP=${OBJDUMP:-0}
 
 perfdir=linux/tools/perf
+if [ $CLONE -eq 2 ]; then perfdir=linux-$LINUXV/tools/perf; fi
+if [ $CLONE -eq 3 ]; then perfdir==perf-$PERFV/tools/perf; fi
 set -xe
-if [ $CLONE -eq 1 ]; then
-  git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
-elif [ $CLONE -eq 2 ]; then
-  wget https://cdn.kernel.org/pub/linux/kernel/v$LINUXK.x/linux-$LINUXV.tar.xz
-  tar -vxf linux-$LINUXV.tar.xz
-  perfdir=linux-$LINUXV/tools/perf
-else
-  # if previous commands fail, try this alternative :
-  wget https://mirrors.edge.kernel.org/pub/linux/kernel/tools/perf/v$PERFV/perf-$PERFV.tar.xz
-  tar -xvf ./perf-$PERFV.tar.xz
-  perfdir=perf-$PERFV/tools/perf
+if [ ! -d "$perfdir" ]; then
+  if [ $CLONE -eq 1 ]; then
+    git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+  elif [ $CLONE -eq 2 ]; then
+    wget https://cdn.kernel.org/pub/linux/kernel/v$LINUXK.x/linux-$LINUXV.tar.xz
+    tar -xf linux-$LINUXV.tar.xz
+  else #3
+    # if previous commands fail, try this alternative :
+    wget https://mirrors.edge.kernel.org/pub/linux/kernel/tools/perf/v$PERFV/perf-$PERFV.tar.xz
+    tar -xf ./perf-$PERFV.tar.xz
+  fi
 fi
-
 cd $perfdir
 sudo apt-get install -y flex
 sudo apt-get install -y bison

@@ -53,6 +53,7 @@ run-mem-bw:
 test-mem-bw: run-mem-bw
 	sleep 2s
 	set -o pipefail; $(DO) profile -s2 $(ST) -o $< $(RERUN) | $(SHOW)
+	grep -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log
 	kill -9 `pidof m0-n8192-u01.llv`
 run-mt:
 	./omp-bin.sh $(NUM_THREADS) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv &
@@ -95,6 +96,7 @@ update:
 	$(DO) tools-update -v1
 test-build:
 	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS -n '+Core_Bound*' -pm 22 | $(SHOW)
+	grep -q 'Backend_Bound.Core_Bound.Ports_Utilization.Ports_Utilized_1' datadep-20e6.toplev-vl2.log
 	grep Time datadep-20e6.toplev-vl2.log
 	./do.py profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
 	    -pm 10006 -r 1 | $(SHOW) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval

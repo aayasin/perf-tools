@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.69
+__version__ = 2.7
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -504,7 +504,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd, logs['tma'] = toplev_V('-vl6', nodes=tma.get('bottlenecks'),
       tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % tma.get('dedup-nodes')))
     profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk if args.verbose <= 1 else grep_nz), 'topdown full tree + All Bottlenecks', 4)
-    insts = 1e7 #read_toplev(logs['tma'], 'Instructions')
+    insts = read_toplev(logs['tma'], 'Instructions')
     if insts is not None and profiling():
       if insts < 1e6:
         C.exe_cmd('grep -w Instructions %s' % logs['tma'], debug=1)
@@ -534,7 +534,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         exe("%s --stdio -i %s > %s " % (perf_view(c), perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
   if en(12):
-    cmd, log = toplev_V('-mvl2 %s' % ('' if args.sys_wide else ' --no-uncore'),
+    cmd, log = toplev_V('-mvl2 --no-sort %s' % ('' if args.sys_wide else ' --no-uncore'),
                         nodes='+IPC,'+tma.get('bottlenecks-only').replace('+', '-'))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
 

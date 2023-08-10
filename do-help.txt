@@ -26,7 +26,7 @@ optional arguments:
   --nodes NODES, -n NODES
                         user metrics to pass to toplev's --nodes (default: +Lo
                         ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,
-                        +UopPI)
+                        +UopPI,+IpAssist)
   -r REPEAT, --repeat REPEAT
                         times to run per-app counting and topdown-primary
                         profile steps (default: 3)

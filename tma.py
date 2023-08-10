@@ -25,3 +25,29 @@ def fixed_metrics():
     else:  events += '}'
     if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
   return events, flags
+
+metrics = {
+  'bot-fe':       '+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
+  'bot-rest':     '+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs'
+                  ',+Core_Bound_Likely',
+  'fixed':        '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
+  'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
+                    C.flag2str(',+IpAssist', pmu.goldencove()) + # Make this one Skylake in TMA 4.6; pmu.v4p()
+                    C.flag2str(',+Memory_Bound*/3', pmu.goldencove()), # +UopPI once ICL mux fixed, +ORO with TMA 4.5
+}
+
+def get(tag):
+  combo_tags = '[fe-]bottlenecks[-only] zero-ok '
+  def prepend_info(x): return ','.join((metrics['fixed'], x))
+  if tag =='bottlenecks': return prepend_info(','.join((metrics['bot-fe'], metrics['bot-rest'])))
+  if tag =='bottlenecks-only': return ','.join((metrics['bot-fe'], metrics['bot-rest']))
+  if tag =='fe-bottlenecks': return prepend_info(metrics['bot-fe'])
+  model = pmu.cpu('CPU')
+  if tag == 'zero-ok':
+    ZeroOk = C.csv2dict(C.dirname()+'/settings/tma-zero-ok.csv')
+    return ZeroOk[model].split(';')
+  if tag == 'dedup-nodes':
+    Dedup = C.csv2dict(C.dirname()+'/settings/tma-many-counters.csv')
+    return Dedup[model].replace(';', ',')
+  assert tag in metrics, "Unsupported tma.get(%s)! Supported tags: %s" % (tag, combo_tags + ' '.join(metrics.keys()))
+  return metrics[tag]

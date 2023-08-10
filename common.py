@@ -189,7 +189,7 @@ def print_env(std=sys.stderr):
 #
 def file2lines(filename, fail=False):
   try:
-    with open(filename) as f:
+    with open(filename, mode='r') as f:
       return f.read().splitlines()
   except IOError:
     if fail: error('cannot open %s'%filename)
@@ -200,6 +200,12 @@ def file2lines(filename, fail=False):
 def file2str(f, lines=0):
   out = file2lines(f)
   return ';'.join(out[:lines] if lines else out).replace('\n', '') if out[0] else None
+
+def csv2dict(f):
+  d = {}
+  for l in file2lines(f):
+    d[l.split(',')[0]] = l.split(',')[1]
+  return d
 
 # (colored) grep with 0 exit status
 def grep(what, file='', flags='', color=False):

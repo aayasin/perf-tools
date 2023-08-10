@@ -36,6 +36,8 @@ def meteorlake(): return name() == 'meteorlake_hybrid'
 # aggregations
 def goldencove(): return alderlake() or sapphire() or meteorlake()
 def perfmetrics():  return icelake() or goldencove()
+# Skylake onwards
+def v4p(): return int(msr_read(0x345)[2], 16) >= 3 # Skylake introduced PEBS_FMT=3 (!= PerfMon Version 4)
 # Icelake onward PMU, e.g. Intel PerfMon Version 5+
 def v5p(): return perfmetrics()
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
@@ -132,6 +134,8 @@ def cpu_has_feature(feature):
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags
 
+
+pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:
@@ -140,7 +144,6 @@ def cpu(what, default=None):
       for x in ('eventlist', 'model', 'x86'): del s[x]
       return s
     return cpu.state if what == 'ALL' else (cpu.state[what] if what in cpu.state else warn())
-  pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
   if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
       'git clone --recurse-submodules https://github.com/aayasin/perf-tools'))
   def versions():
@@ -176,9 +179,12 @@ def cpu(what, default=None):
   except KeyError: warn()
 cpu.state = None
 
+def msr_read(m): return C.exe_one_line('sudo %s/msr.py 0x%x' % (pmutools, m))
+
 def cpu_msrs():
   msrs = [0x048, 0x08b, 0x123,  # IA32_SPEC_CTRL, microcode update signature, IA32_MCU_OPT_CTRL
           0x1a4,                # Prefetch Control
+          0x033,                # Memory Control
   ]
   if goldencove(): msrs += [0x6a0, 0x6a2]
   if server():

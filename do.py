@@ -18,11 +18,12 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.67
+__version__ = 2.69
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
 from datetime import datetime
+from getpass import getuser
 from math import log10
 from platform import python_version
 
@@ -63,9 +64,7 @@ do = {'run':        C.RUN_DEF,
   'lbr-stats-tk':   '- 0 20 1',
   'ldlat':          int(LDLAT_DEF),
   'levels':         2,
-  'metrics':        '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
-                    C.flag2str(',+IpAssist', pmu.goldencove()) + # Make this one Skylake in TMA 4.6
-                    C.flag2str(',+Memory_Bound*/3', pmu.goldencove()), # +UopPI once ICL mux fixed, +ORO with TMA 4.5
+  'metrics':        tma.get('key-info'),
   'model':          'MTL',
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
@@ -86,26 +85,20 @@ do = {'run':        C.RUN_DEF,
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
   'perf-stat-add':  1, # additional events using general counters
-  'perf-stat-def':  'context-switches,cpu-migrations,page-faults',
+  'perf-stat-def':  'context-switches,cpu-migrations,page-faults', # JIRA LFE-9106
   'perf-stat-ipc':  'stat -e instructions,cycles',
   'pin':            'taskset 0x4',
   'plot':           0,
   'pmu':            pmu.name(),
   'python':         sys.executable,
-  'python-pkgs':    ['numpy', 'xlsxwriter'],
+  'python-pkgs':    ['numpy', 'pandas', 'xlsxwriter'],
   'reprocess':      2,
   'sample':         2,
   'size':           0,
   'super':          0,
   'tee':            1,
   'time':           0,
-  'tma-bot-fe':     ',+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
-  'tma-bot-rest':   ',+Memory_Bandwidth,+Memory_Latency,+Memory_Data_TLBs,+Core_Bound_Likely',
-  'tma-dedup-nodes':'Other_Light_Ops,Lock_Latency,Contested_Accesses,Data_Sharing,FP_Arith'+
-                      C.flag2str(',L2_Bound,DRAM_Bound,Memory_Operations', pmu.icelake()),
-  'tma-fx':         '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
   'tma-group':      None,
-  'tma-zero-ok':    'Data_Sharing Contested_Accesses Remote_Cache Slow_Pause',
   'xed':            1 if pmu.cpu('x86', 0) else 0,
 }
 args = argparse.Namespace()
@@ -133,6 +126,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
   if 'tee >(' in x or export or x.startswith(time): x = '%s bash -c "%s" 2>&1' % (export if export else '', x.replace('"', '\\"'))
   x = x.replace('  ', ' ').strip()
   debug = args.verbose > 0
+  if getuser() == 'root': x = x.replace('sudo ', '')
   if len(vars(args)):
     run = not args.print_only
     if profiling:
@@ -284,9 +278,8 @@ def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpu
       for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_%s_freq'%m):
         set_sysfile(f, freq)
 
-def msr_read(m): return exe_1line('sudo %s/msr.py 0x%x' % (args.pmu_tools, m), heavy=False)
 def msr_set(m, mask, set=True):
-  v = msr_read(m)
+  v = pmu.msr_read(m)
   if C.is_num(v, 16):
     v = int(v, 16)
     return (v | mask) if set else (v & ~mask)
@@ -310,7 +303,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
     for m in do['msrs']:
-      v = msr_read(m)
+      v = pmu.msr_read(m)
       exe('echo "MSR 0x%x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x00000001', 'cpuid'), out))
   exe("sudo dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d,
@@ -398,7 +391,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       es, fs = tma.fixed_metrics()
       evts += append(es, evts)
       if fs: perf_args += fs
-    if do['perf-stat-add']: evts += append(pmu.basic_events(), evts)
+    if do['perf-stat-add'] and do['core']: evts += append(pmu.basic_events(), evts)
     if args.events: evts += append(pmu.perf_format(args.events), evts)
     if args.events or args.metrics: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
     if evts != '': perf_args += ' -e "cpu-clock,%s,%s"' % (evts, do['perf-stat-def'])
@@ -486,7 +479,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   toplev += ' --no-desc'
   if do['plot']: toplev += ' --graph -I%d --no-multiplex' % do['interval']
   grep_bk= "egrep '<==|MUX|Info(\.Bot|.*Time)|warning.*zero' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
-  tl_skip= "not (found|referenced|supported)|Unknown sample event"
+  tl_skip= "not (found|referenced|supported)|Unknown sample event|^unreferenced "
   grep_NZ= "egrep -iv '^(all|)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|%s|##placeholder##' " % tl_skip
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
@@ -508,12 +501,17 @@ def profile(mask, toplev_args=['mvl6', None]):
 
   # +Info metrics that would not use more counters
   if en(4):
-    cmd, logs['tma'] = toplev_V('-vl6', nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']),
-      tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % do['tma-dedup-nodes']))
-    profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk if args.verbose <= 0 else grep_nz), 'topdown full tree + All Bottlenecks', 4)
-    if profiling(): C.fappend('Info.PerfTools SMT_on - %d' % (1 if pmu.cpu('smt-on') else 0), logs['tma'])
+    cmd, logs['tma'] = toplev_V('-vl6', nodes=tma.get('bottlenecks'),
+      tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % tma.get('dedup-nodes')))
+    profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk if args.verbose <= 1 else grep_nz), 'topdown full tree + All Bottlenecks', 4)
+    insts = 1e7 #read_toplev(logs['tma'], 'Instructions')
+    if insts is not None and profiling():
+      if insts < 1e6:
+        C.exe_cmd('grep -w Instructions %s' % logs['tma'], debug=1)
+        error("No/too little Instructions = %d " % insts)
+      C.fappend('Info.PerfTools SMT_on - %d' % (1 if pmu.cpu('smt-on') else 0), logs['tma'])
     zeros = read_toplev(logs['tma'], 'zero-counts')
-    if zeros and len([m for m in zeros.split() if m not in do['tma-zero-ok'].split()]):
+    if zeros and len([m for m in zeros.split() if m not in tma.get('zero-ok')]):
       # https://github.com/andikleen/pmu-tools/issues/455
       error("Too many metrics with zero counts (%s). Run longer or use: --toplev-args ' --no-multiplex'" % zeros)
     topdown_describe(logs['tma'])
@@ -536,12 +534,12 @@ def profile(mask, toplev_args=['mvl6', None]):
         exe("%s --stdio -i %s > %s " % (perf_view(c), perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
   if en(12):
-    cmd, log = toplev_V('-mvl2%s' % ('' if args.sys_wide else ' --no-uncore'),
-                        nodes=do['tma-fx'] + (do['tma-bot-fe'] + do['tma-bot-rest']).replace('+', '-'))
+    cmd, log = toplev_V('-mvl2 %s' % ('' if args.sys_wide else ' --no-uncore'),
+                        nodes='+IPC,'+tma.get('bottlenecks-only').replace('+', '-'))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
 
   if en(13):
-    cmd, log = toplev_V('-vvl2', nodes=do['tma-fx'] + do['tma-bot-fe'] + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
+    cmd, log = toplev_V('-vvl2', nodes=tma.get('fe-bottlenecks') + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown FE Bottlenecks', 13)
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
 
@@ -554,7 +552,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if not group: group, x = 'Mem', C.warn("Could not auto-detect group; Minimize system-noise, e.g. try './do.py disable-smt'")
     MG='--metric-group +Summary'
     assert MG in args.toplev_args, "'%s' is missing in toplev-args! " % MG
-    cmd, log = toplev_V('-vvvl2', nodes=do['tma-fx'], tlargs=args.toplev_args.replace(MG, ',+'.join((MG, group))))
+    cmd, log = toplev_V('-vvvl2', nodes=tma.get('fixed'), tlargs=args.toplev_args.replace(MG, ',+'.join((MG, group))))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
 
@@ -597,7 +595,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       bin=bins[-1]
       if isfile(bin):
         exe_v0('printf "\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n" >> %s' % (bin, info))
-        exe("strings %s | %s >> %s" % (bin, C.grep('^(GNU |GCC:|clang [bv])'), info))
+        exe("strings %s | %s >> %s" % (bin, C.grep('^(GCC:|clang [bv])'), info))
       prn_line(info)
     def log_count(x, l): return "printf 'Count of unique %s%s: ' >> %s && wc -l < %s >> %s" % (
       'non-cold ' if do['imix'] & 0x10 else '', x, info, l, info)
@@ -625,6 +623,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         mispreds[ (' '.join(b[2:]), C.ratio(m, takens[b[2]])) ] = m * takens[b[2]]
       C.fappend('\n%s:\n' % header + '\t'.join(('significance', '%7s' % 'ratio', 'instruction addr & ASM')), misp_file)
       for b in C.hist2slist(mispreds): C.fappend('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0])), misp_file)
+    lbr_hdr = '# LBR-based Statistics:'
     if not isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()
       exe_v0('printf "# processing %s%s\n"%s %s' % (data, C.flag2str(" filtered on ", comm), '>>' if do['size'] else '>', info))
@@ -648,13 +647,13 @@ def profile(mask, toplev_args=['mvl6', None]):
           exe(log_br_count('mispredicted conditional taken', 'misp_tk_conds'))
           if do['imix'] & 0x20 and args.mode != 'profile': calc_misp_ratio()
         exe(log_br_count('mispredicted taken', 'mispreds'))
+    else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of stats log files')
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
       loops = '%s.loops.log' % data
       llvm_mca = '%s.llvm_mca.log' % data
       err = '%s.error.log' % data
-      lbr_hdr = '# LBR-based Statistics:'
       exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
       if not isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
@@ -686,7 +685,6 @@ def profile(mask, toplev_args=['mvl6', None]):
             "@instruction-mix no operands")
         if args.verbose > 0: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)
         report_info(info, err)
-      else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of %s , loops and i-mix log files' % hits)
       if do['loops'] and isfile(loops):
         prn_line(info)
         if do['loop-ideal-ipc']: exe('echo > %s' % llvm_mca)
@@ -784,7 +782,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   #profile-end
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', 'csv', 'log', 'pyc', 'stat', 'xlsx', 'svg'] + ext
+  log_files = ['', 'csv', 'log', 'stat', 'xlsx', 'svg'] + ext
   if cmd == 'tar':
     r = '.'.join((tag, pmu.cpu('CPU'), 'results.tar.gz')) if len(tag) else C.error('do_logs(tar): expecting tag')
     if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
@@ -794,7 +792,7 @@ def do_logs(cmd, ext=[], tag=''):
     for f in C.glob(s+'*'):
       if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
     exe('tar -czvf %s run.sh ' % r + ' '.join(files), 'tar into %s' % r, log=False)
-  if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + ' *-out.txt *perf.data* __pycache__ results.tar.gz')
+  if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + ' *-out.txt *perf.data* $(find -name __pycache__) results.tar.gz')
 
 def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
@@ -849,6 +847,7 @@ def main():
           t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
+  pmu.pmutools = args.pmu_tools
   if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
   perfv = exe_1line(args.perf + ' --version', heavy=False)
   if C.any_in([x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')], perfv): C.error('Unsupported perf tool: ' + perfv)

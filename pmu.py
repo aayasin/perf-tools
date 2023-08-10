@@ -22,10 +22,8 @@ else:
 #
 # PMU, no prefix
 #
-def name():
-  f = '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
-  f += '/caps/pmu_name'
-  return C.file2str(f) or 'Unknown PMU'
+def sys_devices_cpu(): return '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
+def name():       return C.file2str(sys_devices_cpu() + '/caps/pmu_name') or 'Unknown PMU'
 
 # per CPU PMUs
 def skylake():    return name() == 'skylake'
@@ -37,7 +35,8 @@ def meteorlake(): return name() == 'meteorlake_hybrid'
 def goldencove(): return alderlake() or sapphire() or meteorlake()
 def perfmetrics():  return icelake() or goldencove()
 # Skylake onwards
-def v4p(): return int(msr_read(0x345)[2], 16) >= 3 # Skylake introduced PEBS_FMT=3 (!= PerfMon Version 4)
+def v4p(): return os.path.exists(sys_devices_cpu() + '/format/frontend') # PEBS_FRONTEND introduced by Skylake (& no root needed)
+  # int(msr_read(0x345)[2], 16) >= 3 # Skylake introduced PEBS_FMT=3 (!= PerfMon Version 4)
 # Icelake onward PMU, e.g. Intel PerfMon Version 5+
 def v5p(): return perfmetrics()
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')

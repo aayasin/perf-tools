@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 2.12 # see version line of do.py
+__version__= 2.17 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -34,6 +34,7 @@ verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2:
 use_cands = os.getenv('LBR_USE_CANDS')
 user_imix = C.env2list('LBR_IMIX', ['vpmovmskb', 'imul'])
 user_loop_imix = C.env2list('LBR_LOOP_IMIX', ['zcnt'])
+user_jcc_pair = C.env2list('LBR_JCC_PAIR', ['JZ', 'JNZ'])
 
 def hex(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
@@ -305,7 +306,9 @@ stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
 
 CISC_CMP= '_cisc-cmp'
 def inst2pred(i):
-  i2p = {'st-stack':  'mov\S+\s+[^\(\),]+, [0-9a-fx]+\(%.sp\)',
+  i2p = {'st-stack':    'mov\S*\s+[^\(\),]+, [0-9a-fx]*\(%.sp\)',
+    'st-reg-stack':   'mov\S*\s+%[^\(\),]+, [0-9a-fx]*\(%.sp\)',
+    'ld-stack':       'mov\S*\s+[0-9a-fx]*\(%.sp\),',
     'add-sub':        '(add|sub).*',
     'inc-dec':        '(inc|dec).*',
     CISC_CMP:         '(cmp[^x]|test).*\(',
@@ -320,17 +323,30 @@ def is_imix(t):
   IMIX_LIST = MEM_INSTS + ['logic']
   if not t: return IMIX_LIST + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
   return t in IMIX_LIST or t.startswith('vec')
-Insts = inst2pred(None) + ['cmov', 'lea', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
+Insts = inst2pred(None) + ['cmov', 'lea', 'lea-scaled', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
 Insts_global = Insts + is_imix(None) + ['all']
-Insts_all = ['cond_backward', 'cond_forward', 'cond_non-taken', 'cond_fusible',
-             'cond_non-fusible', 'cond_taken-not-first', 'cond_LD-CMP-JCC fusible',
-             'cond_CISC_CMP_IMM-JCC non-fusible'] + Insts_global
+Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first'
+              ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
+Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_global
 
-glob = {x: 0 for x in ['loop_cycles', 'loop_iters'] + Insts_all}
+glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}
 hsts = {}
 footprint = set()
 pages = set()
 indirects = set()
+
+def inc_JCC(i, suffix='non-fusible'):
+  c = '%s-JCC %s' % (i, suffix)
+  k = 'cond_%s' % c
+  if k in glob: glob[k] += 1
+  else:
+    glob[k] = 1
+    global Insts_cond
+    Insts_cond += [c]
+  if suffix == 'non-fusible':
+    glob['counted_non-fusible'] += 1
+    return True
+  return False
 
 IPTB  = 'inst-per-taken-br--IpTB'
 FUNCP = 'Params_of_func'
@@ -478,6 +494,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         valid = skip_sample(lines[0])
         invalid('bogus', 'instruction address missing')
         break
+      if skip_bad and len(lines) and not is_label(line) and is_taken(line) and not is_branch(line):
+        valid = skip_sample(lines[0])
+        invalid('bogus', 'non-branch instruction "%s" marked as taken' % get_inst(line))
+        break
       ip = None if header or is_label(line) or 'not reaching sample' in line else line_ip(line, lines)
       new_line = is_line_start(ip, xip)
       if edge_en and new_line:
@@ -488,7 +508,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           glob['all'] += 1
           # An instruction may be counted individually and/or per imix class
           for x in Insts:
-            if is_type(x, line): glob[x] += 1
+            if is_type(x, line):
+              if x == 'lea' and is_type(x86.LEA_S, line): glob['lea-scaled'] += 1
+              glob[x] += 1
           t = line_inst(line)
           if t and is_imix(t): glob[t] += 1
         if len(lines) == 1:
@@ -508,7 +530,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
                   if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
                   if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
           if edge_en and is_type(x86.COND_BR, lines[-1]) and is_taken(lines[-1]):
-            glob['cond_%sward' % ('for' if ip > xip else 'back')] += 1
+            glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
           # checks all lines but first
           if edge_en and is_type(x86.COND_BR, line):
             if is_taken(line): glob['cond_taken-not-first'] += 1
@@ -516,11 +538,24 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
             if x86.is_fusion(lines[-1], line):
               glob['cond_fusible'] += 1
               if len(lines) > 2 and is_type(x86.TEST_CMP, lines[-1]) and is_type(x86.LOAD, lines[-2]):
-                glob['cond_LD-CMP-JCC fusible'] += 1
+                inc_JCC('LD-CMP', 'fusible')
             else:
               glob['cond_non-fusible'] += 1
-              if is_type(x86.TEST_CMP, lines[-1]) and x86.is_mem_imm(lines[-1]):
-                glob['cond_CISC_CMP_IMM-JCC non-fusible'] += 1
+              if x86.is_mem_imm(lines[-1]):
+                inc_JCC('%s_MEM%sIDX_IMM' % ('CMP' if is_type(x86.TEST_CMP, lines[-1]) else 'OTHER',
+                                             '' if x86.is_mem_idx(lines[-1]) else 'NO'))
+              else:
+                counted = False
+                for x in user_jcc_pair:
+                  if is_type(x.lower(), lines[-1]):
+                    counted = inc_JCC(x)
+                    break
+                if counted: pass
+                elif is_type(x86.COND_BR, lines[-1]): counted = inc_JCC('JCC')
+                if len(lines) > 2 and x86.is_fusion(lines[-2], line):
+                  def inc_JCC2(x): return inc_JCC(x, suffix='non-fusible-IS')
+                  if is_type(x86.MOVE, lines[-1]): inc_JCC2('MOV')
+                  elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", lines[-1]): inc_JCC2('LEA-1')
           if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
             inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
           # TODO: consider the branch instruction's bytes (once support added to perf-script)
@@ -554,6 +589,7 @@ read_sample.dump = C.env2int('LBR_DUMP', 0)
 
 def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
 def is_callret(l):    return is_type(x86.CALL_RET, l)
+def is_branch(l):     return is_type(x86.BR, l)
 
 # TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictiorary if header or None otherwise
 def is_header(line):
@@ -705,10 +741,8 @@ def print_global_stats():
   for n in (4, 5, 6): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
                                  prefix='proxy count', ratio_of=('loops', len(loops)))
   if glob['size_stats_en']:
-    for x in ('backward', ' forward'): print_imix_stat(x + ' taken conditional', glob['cond_' + x.strip()])
-    for x in ('non-taken', 'fusible', 'non-fusible', 'taken-not-first', 
-			  'LD-CMP-JCC fusible', 'CISC_CMP_IMM-JCC non-fusible'):
-      print_imix_stat(x + ' conditional', glob['cond_' + x])
+    for x in Insts_cond: print_imix_stat(x + ' conditional', glob['cond_' + x])
+    print_imix_stat('unaccounted non-fusible conditional', glob['cond_non-fusible'] - glob['counted_non-fusible'])
     for x in Insts_global: print_imix_stat(x, glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

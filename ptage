@@ -11,6 +11,7 @@ import sys
 
 # usage: <ex: some-output | sort -n> | ptage
 
+ptage_r = C.env2int('PTAGE_R')
 total, lines = 0, []
   
 while True:
@@ -22,7 +23,10 @@ while True:
 
 for l in lines:
   n = float(C.str2list(l)[0])
-  print("%.1f%%\t"%(100.0*n/total) + l)
+  s = "%.1f%%\t" % (100.0*n/total)
+  if ptage_r:
+    s = '%s%%' % round(100.0*n/total, ptage_r)
+  print(s + l)
  
 print("100%%\t %d\t\t\t===total"%int(total))
 

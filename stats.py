@@ -12,10 +12,10 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.83
+__version__= 0.90
 
 import common as C, pmu
-import csv, re, os.path
+import csv, re, os.path, sys
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]
@@ -44,8 +44,43 @@ debug = 0
 sDB = {}
 stats = {'verbose': 0}
 
+def rollup_all(stat=None):
+  sDB['ALL'], csv_file, reload = {}, 'rollup.csv', None
+  for a in sys.argv[1:]:
+    if not reload:
+      reload = re.findall("-janysave_type-er20c4ppp-c([0-9]+).perf.data.info.log", a)
+    c = a.replace("-janysave_type-er20c4ppp-c%s.perf.data.info.log" % reload, "")
+    sDB[c] = {}
+    d = read_info(a)
+    sDB[c].update(d)
+    for s in d.keys():
+      if s in sDB['ALL']: sDB['ALL'][s] += d[s]
+      else: sDB['ALL'][s] = d[s]
+    if stat: return sDB['ALL'][stat]
+  import pandas as pd
+  df = pd.DataFrame(sDB)
+  df.to_csv(csv_file)
+  print('wrote:', csv_file)
+  print(C.dict2str(sDB['ALL']))
+
+def cc(x): return x.replace(',', '')
+def read_info(info):
+  assert os.path.isfile(info), 'Missing file: %s' % info
+  d = {}
+  for l in C.file2lines(info):
+    if 'IPC histogram' in l: break
+    s, v = (None, ) * 2
+    if 'WARNING' in l: pass
+    elif re.findall('([cC]ount|estimate) of', l):
+      l = l.split(':')
+      s = l[0]#' '.join(l[0].split()) # re.sub('  +', ' ', l[0])
+      v = cc(l[1])
+    if v: d[s] = float(v) if '.' in v else int(v)
+  return d
+
 def rollup(c, perf_stat_file=None):
   if c in sDB: return
+  #sDB[c]={}; sDB[c].update(read_info(c + "-janysave_type-er20c4ppp-c700001.perf.data.info.log")); return
   if not perf_stat_file: perf_stat_file = c + '.perf_stat-r3.log'
   # TODO: call do.profile to get file names
   sDB[c] = read_perf(perf_stat_file)
@@ -119,7 +154,7 @@ def parse_perf(l):
       assert not ':C1' in Name # Name = Name.replace(':C1', ':c1')
       if stats['verbose']: print(name, '->', Name)
       name = Name
-    val = items[0].replace(',', '')
+    val = cc(items[0])
     val = float(val) if name_idx == 2 else int(val)
     var = get_var()
     metric_idx = name_idx + 3
@@ -167,9 +202,9 @@ def read_toplev(filename, metric=None):
         d['Critical-Node'] = items[1]
       elif l.startswith('warning'):
         d['zero-counts'] = l.split(':')[2].strip()
-      else:
-        for m in ('IpTB', 'UopPI', 'SMT_on'):
-          if m in items[1]: d[items[1]] = float(items[3])
+      elif l.startswith('Info'):
+        for m in ('Instructions', 'IpTB', 'UopPI', 'SMT_on'):
+          if m in items[1]: d[items[1]] = float(cc(items[3]))
     except ValueError:
       C.warn("cannot parse: '%s'" % l)
     except AttributeError:
@@ -263,6 +298,7 @@ def csv2stat(filename):
   return stat
 
 def main():
+  if C.arg(1).endswith('.info.log'): return rollup_all()
   stats['verbose'] = 1
   print(pmu.cpu('eventlist'))
   s = csv2stat(C.arg(1))

@@ -29,7 +29,8 @@ def fixed_metrics():
 metrics = {
   'bot-fe':       '+Mispredictions,+Big_Code,+Instruction_Fetch_BW,+Branching_Overhead,+DSB_Misses',
   'bot-rest':     '+Cache_Memory_Bandwidth,+Cache_Memory_Latency,+Memory_Data_TLBs,+Memory_Synchronization'
-                  ',+Irregular_Overhead,+Other_Bottlenecks,+Base_Non_Br,+Core_Bound_Likely',
+                  ',+Irregular_Overhead,+Other_Bottlenecks,+Base_Non_Br' +
+                  C.flag2str(',+Core_Bound_Likely', pmu.cpu('smt-on')),
   'fixed':        '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
   'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
                     C.flag2str(',+IpAssist', pmu.v4p()) +

@@ -401,7 +401,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     ret = profile_exe(perf + stat, msg, step, mode='perf-stat')
     if args.stdout or do['tee']==0 or do['help']<0: return C.error('perf-stat failed') if ret else None
     if args.mode == 'process': return log
-    if not isfile(log) or os.path.getsize(log) == 0: profile_exe(ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
+    if not isfile(log) or os.path.getsize(log) == 0:
+      ret = profile_exe(ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
     if not isfile(log) or int(exe_1line('wc -l ' + log, 0, False)) < 5:
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', step, events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)

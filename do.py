@@ -356,8 +356,8 @@ def profile(mask, toplev_args=['mvl6', None]):
       return
     if mode == 'log-setup': return log_setup()
     if args.sys_wide and not (' -a ' in cmd): C.error("Incorrect system wide in profile-step='%s' cmd='%s'" % (msg, cmd))
-    if mode == 'perf-stat': exe1(cmd, msg, fail=False)
-    else: exe(cmd, msg)
+    if mode == 'perf-stat': return exe1(cmd, msg, fail=False)
+    else: return exe(cmd, msg)
   def profile_mask_help(filename = 'profile-mask-help.md'):
     hdr = ('%7s' % 'mask', '%-50s' % 'profile-step', 'additional [optional] arguments')
     title = ("## Help for profile-steps in the profile command",
@@ -398,13 +398,14 @@ def profile(mask, toplev_args=['mvl6', None]):
     if evts != '': perf_args += ' -e "cpu-clock,%s,%s"' % (evts, do['perf-stat-def'])
     log = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log')
     stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
-    profile_exe(perf + stat, msg, step, mode='perf-stat')
-    if args.stdout or do['tee']==0 or do['help']<0: return None
+    ret = profile_exe(perf + stat, msg, step, mode='perf-stat')
+    if args.stdout or do['tee']==0 or do['help']<0: return C.error('perf-stat failed') if ret else None
     if args.mode == 'process': return log
     if not isfile(log) or os.path.getsize(log) == 0: profile_exe(ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
     if not isfile(log) or int(exe_1line('wc -l ' + log, 0, False)) < 5:
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', step, events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
+    if ret: C.error('perf_stat() failed')
     return log
   def samples_count(d): return 1e5 if args.mode == 'profile' else int(exe_1line(
     '%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | wc -l' % (perf, d)))
@@ -510,7 +511,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       if insts < 1e6:
         C.exe_cmd('grep -w Instructions %s' % logs['tma'], debug=1)
         error("No/too little Instructions = %d " % insts)
-      C.fappend('Info.PerfTools SMT_on - %d' % (1 if pmu.cpu('smt-on') else 0), logs['tma'])
+      C.fappend('Info.PerfTools SMT_on - %d' % int(pmu.cpu('smt-on')), logs['tma'])
     zeros = read_toplev(logs['tma'], 'zero-counts')
     if zeros and len([m for m in zeros.split() if m not in tma.get('zero-ok')]):
       # https://github.com/andikleen/pmu-tools/issues/455

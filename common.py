@@ -204,7 +204,9 @@ def file2str(f, lines=0):
 def csv2dict(f):
   d = {}
   for l in file2lines(f):
-    d[l.split(',')[0]] = l.split(',')[1]
+    k = l.split(',')[0]
+    if not re.match(r'^[A-Z]', k): k = k[1:]
+    d[k] = l.split(',')[1]
   return d
 
 # (colored) grep with 0 exit status

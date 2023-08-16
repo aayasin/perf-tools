@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.6
+__version__= 0.61
 
 import common as C, pmu, stats
 import argparse, os, sys, time
@@ -111,13 +111,12 @@ def main():
     if args.attempt == '-1': return args.app
     return "'%s %s %s'" % (args.app, flavor, 't%s'%args.attempt if args.attempt.isdigit() else args.attempt)
 
-  if args.stages & 0x8: exe(do.replace('profile', 'log').replace('batch:1', 'batch:0'))
-
   if args.stages & 0x1:
     enable_it=0
     if not args.smt and pmu.cpu('smt-on'):
-      exe('%s disable-smt -v1' % do0)
+      exe('%s disable-smt disable-aslr -v1' % do0)
       enable_it=1
+    if args.stages & 0x8: exe(do.replace('profile', 'log').replace('batch:1', 'batch:0'))
     if 'misp' in args.mode: args.profile_mask |= 0x200
     for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
     if enable_it: exe('%s enable-smt -v1' % do0)

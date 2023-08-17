@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.71
+__version__ = 2.72
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -33,6 +33,7 @@ tunable2pkg = {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python
 
 def isfile(f): return f and os.path.isfile(f)
 Find_perf = 'sudo find / -name perf -executable -type f | grep ^/'
+Time = '/usr/bin/time'
 LDLAT_DEF = '7'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
@@ -104,7 +105,6 @@ do = {'run':        C.RUN_DEF,
 args = argparse.Namespace()
 
 def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=True, background=False, export=None):
-  time = '/usr/bin/time'
   def get_time_cmd():
     X, i = x.split(), 0
     while C.any_in(('=', 'python'), X[i]): i += 1
@@ -112,7 +112,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
     while C.any_in(('--no-desc',), X[j]): j += 1
     kk = C.flag_value(x, '-e') or '' if ' record' in x else C.flag_value(x, '-F') if ' script' in x else X[j+1]
     cmd_name = C.chop('-'.join((X[i].split('/')[-1], X[j], kk)))
-    time_str = '%s %s' % (time, '-f "\\t%%E time-real:%s"' % cmd_name if do['time'] > 1 else '')
+    time_str = '%s %s' % (Time, '-f "\\t%%E time-real:%s"' % cmd_name if do['time'] > 1 else '')
     X.insert(1 if '=' in X[0] else 0, time_str)
     return ' '.join(X)
   if msg and do['batch']: msg += " for '%s'" % args.app
@@ -123,8 +123,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
   profiling = C.any_in([' stat', ' record', 'toplev.py'], x)
   if do['time'] and profiling: timeit = True
   if timeit and not export: x = get_time_cmd()
-  if 'tee >(' in x or export or x.startswith(time): x = '%s bash -c "%s" 2>&1' % (export if export else '', x.replace('"', '\\"'))
-  x = x.replace('  ', ' ').strip()
+  x = bash(x, export).replace('  ', ' ').strip()
   debug = args.verbose > 0
   if getuser() == 'root': x = x.replace('sudo ', '')
   if len(vars(args)):
@@ -150,13 +149,13 @@ def exe1(x, m=None, fail=True, log=True):
 def exe_to_null(x): return exe1(x + ' > /dev/null')
 def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) # don't append to cmds_file
 def prn_line(f): exe_v0('echo >> %s' % f)
-
 def print_cmd(x, show=True):
   if show and not do['batch'] and args.verbose >= 0: C.printc(x)
   if len(vars(args))>0 and do['cmds_file']: do['cmds_file'].write('# ' + x + '\n')
 
+def bash(x, px=None): return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if 'tee >(' in x or x.startswith(Time) else x
 def exe_1line(x, f=None, heavy=True):
-  return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(x, f, args.verbose > 1)
+  return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(bash(x), f, args.verbose > 1)
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
 
 def error(x): C.warn(x) if do['forgive'] else C.error(x)
@@ -238,10 +237,10 @@ def find_perf():
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): set_sysfile(p, str(v))
   TIME_MAX = '/proc/sys/kernel/perf_cpu_time_max_percent'
-  perf_params = [
+  perf_params = [ # Documentation/admin-guide/sysctl/kernel.rst
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
-    ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e9), 'root'),
+    ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e6), 'root'),
     ('/sys/devices/%s/perf_event_mux_interval_ms' % pmu.pmu(), 100, ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/nmi_watchdog', 0, ),
@@ -305,7 +304,7 @@ def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
   if do['msr']:
     for m in do['msrs']:
       v = pmu.msr_read(m)
-      exe('echo "MSR 0x%x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
+      exe('echo "MSR 0x%03x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x00000001', 'cpuid'), out))
   exe("sudo dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d,
     label('Command line|Performance E|micro'), out, d, label('BIOS '), out))
@@ -409,7 +408,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     if ret: C.error('perf_stat() failed')
     return log
   def samples_count(d): return 1e5 if args.mode == 'profile' else int(exe_1line(
-    '%s script -i %s -D | grep -F RECORD_SAMPLE 2>/dev/null | wc -l' % (perf, d)))
+    '%s script -i %s -D 2>/dev/null | %sgrep -F RECORD_SAMPLE | wc -l' % (perf, d,
+    ('tee >(tail -50 > %s.debug.log) | ' % d) if do['debug'] else '') ))
   def get_comm(data):
     if not do['perf-filter']: return None
     if do['comm']: return do['comm']
@@ -588,16 +588,20 @@ def profile(mask, toplev_args=['mvl6', None]):
     data, nsamples = perf_record('lbr', 8)
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
+    def print_info(x):
+      if args.mode != 'profile': exe_v0('printf "%s" >%s %s' % (x, '' if print_info.first else '>', info))
+      print_info.first = False
+    print_info.first = True
     def static_stats():
       if args.mode == 'profile': return
       bins = exe2list(perf + " script -i %s | cut -d\( -f2 | cut -d\) -f1 | egrep -v '^\[|anonymous' | %s | tail -5" %
                         (data, sort2u))[1:][::2]
       assert len(bins)
-      exe_v0('printf "# %s:\n#\n" > %s' % ('Static Statistics', info))
+      print_info('# %s:\n#\n' % 'Static Statistics')
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
       bin=bins[-1]
       if isfile(bin):
-        exe_v0('printf "\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n" >> %s' % (bin, info))
+        print_info('\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n' % bin)
         exe("strings %s | %s >> %s" % (bin, C.grep('^(GCC:|clang [bv])'), info))
       prn_line(info)
     def log_count(x, l): return "printf 'Count of unique %s%s: ' >> %s && wc -l < %s >> %s" % (
@@ -629,7 +633,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     lbr_hdr = '# LBR-based Statistics:'
     if not isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()
-      exe_v0('printf "# processing %s%s\n"%s %s' % (data, C.flag2str(" filtered on ", comm), '>>' if do['size'] else '>', info))
+      print_info('# processing %s%s\n' % (data, C.flag2str(" filtered on ", comm)))
       if do['lbr-branch-stats']: exe(perf + " report %s | grep -A13 'Branch Statistics:' | tee -a %s | egrep -v ':\s+0\.0%%|CROSS'" %
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(logs['stat']): exe("egrep '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
@@ -657,7 +661,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       loops = '%s.loops.log' % data
       llvm_mca = '%s.llvm_mca.log' % data
       err = '%s.error.log' % data
-      exe_v0('printf "\n%s\n#\n">> %s' % (lbr_hdr, info))
+      print_info('\n%s\n#\n' % lbr_hdr)
       if not isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
         cycles = get_stat(pmu.event('cycles'), 0)

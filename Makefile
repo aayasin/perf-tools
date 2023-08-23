@@ -52,7 +52,7 @@ run-mem-bw:
 	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s1 --tune :perf-stat:\"\'-C2\'\" # for profiling
 test-mem-bw: run-mem-bw
 	sleep 2s
-	set -o pipefail; $(DO) profile -s2 $(ST) -o $< $(RERUN) | $(SHOW)
+	set -o pipefail; $(DO) profile -s3 $(ST) -o $< $(RERUN) | $(SHOW)
 	grep -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log
 	kill -9 `pidof m0-n8192-u01.llv`
 run-mt:
@@ -61,6 +61,10 @@ test-mt: run-mt
 	sleep 2s
 	set -o pipefail; $(DO) profile -s1 $(RERUN) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
+CPUIDI = 50000000
+test-bottlenecks: kernels/cpuid
+	$(DO1) -pm 10 --tune :help:0
+	grep Bottleneck cpuid-$(CPUIDI).toplev-vl6.log | sort -n -k4 | tail -1 | grep --color Irregular_Overhead
 test-bc2:
 	$(DO2) -pm 40 | $(SHOW)
 test-metric:
@@ -131,6 +135,7 @@ pre-push: help
 	$(DO) log                                               # prompt for sudo soon after
 	$(MAKE) test-bc2 SHOW="grep --color -E '^|Mispredict'"	# tests topdown across-tree tagging; Mispredict
 	echo skip: $(MAKE) test-false-sharing                              # tests topdown ~overlap in Threshold attribute
+	$(MAKE) test-bottlenecks AP="./kernels/cpuid $(CPUIDI)" # tests Bottlenecks View
 	$(MAKE) test-build SHOW="grep --color -E '^|build|DSB|Ports'" # tests build command, perf -e, toplev --nodes; Ports_*
 	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'                 # tests load-latency profile-step + verbose:1
 	$(MAKE) test-default PM=313e                            # tests default non-MUX sensitive profile-steps
@@ -142,6 +147,8 @@ pre-push: help
 	    CMD='suspend-smt profile tar' PM=1931a &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command
+	$(MAKE) test-default APP=./$(AP) PM=313e DO_ARGS=":perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
+	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
 	mkdir test-dir; cd test-dir; ln -s ../run.sh; ln -s ../common.py; make test-default APP=../pmu-tools/workloads/BC2s \
 	    DO=../do.py -f ../Makefile > ../test-dir.log 2>&1   # tests default from another directory, toplev describe
 	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command

@@ -507,12 +507,12 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd, logs['tma'] = toplev_V('-vl6', nodes=tma.get('bottlenecks'),
       tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % tma.get('dedup-nodes')))
     profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk if args.verbose <= 1 else grep_nz), 'topdown full tree + All Bottlenecks', 4)
-    insts = read_toplev(logs['tma'], 'Instructions')
-    if insts is not None and profiling():
-      if insts < 1e6:
+    if profiling():
+      C.fappend('Info.PerfTools SMT_on - %d' % int(pmu.cpu('smt-on')), logs['tma'])
+      insts = read_toplev(logs['tma'], 'Instructions')
+      if insts is not None and insts < 1e6:
         C.exe_cmd('grep -w Instructions %s' % logs['tma'], debug=1)
         error("No/too little Instructions = %d " % insts)
-      C.fappend('Info.PerfTools SMT_on - %d' % int(pmu.cpu('smt-on')), logs['tma'])
     zeros = read_toplev(logs['tma'], 'zero-counts')
     if zeros and len([m for m in zeros.split() if m not in tma.get('zero-ok')]):
       # https://github.com/andikleen/pmu-tools/issues/455

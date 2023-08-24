@@ -11,7 +11,6 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 2.17 # see version line of do.py
 
 import common as C, pmu
 from common import inc
@@ -23,6 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
+__version__= x86.__version__ + 1.93 # see version line of do.py
 
 MEM_INSTS = ['load', 'store', 'lock', 'prefetch']
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
@@ -64,9 +64,19 @@ def skip_sample(s):
     assert line, 'was input truncated? sample:\n%s'%s
   return 0
 
+header_field = {
+  'ip': 5,
+  'sym': 6,
+  'dso': 7,
+}
 def header_ip_str(line):
   x = is_header(line)
   assert x, "Not a head of sample: " + line
+  #           clang 155371 [062] 1286179.977117:      70001 r20c4:ppp:      7ffff7de04c2 _dl_relocate_object+0xbc2 (/lib/x86_64-linux-gnu/ld-2.27.so)
+  if 0:
+    x = re.match(r'^\s+(\w+)\s(\d+)\s(\[\d+\])?\s(\d+\.\d+):\s+(\d+)\s(\S+)\s+([0-9a-f]+)', line)
+    # comm pid cpu timestamp period event ip sym dso
+    return x.group(header_field['ip'])
   if header_ip_str.first:
     if '[' in x.group(1): header_ip_str.position += 1
     header_ip_str.first = False
@@ -375,6 +385,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   def invalid(bad, msg):
     stat[bad] += 1
     if not loop_ipc: C.warn('%s sample encountered (%s)' % (bad, msg))
+  def header_only_str(l):
+    dso = get_field(l, 'dso').replace('(','').replace(')','')
+    return 'header-only: ' + (dso if 'kallsyms' in dso else ' '.join((get_field(l, 'sym'), dso)))
   global lbr_events, bwd_br_tgts, edge_en
   valid, lines, bwd_br_tgts = 0, [], []
   assert not labels, "labels argument must be False!"
@@ -421,6 +434,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         # first sample here (of a given event)
         ev = header.group(3)[:-1]
         if not ev in lbr_events:
+          if not len(lbr_events) and '[' in header.group(1):
+            for k in header_field.keys(): header_field[k] += 1
           lbr_events += [ev]
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
           def f2s(x): return C.flag2str(' ', C.env2str(x, prefix=True))
@@ -448,7 +463,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
            min_lines and (len_m1 < min_lines) or\
            header_ip(lines[0]) != line_ip(lines[len_m1]):
           valid = 0
-          invalid('bogus', 'too short')
+          invalid('bogus', 'too short' if len_m1 else header_only_str(lines[0]))
           # apparently there is a perf-script bug (seen with perf tool 6.1)
           update_size_stats()
           if debug and debug == timestamp:
@@ -578,7 +593,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     if read_sample.dump: print_sample(lines, read_sample.dump)
     if read_sample.stop and stat['total'] >= int(read_sample.stop):
       C.info('stopping after %s valid samples' % read_sample.stop)
-      print_common(stat['total'], print_summary=True)
+      print_common(stat['total'])
       exit(None, lines, 'stop', msg="run:\t 'kill -9 $(pidof perf)'\t!")
   update_size_stats()
   return lines
@@ -646,6 +661,11 @@ def is_taken(line):   return '# ' in line
 def is_in_loop(ip, loop): return ip >= loop and ip <= loops[loop]['back']
 def get_inst(l):      return C.str2list(l)[1]
 def get_loop(ip):     return loops[ip] if ip in loops else None
+def get_field(l, f):
+  try:
+    return C.str2list(l)[header_field[f]]
+  except:
+    return l
 
 def get_taken_idx(sample, n):
   i = len(sample)-1
@@ -752,15 +772,14 @@ def print_global_stats():
         print_stat('branch at %s' % hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
                    prefix='misprediction-ratio', comment='paths histogram')
 
-def print_common(total, print_summary=False):
+def print_common(total):
   if glob['size_stats_en']:
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
   if edge_en and total: print_global_stats()
   print('\n'.join(['# CMP denotes CMP or TEST instructions', '#Global-stats-end', '']))
-  if print_summary:
-    if verbose & 0xf00: C.warn_summary()
+  C.warn_summary()
 
 def print_all(nloops=10, loop_ipc=0):
   total = sum(stat['IPs'].values()) if glob['ip_filter'] else stat['total']

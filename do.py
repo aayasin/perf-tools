@@ -33,6 +33,7 @@ tunable2pkg = {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python
 
 def isfile(f): return f and os.path.isfile(f)
 Find_perf = 'sudo find / -name perf -executable -type f | grep ^/'
+Setup_log = 'setup-system.log'
 Time = '/usr/bin/time'
 LDLAT_DEF = '7'
 do = {'run':        C.RUN_DEF,
@@ -285,7 +286,7 @@ def msr_set(m, mask, set=True):
     return (v | mask) if set else (v & ~mask)
 def msr_clear(m, mask): return msr_set(m, mask, set=False)
 
-def log_setup(out='setup-system.log', c='setup-cpuid.log', d='setup-dmesg.log'):
+def log_setup(out=Setup_log, c='setup-cpuid.log', d='setup-dmesg.log'):
   def label(x, tool='dmesg'): return C.grep(x, flags='-H --label %s' % tool)
   def log_patch(x, patch='| sed s/=/:\ /'): return exe("%s %s >> %s" % (x, patch, out))
   def new_line(): return prn_line(out)
@@ -795,7 +796,7 @@ def do_logs(cmd, ext=[], tag=''):
     if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
   s = (uniq_name() if user_app() else '')
   if cmd == 'tar':
-    files = C.glob('.'+s+'*.cmd')
+    files = C.glob('.'+s+'*.cmd') + (C.glob('setup*') if isfile(Setup_log) else [])
     for f in C.glob(s+'*'):
       if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
     exe('tar -czvf %s run.sh ' % r + ' '.join(files), 'tar into %s' % r, log=False)

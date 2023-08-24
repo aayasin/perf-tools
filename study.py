@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.61
+__version__= 0.71
 
 import common as C, pmu, stats
 import argparse, os, sys, time
@@ -42,22 +42,26 @@ grep -F Puzzle, $log
 
 DM=C.env2str('STUDY_MODE', 'imix-loops')
 Conf = {
-  'Events': {'imix-loops': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r10c4:BR_INST_RETIRED.COND_NTAKEN',
+  'Events': {'imix-loops': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r10c4:BR_INST_RETIRED.COND_NTAKEN', #'r11c4:BR_INST_RETIRED.COND'
     'imix-dsb': 'r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r0262:DSB_FILL.OTHER_CANCEL,r01470261:DSB2MITE_SWITCHES.COUNT,'
                 'FRONTEND_RETIRED.DSB_MISS,FRONTEND_RETIRED.ANY_DSB_MISS,BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN,'
                 'branches,IDQ.MS_CYCLES_ANY,ASSISTS.ANY,INT_MISC.CLEARS_COUNT,MACHINE_CLEARS.COUNT,MACHINE_CLEARS.MEMORY_ORDERING,UOPS_RETIRED.MS:c1',  # 4.6-nda+
-             #'r11c4:BR_INST_RETIRED.COND'
+    'dsb-align':  '\'{instructions,cycles,ref-cycles,IDQ_UOPS_NOT_DELIVERED.CORE,UOPS_ISSUED.ANY,IDQ.DSB_UOPS,FRONTEND_RETIRED.ANY_DSB_MISS},'
+                  '{instructions,cycles,INT_MISC.CLEARS_COUNT,DSB2MITE_SWITCHES.PENALTY_CYCLES,INT_MISC.CLEAR_RESTEER_CYCLES,ICACHE_16B.IFDATA_STALL}\'',
     #r02c0:INST_RETIRED.NOP,r10c0:INST_RETIRED.MACRO_FUSED,'\
     #,r01e5:MEM_UOP_RETIRED.LOAD,r02e5:MEM_UOP_RETIRED.STA'
     'cond-misp': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r01c5:BR_MISP_RETIRED.COND_TAKEN'
                  ',r10c4:BR_INST_RETIRED.COND_NTAKEN,r10c5:BR_MISP_RETIRED.COND_NTAKEN',
     'openmp': 'r0106,r10d1:MEM_LOAD_RETIRED.L2_MISS,r3f24:L2_RQSTS.MISS,r70ec:CPU_CLK_UNHALTED.PAUSE'
-              ',syscalls:sys_enter_sched_yield', # TODO Add sudo
-  },
-  'Toplev': {'imix-loops': ' --frequency --metric-group +Summary --single-thread',
+              ',syscalls:sys_enter_sched_yield',
   },
   'Pebs': {'all-misp': '-b -e %s/event=0xc5,umask=0,name=BR_MISP_RETIRED/ppp -c 20003' % pmu.pmu(),
     'cond-misp': '-b -e %s/event=0xc5,umask=0x11,name=BR_MISP_RETIRED.COND/ppp -c 20003' % pmu.pmu(),
+  },
+  'Toplev': {'imix-loops': ' --frequency --metric-group +Summary --single-thread',
+  },
+  'Tune': {'dsb-align': [[':perf-record:"\' -g -c 20000003\'"']],
+    'openmp': [[':perf-stat-ipc:"\'stat -e instructions,cycles,r0106\'"']],
   },
 }
 def modes_list():
@@ -68,13 +72,13 @@ def modes_list():
 
 def parse_args():
   C.printc('mode: %s' % DM)
+  def conf(x): return Conf[x][DM] if DM in Conf[x] else None
   ap = C.argument_parser('analyze two or more modes (configs)', mask=0x911a,
-                         defs={'toplev-args': Conf['Toplev'][DM] if DM in Conf['Toplev'] else None,
-                               'events': Conf['Events'][DM]})
+         defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
   ap.add_argument('config', nargs='*', default=[])
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)
   ap.add_argument('-t', '--attempt', default='1')
-  C.add_hex_arg(ap, '-s', '--stages', 0x7, 'stages in study')
+  C.add_hex_arg(ap, '-s', '--stages', 0x1f, 'stages in study')
   ap.add_argument('--dump', action='store_const', const=True, default=False)
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
@@ -87,7 +91,8 @@ def parse_args():
   assert args.app and not ' ' in args.app
   fassert(args.profile_mask & 0x100, 'args.pm=0x%x' % args.profile_mask)
   assert args.repeat > 2, "stats module requires '--repeat 3' at least"
-  fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN events")
+  if DM in ('dsb-align', ): pass
+  else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN events")
   return args
 
 def main():
@@ -98,25 +103,28 @@ def main():
     a = getattr(args, x.replace('-', '_'))
     if a: do += ' --%s %s' % (x, "'%s'" % a if ' ' in a else a)
   if args.repeat != 3: do += ' -r %d' % args.repeat
+
   x = 'tune'
   a = getattr(args, x) or []
   extra = ' :sample:3 :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode] if 'misp' in args.mode else ''
-  if args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
-  if args.mode == 'openmp': extra += ' :perf-stat-ipc:"\'stat -e instructions,cycles,r0106\'"'
+  if pmu.skylake(): extra += ' :perf-stat-add:-1'
+  elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
   a.insert(0, [':batch:1 :help:0 :loops:9 :msr:1%s ' % extra])
   do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
+
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def app(flavor):
     if args.attempt == '-1': return args.app
     return "'%s %s %s'" % (args.app, flavor, 't%s'%args.attempt if args.attempt.isdigit() else args.attempt)
+  def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
 
   if args.stages & 0x1:
     enable_it=0
     if not args.smt and pmu.cpu('smt-on'):
       exe('%s disable-smt disable-aslr -v1' % do0)
       enable_it=1
-    if args.stages & 0x8: exe(do.replace('profile', 'log').replace('batch:1', 'batch:0'))
+    if args.stages & 0x8: exe(do_cmd('log'))
     if 'misp' in args.mode: args.profile_mask |= 0x200
     for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
     if enable_it: exe('%s enable-smt -v1' % do0)
@@ -142,6 +150,10 @@ def main():
       bef, aft = args.config[0], args.config[1]
       C.printc('Speedup (%s/%s): %sx' % (aft, bef, str(round(stats.get('time', app(bef)) / stats.get('time', app(aft)),
                3 if args.verbose else 2))))
+
+  if args.stages & 0x10:
+    if args.stages & 0x2: time.sleep(60)
+    exe(' '.join((do_cmd('tar'), '-a', args.app)))
 
 if __name__ == "__main__":
   main()

@@ -85,7 +85,7 @@ do = {'run':        C.RUN_DEF,
   'perf-report-append': '',
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
-  'perf-stat-add':  1, # additional events using general counters
+  'perf-stat-add':  2, # additional events using general counters
   'perf-stat-def':  'context-switches,cpu-migrations,page-faults', # JIRA LFE-9106
   'perf-stat-ipc':  'stat -e instructions,cycles',
   'pin':            'taskset 0x4',
@@ -387,11 +387,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     evts, perf_args = events, [flags, '-x,' if csv else '--log-fd=1', do['perf-stat'] ]
     if args.metrics: perf_args += ['--metric-no-group', '-M', args.metrics] # 1st is workaround bug 4804e0111662 in perf-stat -r2 -M
     perf_args = ' '.join(perf_args)
-    if perfmetrics:
+    if perfmetrics and do['perf-stat-add'] > -1:
       es, fs = tma.fixed_metrics()
       evts += append(es, evts)
       if fs: perf_args += fs
-    if do['perf-stat-add'] and do['core']: evts += append(pmu.basic_events(), evts)
+    if do['perf-stat-add'] > 1 and do['core']: evts += append(pmu.basic_events(), evts)
     if args.events: evts += append(pmu.perf_format(args.events), evts)
     if args.events or args.metrics: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
     if evts != '': perf_args += ' -e "cpu-clock,%s,%s"' % (evts, do['perf-stat-def'])
@@ -453,8 +453,8 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
   if args.profile_mask & ~0x1 and args.verbose >= 0: C.info('App: ' + r)
   if en(1): logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
-  if en(2): perf_stat('-a', 'system-wide counting', 2, a_events(), grep='| egrep "seconds|insn|topdown|pkg"')
-  
+  if en(2): perf_stat('-a', 'system-wide counting', 2, grep='| egrep "seconds|insn|topdown|pkg"',
+                      events=a_events() if do['perf-stat-add'] > -1 else '')
   if en(3) and do['sample']:
     data = '%s.perf.data' % record_name(do['perf-record'])
     profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.period(), data, do['perf-record'], r),
@@ -846,6 +846,7 @@ def main():
   if args.verbose > 2: args.toplev_args += ' --perf'
   if args.print_only and args.verbose <= 0: args.verbose = 1
   do['nodes'] += ("," + args.nodes)
+  if args.events and '{' in args.events: do['perf-stat-add'] = -1
   if args.tune:
     for tlists in args.tune:
       for t in tlists:
@@ -859,7 +860,7 @@ def main():
   perfv = exe_1line(args.perf + ' --version', heavy=False)
   if C.any_in([x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')], perfv): C.error('Unsupported perf tool: ' + perfv)
   do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
-  if do['perf-stat-add']:
+  if do['perf-stat-add'] > 0:
     x = ',branches,branch-misses'
     if args.repeat > 1: x += ',cycles:k'
     do['perf-stat-def'] += x

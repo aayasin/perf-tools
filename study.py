@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.71
+__version__= 0.72
 
 import common as C, pmu, stats
 import argparse, os, sys, time
@@ -109,7 +109,7 @@ def main():
   extra = ' :sample:3 :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode] if 'misp' in args.mode else ''
   if pmu.skylake(): extra += ' :perf-stat-add:-1'
   elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
-  a.insert(0, [':batch:1 :help:0 :loops:9 :msr:1%s ' % extra])
+  a.insert(0, [':batch:1 :help:0 :loops:9 :msr:1 :dmidecode:1%s ' % extra])
   do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
@@ -124,7 +124,7 @@ def main():
     if not args.smt and pmu.cpu('smt-on'):
       exe('%s disable-smt disable-aslr -v1' % do0)
       enable_it=1
-    if args.stages & 0x8: exe(do_cmd('log'))
+    if args.stages & 0x8: exe(do_cmd('version log'))
     if 'misp' in args.mode: args.profile_mask |= 0x200
     for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
     if enable_it: exe('%s enable-smt -v1' % do0)

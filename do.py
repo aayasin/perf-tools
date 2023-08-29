@@ -951,7 +951,8 @@ def main():
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
     elif c == 'version':      print(os.path.basename(__file__), 'version =', version(), '; '.join([''] +
-      [module_version(x) for x in ('lbr', 'stats')] + [exe_1line(args.perf + ' --version').replace(' version ', '=')]))
+      [module_version(x) for x in ('lbr', 'stats')] + [exe_1line(args.perf + ' --version').replace(' version ', '='),
+                                                       'TMA=%s' % pmu.cpu('TMA version')]))
     elif c.startswith('backup'):
       r = '../perf-tools-%s-%s-e%d.tar.gz' % (version(),
           '-'.join([module_version(x) for x in ('lbr', 'stats', 'study')]), len(param))

@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.8
+__version__ = 0.81
 # TODO:
 # - functions/calls support
 
@@ -111,7 +111,9 @@ int main(int argc, const char* argv[])
         exit(-1);
     }
     if (MSG) printf("%%s\\n", MSG ? MSG : "");
-    n= atol(argv[1]);"""%(__author__, C.arg(0), str(__version__), str(args).replace('Namespace', ''),
+    asm ("      mov %%1,%%0"
+                 : "=r" (n)
+                 : "r" (atol(argv[1])));"""%(__author__, C.arg(0), str(__version__), str(args).replace('Namespace', ''),
   '/* %s\n */'%references.Comments[args.reference].replace('\n', '\n * ') if args.reference else '', paper))
 for x in vars(args).keys():
   if 'instructions' in x:

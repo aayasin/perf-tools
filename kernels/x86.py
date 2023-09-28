@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.26
+__version__ = 0.27
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -25,9 +25,12 @@ INDIRECT  = r"(jmp|call).*%"
 CALL_RET  = '(call|ret)'
 COND_BR   = 'j[^m][^ ]*'
 TEST_CMP  = r"(test|cmp).?\s"
+BIT_TEST  = 'bt[^crs]'
 COMI      = r"v?u?comi",
+EXTRACT   = 'xtr' # covers legacy, AVX* and x87 flavors
 LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"mov.?\s.*\).*,"
+STORE     = r"\s+\S+\s+[^\(\),]+,"
 MOVE      = r"v?mov"
 BR = '(j|%s|sys%s|bnd jmp)' % (CALL_RET, CALL_RET)
 MEM_IDX = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
@@ -100,3 +103,4 @@ def is_fusion(line1, line2):
 def is_memory(line): return '(' in line and 'lea' not in line and 'nop' not in line
 def is_mem_imm(line): return is_memory(line) and '$' in line
 def is_mem_idx(line): return re.search(MEM_IDX, line)
+def is_mem_store(line): return re.match(STORE, line) and C.any_in(('mov', EXTRACT), line)

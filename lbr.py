@@ -22,9 +22,9 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 1.93 # see version line of do.py
+__version__= x86.__version__ + 1.94 # see version line of do.py
 
-MEM_INSTS = ['load', 'store', 'lock', 'prefetch']
+MEM_INSTS = ['load', 'store', 'rmw', 'lock', 'prefetch']
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
 hitcounts = C.envfile('PTOOLS_HITS')
@@ -123,8 +123,9 @@ def line_inst(line):
     if 'lea' in line: return 'lea'
     elif 'lock' in line: return 'lock'
     elif 'prefetch' in line: return 'prefetch'
-    elif is_type(CISC_CMP, line) or 'gather' in line: return 'load'
-    elif re.match(r"\s+\S+\s+[^\(\),]+,", line) or 'scatter' in line: return 'store'
+    elif is_type(CISC_CMP, line) or is_type(x86.BIT_TEST, line) or 'gather' in line: return 'load'
+    elif 'scatter' in line or x86.EXTRACT in line: return 'store'
+    elif re.match(x86.STORE, line): return 'store' if x86.is_mem_store(line) else 'rmw'
     else: return 'load'
   else:
     for x in pInsts: # skip non-vector p/v-prefixed insts
@@ -779,7 +780,7 @@ def print_common(total):
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
   if edge_en and total: print_global_stats()
-  print('\n'.join(['# CMP denotes CMP or TEST instructions', '#Global-stats-end', '']))
+  print(' instructions.\n#'.join(['# Notes: CMP = CMP or TEST', ' RMW = Read-Modify-Write', 'Global-stats-end'])+'\n')
   C.warn_summary()
 
 def print_all(nloops=10, loop_ipc=0):

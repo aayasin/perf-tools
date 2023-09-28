@@ -303,6 +303,7 @@ def log_setup(out=Setup_log, c='setup-cpuid.log', d='setup-dmesg.log'):
   new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
+    if do['msr'] > 1: do['msrs'] += [pmu.MSR['IA32_MCU_OPT_CTRL']]
     for m in do['msrs']:
       v = pmu.msr_read(m)
       exe('echo "MSR 0x%03x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))

@@ -180,8 +180,10 @@ cpu.state = None
 
 def msr_read(m): return C.exe_one_line('sudo %s/msr.py 0x%x' % (pmutools, m))
 
+MSR = {'IA32_MCU_OPT_CTRL': 0x123,
+}
 def cpu_msrs():
-  msrs = [0x048, 0x08b, 0x123,  # IA32_SPEC_CTRL, microcode update signature, IA32_MCU_OPT_CTRL
+  msrs = [0x048, 0x08b,         # IA32_SPEC_CTRL, microcode update signature
           0x1a4,                # Prefetch Control
           0x033,                # Memory Control
   ]

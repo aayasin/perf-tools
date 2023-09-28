@@ -24,8 +24,6 @@ import common as C
 import jumpy as J, references
 from x86 import *
 
-paper=str(0)
-
 ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--unroll-factor', type=int, default=3, help='# times to repeat instruction(s), aka unroll-factor')
 ap.add_argument('-r', '--registers', type=int, default=0, help="# of registers to traverse via '@' if > 0")
@@ -57,8 +55,7 @@ if args.registers > 0:
   if not '@' in ' '.join(args.instructions): error("expect '@' in --instructions")
   if args.registers > args.registers_max:    error("invalid value for --registers! must be < %d"%args.registers_max)
 
-if args.reference:
-  paper='"Reference: %s"'%references.Papers[args.reference]
+paper = '"Reference: %s"' % references.Papers[args.reference] if args.reference else str(0)
 
 def itemize(insts):
   if not '#' in ' '.join(insts): return insts

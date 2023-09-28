@@ -567,6 +567,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
                     break
                 if counted: pass
                 elif is_type(x86.COND_BR, lines[-1]): counted = inc_JCC('JCC')
+                elif is_type(x86.COMI, lines[-1]): counted = inc_JCC('COMI')
                 if len(lines) > 2 and x86.is_fusion(lines[-2], line):
                   def inc_JCC2(x): return inc_JCC(x, suffix='non-fusible-IS')
                   if is_type(x86.MOVE, lines[-1]): inc_JCC2('MOV')

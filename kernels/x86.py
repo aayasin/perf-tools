@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.25
+__version__ = 0.26
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -25,6 +25,7 @@ INDIRECT  = r"(jmp|call).*%"
 CALL_RET  = '(call|ret)'
 COND_BR   = 'j[^m][^ ]*'
 TEST_CMP  = r"(test|cmp).?\s"
+COMI      = r"v?u?comi",
 LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"mov.?\s.*\).*,"
 MOVE      = r"v?mov"

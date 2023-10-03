@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.81
+__version__ = 0.82
 # TODO:
 # - functions/calls support
 
@@ -54,6 +54,9 @@ prefetch = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else
 if args.registers > 0:
   if not '@' in ' '.join(args.instructions): error("expect '@' in --instructions")
   if args.registers > args.registers_max:    error("invalid value for --registers! must be < %d"%args.registers_max)
+
+for i in args.instructions:
+  if '%r9' in i or '%r10' in i: error("can't use registers r9 and r10, please use other registers")
 
 paper = '"Reference: %s"' % references.Papers[args.reference] if args.reference else str(0)
 

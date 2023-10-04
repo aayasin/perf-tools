@@ -644,7 +644,7 @@ def is_label(line):
   line = line.strip()
   return line.endswith(':') or (len(line.split()) == 1 and line.endswith(']')) or \
       (len(line.split()) > 1 and line.split()[-2].endswith(':')) or \
-      (':' in line and line.split(':')[-1].isnumeric())
+      (':' in line and line.split(':')[-1].isdigit())
 
 def get_srcline(line):
   if line.endswith(':') or line.startswith('['): return None
@@ -653,7 +653,7 @@ def get_srcline(line):
     optional = '[' + label_split[-1]
     return 'N/A (%s%s)' % (label_split[0], optional if verbose else '')
   if len(line.split()) > 1 and line.split()[-2].endswith(':'): return line.split()[-1]
-  if ':' in line and line.split(':')[-1].isnumeric(): return line
+  if ':' in line and line.split(':')[-1].isdigit(): return line
   return None
 
 def is_loop_by_ip(ip):  return ip in loops

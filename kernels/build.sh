@@ -46,9 +46,13 @@ $PY ./gen-kernel.py -i 'cmpq %r12,0x0(%rsp)' 'jg Lbl_end' 'inc %r12' 'dec %r12' 
 $PY ./gen-kernel.py -p "mov %rsp,%rdx" "sub \$0x40000,%rdx" -i "cmpl \$0,0x40000(,%rdx,1)" -n 100 > cmp0-mem-index.c
 $PY ./gen-kernel.py -i 'vshufps $0xff,%ymm0,%ymm1,%ymm2' 'vshufps $0xff,%ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' > vshufps.c
 $PY ./gen-kernel.py -i 'vpshufb %ymm0,%ymm1,%ymm2' 'vpshufb %ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' > vpshufb.c
+$PY ./gen-kernel.py -i 'mov 0x0(%rsp),%r12' 'add %r13,%r12' NOP -n 14 > ld-op-nop.c
+$PY ./gen-kernel.py -i 'mov %r13,%r12' 'add %r14,%r12' NOP -n 14 > mov-op-nop.c
+$PY ./gen-kernel.py -i 'mov 0x0(%rsp),%r12' NOP 'add %r13,%r12' -n 14 > ld-nop-op.c
+$PY ./gen-kernel.py -i 'mov %r13,%r12' NOP 'add %r14,%r12' -n 14 > mov-nop-op.c
 fi
 
-ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-cmp-jcc-{3i,2i-{imm,reg}}{,-inc},cmp0-mem-index,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit,vshufps,vpshufb"
+ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-cmp-jcc-{3i,2i-{imm,reg}}{,-inc},{ld,mov}-{op-nop,nop-op},cmp0-mem-index,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit,vshufps,vpshufb"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

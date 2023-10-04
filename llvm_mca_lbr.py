@@ -73,7 +73,7 @@ regs = (('w', ('%ax', '%bx', '%cx', '%dx', '%di', '%si', '%bp', '%sp')),
 
 
 def run_llvm(hitcounts, llvm_log, loop, loop_ipc):
-  if os.path.getsize(hitcounts) == 0: C.error(f"{hitcounts} file is empty")
+  if os.path.getsize(hitcounts) == 0: C.error("%s file is empty" % hitcounts)
   llvm_input_name = ".ipc_%s.txt" % loop_ipc
   C.exe_cmd(C.grep('0%x' % int(loop_ipc, 16), hitcounts, '-A%d' % (loop['size'] - 1)),
             redir_out=' | sed -e "s/^[ \t]*//" | cut -d " " -f 2- > %s' % llvm_input_name)
@@ -91,7 +91,7 @@ def get_llvm(hitcounts, llvm_log, loop, loop_ipc, info='IPC'):
     try:
       result = float(result_str.split()[1])
     except IndexError:
-      C.error(f"bogus IPC line:\n{result_str}\nat {llvm_log} for loop {loop_ipc}")
+      C.error("bogus IPC line:\n%s\nat %s for loop %s" % (result_str, llvm_log, loop_ipc))
   return result
 
 

@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.74
+__version__ = 2.75
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -516,9 +516,10 @@ def profile(mask, toplev_args=['mvl6', None]):
         C.exe_cmd('grep -w Instructions %s' % logs['tma'], debug=1)
         error("No/too little Instructions = %d " % insts)
     zeros = read_toplev(logs['tma'], 'zero-counts')
-    if zeros and len([m for m in zeros.split() if m not in tma.get('zero-ok')]):
+    def fail_zeros(): return len([m for m in zeros.split() if m not in tma.get('zero-ok')]) if zeros else 0
+    if zeros and fail_zeros():
       # https://github.com/andikleen/pmu-tools/issues/455
-      error("Too many metrics with zero counts (%s). Run longer or use: --toplev-args ' --no-multiplex'" % zeros)
+      error("Too many metrics with zero counts; %d unexpected (%s). Run longer or use: --toplev-args ' --no-multiplex'" % (fail_zeros(), zeros))
     topdown_describe(logs['tma'])
 
   if en(5):
@@ -557,7 +558,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if not group: group, x = 'Mem', C.warn("Could not auto-detect group; Minimize system-noise, e.g. try './do.py disable-smt'")
     MG='--metric-group +Summary'
     assert MG in args.toplev_args, "'%s' is missing in toplev-args! " % MG
-    cmd, log = toplev_V('-vvvl2', nodes=tma.get('fixed'), tlargs=args.toplev_args.replace(MG, ',+'.join((MG, group))))
+    cmd, log = toplev_V('-vl2', tag='-'+group, nodes=tma.get('fixed'), tlargs=args.toplev_args.replace(MG, ',+'.join((MG, group))))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
 

@@ -127,7 +127,7 @@ test-srcline: ../perf lbr.py do.py common.py
 	grep -q 'srcline: pagefault.c;43' pagefault-clang-1000000*info.log || $(FAIL)
 
 clean:
-	rm -rf {run,BC,datadep,$(AP),openssl}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
+	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
 pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
@@ -145,7 +145,7 @@ pre-push: help
 	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
 	$(MAKE) test-default DO_ARGS=":calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \
 	    CMD='suspend-smt profile tar' PM=1931a &&\
-	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\
+	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-*.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command
 	$(MAKE) test-default APP=./$(AP) PM=313e DO_ARGS=":perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
 	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps

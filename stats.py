@@ -16,6 +16,8 @@ __version__= 0.90
 
 import common as C, pmu
 import csv, re, os.path, sys
+from lbr import print_stat
+from kernels import x86
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]
@@ -296,6 +298,72 @@ def csv2stat(filename):
       out.write('%s %s\n' % (x, str(d[x])))
   print('wrote:', stat)
   return stat
+
+def inst_fusions(hitcounts, info):
+  stats_data = {'LD-OP': 0,
+                'MOV-OP': 0}
+  def calc_stats():
+    block = hotness_key = None
+    hotness = lambda s: C.str2list(s)[0]
+    is_mov = lambda l: 'mov' in l and not x86.is_mem_store(l)
+    cands_log = hitcounts.replace(".log", "-candidates.log")
+    def find_cand(lines):
+      patch = lambda s: s.replace(s.split()[0], '')
+      if len(lines) < 3: return None  # need 3 insts at least
+      mov_line = patch(lines[0])
+      dest_reg = x86.get('dst', mov_line)
+      dest_subs = x86.sub_regs(dest_reg)
+      # dest reg in 2nd line -> no candidate
+      # a. if dest reg is dest in 2nd line and fusion occurs -> not candidate
+      # b. if dest reg is dest in 2nd line and no fusion ->
+      # no candidate and disables next OPs to be candidates because dest reg got modified
+      # c. if dest reg is src in 2nd line -> dest reg value is used before OP, cancels candidate
+      if C.any_in(dest_subs, lines[1]): return None
+      to_check = lines[2:]
+      for i, line in enumerate(to_check):
+        line = patch(line)
+        if x86.get('dst', line) == dest_reg:  # same dest reg
+          # jcc macro-fusion disables candidate
+          if i < len(to_check) - 1 and x86.is_jcc_fusion(line, patch(to_check[i+1])): return None
+          ld_fusion, mov_fusion = x86.is_ld_op_fusion(mov_line, line), x86.is_mov_op_fusion(mov_line, line)
+          if not ld_fusion and not mov_fusion: return None
+          # check if dest reg was used as src before OP or OP src reg was ever modified
+          srcs = x86.get('srcs', line)
+          assert len(srcs) == 1
+          src_reg = srcs[0]
+          for x in range(1, i + 2):
+            if re.search(x86.CMOV, x86.get('inst', lines[x])): return None  # CMOV will use wrongly modified RFLAGS
+            if x86.is_sub_reg(x86.get('dst', lines[x]), src_reg): return None  # OP src reg was modified before OP
+            if C.any_in(dest_subs, lines[x]): return None  # dest reg used before OP
+          # candidate found
+          new_hotness = int(hotness(lines[0]))
+          if ld_fusion: stats_data['LD-OP'] += new_hotness
+          else: stats_data['MOV-OP'] += new_hotness
+          # append candidate block to log
+          header, tail = lines[0][:25] + "\n", lines[i+2][:25] + "z\n"  # headers to differentiate blocks
+          block_list = [header] + lines[0:i+3] + [tail]
+          C.fappend(''.join(block_list), cands_log, end='')
+      return None
+    if os.path.exists(cands_log): os.remove(cands_log)
+    # for each hotness block, create a list of the lines then check
+    with open(hitcounts, "r") as hits:
+      for line in hits:
+        def restart(): return [[line], hotness(line)] if is_mov(line) else [None, None]
+        # check blocks starting with not store MOV
+        if not is_mov(line) and not block: continue
+        if not block:  # new block first line found
+          block, hotness_key = restart()
+          continue
+        # append lines from the same basic block (by hotness)
+        if hotness(line) == hotness_key: block.append(line)
+        else:  # basic block end, check candidates
+          for i, block_line in enumerate(block):
+            if is_mov(block_line): find_cand(block[i:])
+          hotness_key, block = restart()  # restart for next block
+  total = int(C.exe_one_line(C.grep(' ALL instructions:', info)).split(':')[1].strip())
+  calc_stats()
+  for stat, value in stats_data.items():
+    print_stat('%s fusible-candidate' % stat, value, ratio_of=('ALL', total), log=info)
 
 def main():
   if C.arg(1).endswith('.info.log'): return rollup_all()

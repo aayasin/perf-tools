@@ -37,8 +37,8 @@ Globals = {'llvm-mca': '/usr/local/bin/llvm-mca',
 }
 
 # append to a file
-def fappend(text, filename):
-  with open(filename, 'a') as f: f.write(text + '\n')
+def fappend(text, filename, end='\n'):
+  with open(filename, 'a') as f: f.write(text + end)
 
 # colored printing, writes to outfile or log_stdio
 def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):

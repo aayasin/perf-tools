@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.72
+__version__= 0.73
 
 import common as C, pmu, stats
 import argparse, os, sys, time
@@ -47,8 +47,10 @@ Conf = {
                 'FRONTEND_RETIRED.DSB_MISS,FRONTEND_RETIRED.ANY_DSB_MISS,BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN,'
                 'branches,IDQ.MS_CYCLES_ANY,ASSISTS.ANY,INT_MISC.CLEARS_COUNT,MACHINE_CLEARS.COUNT,MACHINE_CLEARS.MEMORY_ORDERING,UOPS_RETIRED.MS:c1',  # 4.6-nda+
     'dsb-align':  '\'{instructions,cycles,ref-cycles,IDQ_UOPS_NOT_DELIVERED.CORE,UOPS_ISSUED.ANY,IDQ.DSB_UOPS,FRONTEND_RETIRED.ANY_DSB_MISS},'
-                  '{instructions,cycles,INT_MISC.CLEARS_COUNT,DSB2MITE_SWITCHES.PENALTY_CYCLES,INT_MISC.CLEAR_RESTEER_CYCLES,ICACHE_16B.IFDATA_STALL}\'',
-    #r02c0:INST_RETIRED.NOP,r10c0:INST_RETIRED.MACRO_FUSED,'\
+                  '{instructions,cycles,INT_MISC.CLEARS_COUNT,DSB2MITE_SWITCHES.PENALTY_CYCLES,INT_MISC.CLEAR_RESTEER_CYCLES,ICACHE_DATA.STALLS}\'',
+    'dsb-glc':  '{IDQ.DSB_UOPS,r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r01470261:DSB2MITE_SWITCHES.COUNT,'
+                'FRONTEND_RETIRED.ANY_DSB_MISS,UOPS_ISSUED.ANY,INT_MISC.CLEARS_COUNT,INST_RETIRED.MACRO_FUSED}',
+             #r02c0:INST_RETIRED.NOP,r10c0:INST_RETIRED.MACRO_FUSED,'\
     #,r01e5:MEM_UOP_RETIRED.LOAD,r02e5:MEM_UOP_RETIRED.STA'
     'cond-misp': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r01c5:BR_MISP_RETIRED.COND_TAKEN'
                  ',r10c4:BR_INST_RETIRED.COND_NTAKEN,r10c5:BR_MISP_RETIRED.COND_NTAKEN',
@@ -71,7 +73,6 @@ def modes_list():
   return list(set(ms))
 
 def parse_args():
-  C.printc('mode: %s' % DM)
   def conf(x): return Conf[x][DM] if DM in Conf[x] else None
   ap = C.argument_parser('analyze two or more modes (configs)', mask=0x911a,
          defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
@@ -84,8 +85,9 @@ def parse_args():
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
   ap.add_argument('--smt', action='store_const', const=True, default=False)
   args = ap.parse_args()
-  def fassert(x, msg): assert x or args.forgive, msg
   if args.dump: dump_sample()
+  C.printc('mode: %s' % DM)
+  def fassert(x, msg): assert x or args.forgive, msg
   assert len(args.config), "at least 2 modes are required"
   fassert(len(args.config) > 1, "at least 2 modes are required (or use --forgive)")
   assert args.app and not ' ' in args.app
@@ -95,8 +97,12 @@ def parse_args():
   else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN events")
   return args
 
+args = None
+def app(flavor):
+  if args.attempt == '-1': return args.app
+  return "'%s %s %s'" % (args.app, flavor, 't%s' % args.attempt if args.attempt.isdigit() else args.attempt)
+
 def main():
-  args = parse_args()
   do0 = C.realpath('do.py')
   do = do0 + ' profile'
   for x in C.argument_parser(None):
@@ -113,10 +119,8 @@ def main():
   do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
+  do = do.replace('{', '"{').replace('}', '}"')
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
-  def app(flavor):
-    if args.attempt == '-1': return args.app
-    return "'%s %s %s'" % (args.app, flavor, 't%s'%args.attempt if args.attempt.isdigit() else args.attempt)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
 
   if args.stages & 0x1:
@@ -156,4 +160,5 @@ def main():
     exe(' '.join((do_cmd('tar'), '-a', args.app)))
 
 if __name__ == "__main__":
+  args = parse_args()
   main()

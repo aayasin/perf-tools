@@ -52,7 +52,7 @@ $PY ./gen-kernel.py -i 'mov 0x0(%rsp),%r12' NOP 'add %r13,%r12' -n 14 > ld-nop-o
 $PY ./gen-kernel.py -i 'mov %r13,%r12' NOP 'add %r14,%r12' -n 14 > mov-nop-op.c
 fi
 
-ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-cmp-jcc-{3i,2i-{imm,reg}}{,-inc},{ld,mov}-{op-nop,nop-op},cmp0-mem-index,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit,vshufps,vpshufb"
+ks="cpuid,dsb-jmp,fp-{{add,mul}-{bw,lat},arith-mix,divps},jcc20k,jumpy*,ld-cmp-jcc-{3i,2i-{imm,reg}}{,-inc},{ld,mov}-{op-nop,nop-op},cmp0-mem-index,memcpy,pagefault,peak*,rfetch{64k,3m{,-ic}},sse2avx,itlb-miss-stlb-hit,vshufps,vpshufb,tripcount-mean"
 kernels=`bash -c "ls {$ks}.c | sed 's/\.c//'"`
 for x in $kernels; do
   $CC -o $x $x.c

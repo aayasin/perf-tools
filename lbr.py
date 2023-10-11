@@ -22,9 +22,8 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 1.94 # see version line of do.py
+__version__= x86.__version__ + 1.95 # see version line of do.py
 
-MEM_INSTS = ['load', 'store', 'rmw', 'lock', 'prefetch']
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
 hitcounts = C.envfile('PTOOLS_HITS')
@@ -116,28 +115,22 @@ def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
 def vec_len(i, t='int'): return 'vec%d-%s' % (128 * (2 ** i), t)
 def line_inst(line):
   pInsts = ['cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper'] + user_loop_imix
-  allInsts = ['nop', 'lea', 'cisc-test'] + MEM_INSTS + pInsts
+  allInsts = ['nop', 'lea', 'cisc-test'] + x86.MEM_INSTS + pInsts
   if not line: return allInsts
   if 'nop' in line: return 'nop'
-  elif '(' in line:  # load/store take priority in CISC insts
+  if '(' in line:  # load/store take priority in CISC insts
     if 'lea' in line: return 'lea'
-    elif 'lock' in line: return 'lock'
-    elif 'prefetch' in line: return 'prefetch'
-    elif is_type(CISC_CMP, line) or is_type(x86.BIT_TEST, line) or 'gather' in line: return 'load'
-    elif 'scatter' in line or x86.EXTRACT in line: return 'store'
-    elif re.match(x86.STORE, line): return 'store' if x86.is_mem_store(line) else 'rmw'
-    else: return 'load'
-  else:
-    for x in pInsts: # skip non-vector p/v-prefixed insts
-      if x in line: return x
-    r = re.match(r"\s+\S+\s+(\S+)", line)
-    if not r: pass
-    elif re.match(r"^(and|or|xor|not)", r.group(1)): return 'logic'
-    elif re.match(r"^[pv]", r.group(1)):
-      for i in range(vec_size):
-        if re.findall(INT_VEC(i), line): return vec_len(i)
-      warn(0x100, 'vec-int: ' + ' '.join(line.split()[1:]))
-      return 'vecX-int'
+    return x86.get_mem_inst(line)
+  for x in pInsts: # skip non-vector p/v-prefixed insts
+    if x in line: return x
+  r = re.match(r"\s+\S+\s+(\S+)", line)
+  if not r: pass
+  elif re.match(r"^(and|or|xor|not)", r.group(1)): return 'logic'
+  elif re.match(r"^[pv]", r.group(1)):
+    for i in range(vec_size):
+      if re.findall(INT_VEC(i), line): return vec_len(i)
+    warn(0x100, 'vec-int: ' + ' '.join(line.split()[1:]))
+    return 'vecX-int'
   return None
 
 def tripcount(ip, loop_ipc, state):
@@ -244,7 +237,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf = 1, {}, [], 0, 0, 0
-      types = ['taken', 'lea', 'cmov'] + MEM_INSTS + user_loop_imix
+      types = ['taken', 'lea', 'cmov'] + x86.MEM_INSTS + user_loop_imix
       for i in types: cnt[i] = 0
       x = len(lines)-2
       while x >= 1:
@@ -319,27 +312,27 @@ stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
 
-CISC_CMP= '_cisc-cmp'
 def inst2pred(i):
-  i2p = {'st-stack':    'mov\S*\s+[^\(\),]+, [0-9a-fx]*\(%.sp\)',
-    'st-reg-stack':   'mov\S*\s+%[^\(\),]+, [0-9a-fx]*\(%.sp\)',
-    'ld-stack':       'mov\S*\s+[0-9a-fx]*\(%.sp\),',
+  i2p = {'st-stack':  'mov\S*\s+[^\(\),]+, [0-9a-fx\-]*\(%.sp',
+    'st-reg-stack':   'mov\S*\s+%[^\(\),]+, [0-9a-fx\-]*\(%.sp',
     'add-sub':        '(add|sub).*',
     'inc-dec':        '(inc|dec).*',
-    CISC_CMP:         '(cmp[^x]|test).*\(',
+    '_cisc-cmp':      x86.CISC_CMP,
     '_risc-cmp':      '(cmp[^x]|test)[^\(]*',
   }
-  if i is None: return sorted(list(i2p.keys()))
+  if i is None:
+    del i2p['st-stack']
+    return sorted(list(i2p.keys()))
   return i2p[i] if i in i2p else i
 
 # determine what is counted globally
 def is_imix(t):
   # TODO: cover FP vector too
-  IMIX_LIST = MEM_INSTS + ['logic']
+  IMIX_LIST = x86.MEM_INSTS + ['logic']
   if not t: return IMIX_LIST + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
   return t in IMIX_LIST or t.startswith('vec')
 Insts = inst2pred(None) + ['cmov', 'lea', 'lea-scaled', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
-Insts_global = Insts + is_imix(None) + ['all']
+Insts_global = Insts + is_imix(None) + x86.mem_type() + ['all']
 Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first'
               ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
 Insts_Fusions = [x + '-OP fusible' for x in ['MOV', 'LD']]
@@ -567,7 +560,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
               if x == 'lea' and is_type(x86.LEA_S, line): glob['lea-scaled'] += 1
               glob[x] += 1
           t = line_inst(line)
-          if t and is_imix(t): glob[t] += 1
+          if t and is_imix(t):
+            glob[t] += 1
+            if t in x86.MEM_INSTS and x86.mem_type(line):
+              glob[x86.mem_type(line)] += 1
         if len(lines) == 1:
           if is_taken(line): takens += [ip]
           # Expect a taken branch in first entry, but for some reason Linux/perf sometimes return <32 entry LBR
@@ -616,9 +612,9 @@ read_sample.tick = C.env2int('LBR_TICK', 1000)
 read_sample.dump = C.env2int('LBR_DUMP', 0)
 
 
-def is_type(t, l):    return re.match(r"\s+\S+\s+%s" % inst2pred(t), l)
+def is_type(t, l):    return x86.is_type(inst2pred(t), l)
 def is_callret(l):    return is_type(x86.CALL_RET, l)
-def is_branch(l):     return is_type(x86.BR, l)
+def is_branch(l):     return is_type(x86.JUMP, l)
 
 # TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictiorary if header or None otherwise
 def is_header(line):
@@ -752,6 +748,7 @@ def print_stat(name, count, prefix='count', comment='', ratio_of=None, log=None)
     n = (x if 'cond' in name or 'fusible' in name else x.upper()) + ' '
     if x.startswith('vec'): n += 'comp '
     if x in is_imix(None):  n += 'insts-class'
+    elif x in x86.mem_type(None):  n += 'insts-subclass'
     elif 'cond' in name:    n += 'branches'
     elif 'fusible' in name: n += 'pairs'
     else: n += 'instructions'

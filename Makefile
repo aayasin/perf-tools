@@ -117,10 +117,12 @@ test-study: study.py stats.py run.sh do.py
 	$(TS_A) >> $@ 2>&1 || $(FAIL)
 	@tail $@
 	test -f run-cfg1-t1.$(CPU).stat && test -f run-cfg2-t1.$(CPU).stat
+	test -f run-cfg1-t1_run-cfg2-t1.stats.log
 	@echo $(TS_B) >> $@
 	$(TS_B) >> $@ 2>&1
 	test -f BC2s-cfg1-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
 	test -f BC2s-cfg2-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
+	test -f BC2s-cfg1-t1_BC2s-cfg2-t1_stats.log
 test-stats: stats.py
 	@$(MAKE) test-default APP="$(APP) s" PM=1012 > /dev/null 2>&1
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat

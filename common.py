@@ -127,7 +127,7 @@ def exe_output(x, sep=";"):
   out = subprocess.check_output(x, shell=True)
   if isinstance(out, (bytes, bytearray)):
     out = out.decode()
-  return out.replace("\n", sep)
+  return out.replace("\n", sep).strip(sep)
 
 def exe2list(x, sep=' ', debug=False):
   res = str2list(exe_output(x, sep))
@@ -304,8 +304,8 @@ TOPLEV_DEF=' --frequency --metric-group +Summary'
 PROF_MASK_DEF=0x313F
 def add_hex_arg(ap, n, fn, d, h):
   ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
-def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefaultsHelpFormatter):
-  ap = argparse.ArgumentParser(usage=usg, formatter_class=fc) if usg else argparse.ArgumentParser(formatter_class=fc)
+def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefaultsHelpFormatter, epilog=None):
+  ap = argparse.ArgumentParser(usage=usg, formatter_class=fc, epilog=epilog) if usg else argparse.ArgumentParser(formatter_class=fc)
   common_args = []
   def common_def(a):
     common_args.append(a)

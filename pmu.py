@@ -54,7 +54,7 @@ def event(x):
     'calls-loop': 'r0bc4:callret_loop-overhead',
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
     'dsb-miss':   '%s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp' % pmu(),
-    'sentries':   'r40c4:System-entries:u',
+    'sentries':   'r40c4:system-entries:u',
     }[x]
   return perf_format(e)
 

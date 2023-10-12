@@ -698,7 +698,7 @@ def get_taken(sample, n):
 
 def tripcount_mean(loop, loop_ipc):
   hex_ipc = '0%x' % loop_ipc
-  hotness = int(C.str2list(C.exe_one_line('%s' % C.grep(hex_ipc, hitcounts)))[0])
+  hotness = int(C.str2list(C.exe_one_line(C.grep(hex_ipc, hitcounts)))[0])
   before = after = 0
   prev_line = C.exe_one_line('%s' % C.grep(hex_ipc, hitcounts, '-B1'))
   l = C.str2list(prev_line)

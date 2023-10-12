@@ -154,7 +154,7 @@ def print_cmd(x, show=True):
   if show and not do['batch'] and args.verbose >= 0: C.printc(x)
   if len(vars(args))>0 and do['cmds_file']: do['cmds_file'].write('# ' + x + '\n')
 
-def bash(x, px=None): return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if 'tee >(' in x or x.startswith(Time) else x
+def bash(x, px=None): return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if 'tee >(' in x or x.startswith(Time) or px else x
 def exe_1line(x, f=None, heavy=True):
   return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(bash(x), f, args.verbose > 1)
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)

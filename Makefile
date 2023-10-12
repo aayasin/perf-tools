@@ -121,10 +121,16 @@ test-stats: stats.py
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
 ../perf:
 	$(DO) build-perf
-test-srcline: ../perf lbr.py do.py common.py
+test-srcline: lbr.py do.py common.py
 	cd kernels && clang -g -O2 pagefault.c -o pagefault-clang > /dev/null 2>&1
 	$(DO) $(CMD) -a './kernels/pagefault-clang 1000000' --perf ../perf -pm 100 --tune :loop-srcline:1 > /dev/null 2>&1
 	grep -q 'srcline: pagefault.c;43' pagefault-clang-1000000*info.log || $(FAIL)
+test-tripcount-mean: lbr.py do.py kernels/x86.py
+	gcc -g -O2 kernels/tripcount-mean.c -o kernels/tripcount-mean > /dev/null 2>&1
+	$(DO) $(CMD) -a './kernels/tripcount-mean 40000000' --perf ../perf -pm 100 > /dev/null 2>&1
+	grep Loop#1 tripcount-mean-40000000*info.log | awk -F 'tripcount-mean: ' '{print $$2}' | \
+	awk -F ',' '{print $$1}' | awk 'BEGIN {lower=98; upper=102} {if ($$1 >= lower && $$1 <= upper) exit 0; \
+	else exit 1}' || $(FAIL)
 
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
@@ -155,6 +161,7 @@ pre-push: help
 	$(MAKE) test-study                                      # tests study script (errors only)
 	$(MAKE) test-stats                                      # tests stats module
 	$(MAKE) test-srcline                                    # tests srcline loop stat
+	$(MAKE) test-tripcount-mean                             # tests tripcount-mean calculation
 	$(PY3) $(DO) profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1  || echo skip
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC

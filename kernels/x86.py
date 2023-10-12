@@ -31,6 +31,7 @@ COND_BR   = 'j[^m][^ ]*'
 EXTRACT   = 'xtr' # covers legacy, AVX* and x87 flavors
 IMUL      = r"imul.*"
 INDIRECT  = r"(jmp|call).*%"
+JMP_RET   = r"(jmp|ret)"
 JUMP      = '(j|%s|sys%s|bnd jmp)' % (CALL_RET, CALL_RET)
 LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"mov.?\s.*\).*,"

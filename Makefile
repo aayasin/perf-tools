@@ -121,14 +121,16 @@ test-stats: stats.py
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
 ../perf:
 	$(DO) build-perf
+SLI = 1000000
 test-srcline: lbr.py do.py common.py
 	cd kernels && clang -g -O2 pagefault.c -o pagefault-clang > /dev/null 2>&1
-	$(DO) $(CMD) -a './kernels/pagefault-clang 1000000' --perf ../perf -pm 100 --tune :loop-srcline:1 > /dev/null 2>&1
-	grep -q 'srcline: pagefault.c;43' pagefault-clang-1000000*info.log || $(FAIL)
+	$(DO) $(CMD) -a './kernels/pagefault-clang $(SLI)' --perf ../perf -pm 100 --tune :loop-srcline:1 > /dev/null 2>&1
+	grep -q 'srcline: pagefault.c;43' pagefault-clang-$(SLI)*info.log || $(FAIL)
+TMI = 80000000
 test-tripcount-mean: lbr.py do.py kernels/x86.py
 	gcc -g -O2 kernels/tripcount-mean.c -o kernels/tripcount-mean > /dev/null 2>&1
-	$(DO) $(CMD) -a './kernels/tripcount-mean 40000000' --perf ../perf -pm 100 > /dev/null 2>&1
-	grep Loop#1 tripcount-mean-40000000*info.log | awk -F 'tripcount-mean: ' '{print $$2}' | \
+	$(DO) $(CMD) -a './kernels/tripcount-mean $(TMI)' --perf ../perf -pm 100 > /dev/null 2>&1
+	grep Loop#1 tripcount-mean-$(TMI)*info.log | awk -F 'tripcount-mean: ' '{print $$2}' | \
 	awk -F ',' '{print $$1}' | awk 'BEGIN {lower=98; upper=102} {if ($$1 >= lower && $$1 <= upper) exit 0; \
 	else exit 1}' || $(FAIL)
 

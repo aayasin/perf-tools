@@ -740,7 +740,6 @@ def print_hist(hist_t, Threshold=0.01):
   d = {}
   d['type'] = 'paths' if 'paths' in name else ('hex' if 'indir' in name else 'number')
   d['mode'] = str(C.hist2slist(hist)[-1][0])
-  tc_special = name == 'tripcount' and d['mode'] == '32+'
   keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
   do_tripcount_mean = name == 'tripcount' and d['mode'] == '32+'

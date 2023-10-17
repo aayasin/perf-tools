@@ -698,17 +698,19 @@ def get_taken(sample, n):
 
 def tripcount_mean(loop, loop_ipc):
   hex_ipc = '0%x' % loop_ipc
-  hotness = int(C.str2list(C.exe_one_line('%s' % C.grep(hex_ipc, hitcounts)))[0])
-  before = after = 0
+  hotness = int(C.str2list(C.exe_one_line(C.grep(hex_ipc, hitcounts)))[0])
+  avg = before = after = 0
   prev_line = C.exe_one_line('%s' % C.grep(hex_ipc, hitcounts, '-B1'))
   l = C.str2list(prev_line)
   if hex_ipc in l[1]: return None  # no inst before loop
   if not re.search(x86.JMP_RET, prev_line): before += int(l[0])  # JCC before loop is not considered a special case
-  jmp_line = C.exe_one_line('%s' % C.grep('%s' % 'jmp*\s' + hex(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
+  jmp_line = C.exe_one_line(C.grep('%s' % 'jmp*\s' + hex(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
   if not jmp_line == '': before += int(C.str2list(jmp_line)[0])
-  next_line = C.str2list(C.exe_one_line('%s' % C.grep('0%x' % loop['back'], hitcounts, '-A1')))
-  if len(next_line) > 4: after = int(next_line[4])  # only if inst found after loop
-  avg = float(before + after) / 2
+  next_line = C.str2list(C.exe_one_line(C.grep('0%x' % loop['back'], hitcounts, '-A1')))
+  if len(next_line) > 4:
+    after = int(next_line[4])  # only if inst found after loop
+    avg = float(before + after) / 2
+  else: avg = float(before)
   return round(hotness / avg, 2)
 
 def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
@@ -741,7 +743,8 @@ def print_hist(hist_t, Threshold=0.01):
   tc_special = name == 'tripcount' and d['mode'] == '32+'
   keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
-  if tc_special:
+  do_tripcount_mean = name == 'tripcount' and d['mode'] == '32+'
+  if do_tripcount_mean:
     mean = tripcount_mean(loop, loop_ipc)
     if mean: d['mean'] = mean
   d['num-buckets'] = len(hist)
@@ -754,7 +757,7 @@ def print_hist(hist_t, Threshold=0.01):
         print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
     if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
-  if tc_special: d['num-buckets'] = '-'
+  if do_tripcount_mean: d['num-buckets'] = '-'
   d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) == str else k) for k in hist.keys()) if weighted else tot
   return d
 

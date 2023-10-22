@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.76
+__version__ = 2.77
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -55,6 +55,7 @@ do = {'run':        C.RUN_DEF,
   'help':           1,
   'interval':       10,
   'imix':           0x3f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens, 5: misp report
+  'jcc-erratum':    0,
   'loop-ideal-ipc': 0,
   'loop-srcline':   0,
   'loops':          min(pmu.cpu('corecount'), 30),
@@ -383,6 +384,9 @@ def profile(mask, toplev_args=['mvl6', None]):
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')):] + px.join(rapl) + ('/' if '/' in px else '')
     return 'msr/tsc/' + (power() if args.power and not pmu.v5p() else '')
   def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
+  def perf_F(): return "-F +brstackinsn%s%s --xed%s" % ('len' if do['jcc-erratum'] else '',
+                                                        ',+srcline' if do['loop-srcline'] else '',
+                                                        ' 2>>' + err if do['loop-srcline'] else '')
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'], csv=False,
                 grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
@@ -674,14 +678,13 @@ def profile(mask, toplev_args=['mvl6', None]):
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         exe('echo > %s' % err)
-        misp, cmd, msg = '', "-F +brstackinsn%s --xed%s" % (',+srcline' if do['loop-srcline'] else '',
-                                                            ' 2>>' + err if do['loop-srcline'] else ''), '@info'
+        misp, cmd, msg = '', perf_F(), '@info'
         if do['imix']:
           print_cmd(' '.join(('4debug', perf, 'script', perf_ic(data, perf_script.comm), cmd, '| less')), False)
           cmd += " | tee >(%s %s %s >> %s) %s | GREP_INST | %s " % (
             lbr_env, C.realpath('lbr_stats'), do['lbr-stats-tk'], info, misp, clean)
           if do['imix'] & 0x1:
-            cmd += "| tee >(sort|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
+            cmd += "| tee >(sort| sed 's/\s\+/\\t/g'|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
             msg += ', hitcounts'
           if do['imix'] & 0x2:
             cmd += "| cut -f2- | tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) " % (sort2up, out)
@@ -708,8 +711,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         cmd += ' | ./loop_stats %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], info)
         print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, C.realpath('loop_stats'),
           exe_1line('tail -1 %s' % loops, 2)[:-1], info))
-        perf_script("-F +brstackinsn%s --xed%s %s && %s" % (',+srcline' if do['loop-srcline'] else '',
-                                                            ' 2>>' + err if do['loop-srcline'] else '', cmd,
+        perf_script("%s %s && %s" % (perf_F(), cmd,
                     C.grep('FL-cycles...[1-9][0-9]?', info, color=1)), "@detailed stats for hot loops", data,
                     export='PTOOLS_HITS=%s %s' % (hits, ('LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] else ''))
       else: warn_file(loops)

@@ -121,13 +121,21 @@ test-stats: stats.py
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
 ../perf:
 	$(DO) build-perf
-test-srcline: ../perf lbr.py do.py common.py
+SLI = 1000000
+test-srcline: lbr.py do.py common.py
 	cd kernels && clang -g -O2 pagefault.c -o pagefault-clang > /dev/null 2>&1
-	$(DO) $(CMD) -a './kernels/pagefault-clang 1000000' --perf ../perf -pm 100 --tune :loop-srcline:1 > /dev/null 2>&1
-	grep -q 'srcline: pagefault.c;43' pagefault-clang-1000000*info.log || $(FAIL)
+	$(DO) $(CMD) -a './kernels/pagefault-clang $(SLI)' --perf ../perf -pm 100 --tune :loop-srcline:1 > /dev/null 2>&1
+	grep -q 'srcline: pagefault.c;43' pagefault-clang-$(SLI)*info.log || $(FAIL)
+TMI = 80000000
+test-tripcount-mean: lbr.py do.py kernels/x86.py
+	gcc -g -O2 kernels/tripcount-mean.c -o kernels/tripcount-mean > /dev/null 2>&1
+	$(DO) $(CMD) -a './kernels/tripcount-mean $(TMI)' --perf ../perf -pm 100 > /dev/null 2>&1
+	grep Loop#1 tripcount-mean-$(TMI)*info.log | awk -F 'tripcount-mean: ' '{print $$2}' | \
+	awk -F ',' '{print $$1}' | awk 'BEGIN {lower=98; upper=102} {if ($$1 >= lower && $$1 <= upper) exit 0; \
+	else exit 1}' || $(FAIL)
 
 clean:
-	rm -rf {run,BC,datadep,$(AP),openssl}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
+	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
 pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
@@ -145,7 +153,7 @@ pre-push: help
 	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
 	$(MAKE) test-default DO_ARGS=":calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \
 	    CMD='suspend-smt profile tar' PM=1931a &&\
-	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vvvl2.log && test -f $(AP)-u.$(CPU).results.tar.gz\
+	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-*.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command
 	$(MAKE) test-default APP=./$(AP) PM=313e DO_ARGS=":perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
 	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
@@ -155,6 +163,7 @@ pre-push: help
 	$(MAKE) test-study                                      # tests study script (errors only)
 	$(MAKE) test-stats                                      # tests stats module
 	$(MAKE) test-srcline                                    # tests srcline loop stat
+	$(MAKE) test-tripcount-mean                             # tests tripcount-mean calculation
 	$(PY3) $(DO) profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1  || echo skip
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC

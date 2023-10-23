@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.40
+__version__ = 0.41
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -20,20 +20,25 @@ INST_UNIQ='PAUSE'
 INST_1B='NOP'
 MOVLG='MOVLG'
 FP_SUFFIX = "[sdh]([a-z])?"
+
+# instruction mnemonics
+BIT_TEST  = 'bt[^crs]'
+CALL_RET  = '(call|ret)'
+CISC_CMP  = '(cmp[^x]|test).*\(' # CMP or TEST with memory (CISC)
+CMOV      = r"cmov"
+COMI      = r"v?u?comi",
+COND_BR   = 'j[^m][^ ]*'
+EXTRACT   = 'xtr' # covers legacy, AVX* and x87 flavors
 IMUL      = r"imul.*"
 INDIRECT  = r"(jmp|call).*%"
-CALL_RET  = '(call|ret)'
-COND_BR   = 'j[^m][^ ]*'
-TEST_CMP  = r"(test|cmp).?\s"
-BIT_TEST  = 'bt[^crs]'
-COMI      = r"v?u?comi",
-EXTRACT   = 'xtr' # covers legacy, AVX* and x87 flavors
+JMP_RET   = r"(jmp|ret)"
+JUMP      = '(j|%s|sys%s|bnd jmp)' % (CALL_RET, CALL_RET)
 LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"mov.?\s.*\).*,"
-STORE     = r"\s+\S+\s+[^\(\),]+,"  # use is_mem_store()
 MOV       = r"v?mov"
-CMOV      = r"cmov"
-BR = '(j|%s|sys%s|bnd jmp)' % (CALL_RET, CALL_RET)
+STORE     = r"\s+\S+\s+[^\(\),]+,"  # use is_mem_store()
+TEST_CMP  = r"(test|cmp).?\s"
+
 MEM_IDX = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
 M_FUSION_INSTS = ['cmp', 'test', 'add', 'sub', 'inc', 'dec', 'and']
 REGS_32 = ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp', 'esp'] + \
@@ -183,3 +188,25 @@ def is_memory(line): return '(' in line and 'lea' not in line and 'nop' not in l
 def is_imm(line): return '$' in line
 def is_mem_imm(line): return is_memory(line) and is_imm(line)
 def is_mem_store(line): return is_memory(line) and re.match(STORE, line) and C.any_in(('mov', EXTRACT), line)
+def is_type(t, l): return re.match(r"\s+\S+\s+%s" % t, l)
+def is_cisc_load(line): return is_type(CISC_CMP, line) or is_type(BIT_TEST, line)
+
+def get_mem_inst(line):
+  assert '(' in line, line
+  if 'lock' in line: return 'lock'
+  elif 'prefetch' in line: return 'prefetch'
+  elif is_cisc_load(line) or 'gather' in line: return 'load'
+  elif 'scatter' in line or EXTRACT in line: return 'store'
+  elif re.match(STORE, line): return 'store' if is_mem_store(line) else 'rmw'
+  else: return 'load' if is_type(MOV, line) else 'rmw'
+
+MEM_INSTS_BASIC = ['load', 'store', 'rmw']
+MEM_INSTS = MEM_INSTS_BASIC + ['lock', 'prefetch']
+def mem_type(line=None):
+  if not line: return ['%s-%s' % (t, a) for t in ('stack', 'global', 'heap') for a in MEM_INSTS_BASIC]
+  a = get_mem_inst(line)
+  assert a in MEM_INSTS, 'inst=%s for line:\n%s' % (a, line)
+  if not a in MEM_INSTS_BASIC or is_cisc_load(line): return None
+  if re.search('%[re]sp', line): return 'stack-'+a
+  if re.search('%[re]ip', line): return 'global-'+a
+  return 'heap-'+a

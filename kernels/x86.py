@@ -25,6 +25,7 @@ FP_SUFFIX = "[sdh]([a-z])?"
 BIT_TEST  = 'bt[^crs]'
 CALL_RET  = '(call|ret)'
 CISC_CMP  = '(cmp[^x]|test).*\(' # CMP or TEST with memory (CISC)
+CISC_OP   = '[a-z]+\s+[^,]+\(' # note: does include plain loads!
 CMOV      = r"cmov"
 COMI      = r"v?u?comi",
 COND_BR   = 'j[^m][^ ]*'
@@ -198,7 +199,7 @@ def get_mem_inst(line):
   elif is_cisc_load(line) or 'gather' in line: return 'load'
   elif 'scatter' in line or EXTRACT in line: return 'store'
   elif re.match(STORE, line): return 'store' if is_mem_store(line) else 'rmw'
-  else: return 'load' if is_type(MOV, line) else 'rmw'
+  else: return 'load' if is_type(MOV, line) or is_type(CISC_OP, line) else 'rmw'
 
 MEM_INSTS_BASIC = ['load', 'store', 'rmw']
 MEM_INSTS = MEM_INSTS_BASIC + ['lock', 'prefetch']

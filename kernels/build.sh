@@ -1,7 +1,8 @@
 #!/bin/sh
 # Author: Ahmad Yasin
 # July 2023
-#
+# Donot modify! Use build.py
+
 CC=${CC:-gcc -g -O2}
 GEN=${GEN:-1}
 PY=${PY:-python3}

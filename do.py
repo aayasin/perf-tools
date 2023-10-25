@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.75
+__version__ = 2.76
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -490,7 +490,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
   def toplev_V(v, tag='', nodes=do['nodes'],
                tlargs = toplev_args[1] if toplev_args[1] else args.toplev_args):
-    o = '%s.toplev%s.log'%(out, v.split()[0]+tag)
+    o = '%s.toplev%s%s.log' % (out, v.split()[0]+tag, '-nomux' if 'no-multiplex' in tlargs else '')
     c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, C.toplev_log2csv(o), tlargs, r)
     if ' --global' in c:
       # https://github.com/andikleen/pmu-tools/issues/453

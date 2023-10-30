@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 1.95 # see version line of do.py
+__version__= x86.__version__ + 1.96 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -236,7 +236,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           inc(loop['paths-%d'%x], ';'.join([hex(a) for a in lbr_takens[-x:]]))
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
-      size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf = 1, {}, [], 0, 0, 0
+      size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf, erratum = 1, {}, [], 0, 0, 0, 0 if 'ilen:' in lines[-1] else None
       types = ['taken', 'lea', 'cmov'] + x86.MEM_INSTS + user_loop_imix
       for i in types: cnt[i] = 0
       x = len(lines)-2
@@ -248,12 +248,15 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         elif x == len(lines) - 2 or not x86.is_jcc_fusion(lines[x + 1], lines[x + 2]):
           if x86.is_ld_op_fusion(lines[x], lines[x + 1]): ld_op_mf += 1
           elif x86.is_mov_op_fusion(lines[x], lines[x + 1]): mov_op_mf += 1
+        # erratum feature disabled if erratum is None, otherwise erratum counts feature cases
+        if not erratum is None and is_jcc_erratum(lines[x+1], lines[x]): erratum += 1
         t = line_inst(lines[x])
         if t and t in types: cnt[t] += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
           loop['size'], loop['Conds'], loop['op-jcc-mf'], loop['mov-op-mf'], loop['ld-op-mf'] = \
             size, len(conds), op_jcc_mf, mov_op_mf, ld_op_mf
+          if not erratum is None: loop['jcc-erratum'] = erratum
           for i in types: loop[i] = cnt[i]
           if len(conds):
             loop['Cond_polarity'] = {}
@@ -347,16 +350,23 @@ indirects = set()
 def inc_pair(first, second='JCC', suffix='non-fusible'):
   c = '%s-%s %s' % (first, second, suffix)
   k = 'cond_%s' % c if second == 'JCC' else c
-  if k in glob: glob[k] += 1
-  else:
-    glob[k] = 1
-    if second == 'JCC':
-      global Insts_cond
-      Insts_cond += [c]
+  new = inc_stat(k)
+  if new and second == 'JCC': # new JCC paired stat added
+    global Insts_cond
+    Insts_cond += [c]
   if second == 'JCC' and suffix == 'non-fusible':
     glob['counted_non-fusible'] += 1
     return True
   return False
+
+# inc/init stat, returns True when new stat is initialized
+def inc_stat(stat):
+  if stat in glob:
+    glob[stat] += 1
+    return False
+  else:
+    glob[stat] = 1
+    return True
 
 IPTB  = 'inst-per-taken-br--IpTB'
 FUNCP = 'Params_of_func'
@@ -409,6 +419,7 @@ def edge_stats(line, lines, ip, xip):
           def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
           if is_type(x86.MOV, lines[-1]): inc_pair2('MOV')
           elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", lines[-1]): inc_pair2('LEA-1')
+  if is_jcc_erratum(line, lines[-1]): inc_stat('JCC-erratum')
   if len(lines) > 2 and not x86.is_jcc_fusion(lines[-1], line):
     if x86.is_ld_op_fusion(lines[-2], lines[-1]): inc_pair('LD', 'OP', suffix='fusible')
     elif x86.is_mov_op_fusion(lines[-2], lines[-1]): inc_pair('MOV', 'OP', suffix='fusible')
@@ -568,6 +579,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           if is_taken(line): takens += [ip]
           # Expect a taken branch in first entry, but for some reason Linux/perf sometimes return <32 entry LBR
           #else: print('##', num_valid_sample())
+          # check erratum for line with no consideration of macro-fusion with previous line
+          if edge_en and is_jcc_erratum(line): inc_stat('JCC-erratum')
         else: # a 2nd instruction
           insts += 1
           if is_taken(line):
@@ -621,6 +634,7 @@ def is_header(line):
   def patch(x):
     if debug: C.printf("\nhacking '%s' in: %s" % (x, line))
     return line.replace(x, '-', 1)
+  if 'ilen:' in line: return False
   if '[' in line[:50]:
     p = line.split('[')[0]
     assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()
@@ -648,8 +662,24 @@ def is_jmp_next(br, # a hacky implementation for now
 def has_timing(line): return line.endswith('IPC')
 def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else False
 
+def is_jcc_erratum(line, previous=None):
+  # JCC/CALL/RET/JMP
+  if not is_type(x86.COND_BR, line) and not is_type(x86.CALL_RET, line) \
+          and not is_type(x86.JMP_RET, line): return False
+  pattern = r"ilen:\s+(\d+)"
+  ilen = re.search(pattern, line)
+  if not ilen: return False
+  ip = line_ip(line)
+  length = int(ilen.group(1))
+  if previous and x86.is_jcc_fusion(previous, line):
+    ip = line_ip(previous)
+    length += int(re.search(pattern, previous).group(1))
+  next_ip = ip + length
+  return not ip >> 5 == next_ip >> 5
+
 def is_label(line):
   line = line.strip()
+  if 'ilen:' in line: return False
   return line.endswith(':') or (len(line.split()) == 1 and line.endswith(']')) or \
       (len(line.split()) > 1 and line.split()[-2].endswith(':')) or \
       (':' in line and line.split(':')[-1].isdigit())
@@ -707,8 +737,9 @@ def tripcount_mean(loop, loop_ipc):
   jmp_line = C.exe_one_line(C.grep('%s' % 'jmp*\s' + hex(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
   if not jmp_line == '': before += int(C.str2list(jmp_line)[0])
   next_line = C.str2list(C.exe_one_line(C.grep('0%x' % loop['back'], hitcounts, '-A1')))
-  if len(next_line) > 4:
-    after = int(next_line[4])  # only if inst found after loop
+  index = 6 if 'ilen:' in next_line else 4
+  if len(next_line) > index:
+    after = int(next_line[index])  # only if inst found after loop
     avg = float(before + after) / 2
   else: avg = float(before)
   return round(hotness / avg, 2)
@@ -798,6 +829,7 @@ def print_global_stats():
   if glob['size_stats_en']:
     for x in Insts_cond: print_imix_stat(x + ' conditional', glob['cond_' + x])
     print_imix_stat('unaccounted non-fusible conditional', glob['cond_non-fusible'] - glob['counted_non-fusible'])
+    if 'JCC-erratum' in glob: print_imix_stat('JCC-erratum conditional', glob['JCC-erratum'])
     for x in Insts_Fusions: print_imix_stat(x, glob[x])
     for x in Insts_global: print_imix_stat(x, glob[x])
   if 'indirect-x2g' in hsts:

@@ -306,7 +306,7 @@ def inst_fusions(hitcounts, info):
     block = hotness_key = None
     hotness = lambda s: C.str2list(s)[0]
     is_mov = lambda l: 'mov' in l and not x86.is_mem_store(l)
-    cands_log = hitcounts.replace(".log", "-candidates.log")
+    cands_log = hitcounts.replace("hitcounts", "fusion-candidates")
     def find_cand(lines):
       patch = lambda s: s.replace(s.split()[0], '')
       if len(lines) < 3: return None  # need 3 insts at least
@@ -340,7 +340,7 @@ def inst_fusions(hitcounts, info):
           if ld_fusion: stats_data['LD-OP'] += new_hotness
           else: stats_data['MOV-OP'] += new_hotness
           # append candidate block to log
-          header, tail = lines[0][:25] + "\n", lines[i+2][:25] + "z\n"  # headers to differentiate blocks
+          header, tail = lines[0][:25] + "\n", lines[i+2][:25] + "zz - block end\n"  # headers to differentiate blocks
           block_list = [header] + lines[0:i+3] + [tail]
           C.fappend(''.join(block_list), cands_log, end='')
       return None

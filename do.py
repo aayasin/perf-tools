@@ -581,9 +581,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     warn_file(perf_data)
     if not tag in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
     n = samples_count(perf_data)
+    def warn(x='little'): C.warn("Too %s samples collected (%s in %s); rerun with '--tune :calibrate:%d'" % (x, n,
+      perf_data, do['calibrate'] + (-1 if x == 'little' else 1)))
     if n == 0: C.error("No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
-    elif n < 1e4: C.warn("Too little samples collected (%s in %s); rerun with '--tune :calibrate:-1'" % (n, perf_data))
-    elif n > 1e5: C.warn("Too many samples collected (%s in %s); rerun with '--tune :calibrate:1'" % (n, perf_data))
+    elif n < 1e4: warn()
+    elif n > 1e5: warn("many")
     return perf_data, n
   
   if en(8) and do['sample'] > 1:

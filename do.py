@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.77
+__version__ = 2.78
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -807,7 +807,8 @@ def do_logs(cmd, ext=[], tag=''):
     files = C.glob('.'+s+'*.cmd') + (C.glob('setup*') if isfile(Setup_log) else [])
     for f in C.glob(s+'*'):
       if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
-    exe('tar -czvf %s run.sh ' % r + ' '.join(files), 'tar into %s' % r, log=False)
+    if isfile('run.sh'): files += ['run.sh']
+    exe('tar -czvf %s ' % r + ' '.join(files), 'tar into %s' % r, log=False)
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + ' *-out.txt *perf.data* $(find -name __pycache__) results.tar.gz')
 
 def build_kernel(dir='./kernels/'):
@@ -958,6 +959,7 @@ def main():
       do_logs('tar')
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
+    elif c == 'sync-date':    exe('sudo date -s "$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d\' \' -f5-8)Z"', redir_out=None)
     elif c == 'version':      print(os.path.basename(__file__), 'version =', version(), '; '.join([''] +
       [module_version(x) for x in ('lbr', 'stats')] + [exe_1line(args.perf + ' --version').replace(' version ', '='),
                                                        'TMA=%s' % pmu.cpu('TMA version')]))

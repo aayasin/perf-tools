@@ -872,7 +872,7 @@ def print_all(nloops=10, loop_ipc=0):
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
       if hitcounts and lp['size']:
         if lp['taken'] == 0:
-          C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size']),
+          C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size'] if verbose & 0x40 else '-A%d' % (lp['size']-1)),
           'Hitcounts & ASM of loop %s' % hex(loop_ipc))
           if llvm_log: lp['IPC-ideal'] = llvm_mca_lbr.get_llvm(hitcounts, llvm_log, lp, hex(loop_ipc))
         else: lp['attributes'] += ';likely_non-contiguous'

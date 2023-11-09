@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 1.96 # see version line of do.py
+__version__= x86.__version__ + 1.97 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -107,6 +107,12 @@ def line_timing(line):
   ipc = round(float(x.group(3)), 1)
   cycles = int(x.group(2))
   return cycles, ipc
+
+def is_loop_line(line):
+  ip = line_ip(line)
+  for loop_ipc in loops:
+    if loop_ipc <= ip <= loops[loop_ipc]['back']: return True
+  return False
 
 def num_valid_sample(): return stat['total'] - stat['bad'] - stat['bogus']
 
@@ -311,7 +317,7 @@ edge_en = 0
 LBR_Event = pmu.lbr_event()[:-4]
 lbr_events = []
 loops = {}
-stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
+stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles', 'total_loops_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
 
@@ -610,6 +616,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         if has_timing(line):
           cycles = line_timing(line)[0]
           stat['total_cycles'] += cycles
+          if is_loop_line(line):
+            stat['total_loops_cycles'] += cycles
         if mispred_ip and is_taken(line) and mispred_ip == line_ip(line) and 'MISPRED' in line: valid += 1
         lines += [ line ]
       xip = ip
@@ -824,6 +832,8 @@ def print_global_stats():
   if len(footprint): print_estimate(nc('code footprint [KB]'), '%.2f' % (len(footprint) / 16.0))
   if len(pages): print_stat(nc('code 4K-pages'), len(pages))
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
+  print_stat('cycles in loops', stat['total_loops_cycles'], prefix='proxy count',
+             ratio_of=('total cycles', stat['total_cycles']))
   for n in (4, 5, 6): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
                                  prefix='proxy count', ratio_of=('loops', len(loops)))
   if glob['size_stats_en']:

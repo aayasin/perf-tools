@@ -43,7 +43,7 @@ def get(tag):
   if tag =='bottlenecks': return prepend_info(','.join((metrics['bot-fe'], metrics['bot-rest'])))
   if tag =='bottlenecks-only': return ','.join((metrics['bot-fe'], metrics['bot-rest']))
   if tag =='fe-bottlenecks': return prepend_info(metrics['bot-fe'])
-  model = pmu.cpu('CPU')
+  model = pmu.cpu('CPU') or C.env2str('TMA_CPU', 'SPR')
   if tag == 'zero-ok':
     ZeroOk = C.csv2dict(C.dirname()+'/settings/tma-zero-ok.csv')
     return ZeroOk[model].split(';')

@@ -12,9 +12,9 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.90
+__version__= 0.91
 
-import common as C, pmu
+import common as C, pmu, tma
 import csv, re, os.path, sys
 from lbr import print_stat
 from kernels import x86
@@ -150,7 +150,7 @@ def parse_perf(l):
   elif '#' in l:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
-    if name.count('_') > 1 and name.islower() and not re.match('^(perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
+    if name.count('_') >= 1 and name.islower() and not re.match('^(perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
       base_event = name.split(':')[0]
       Name = name.replace(base_event, pmu.toplev2intel_name(base_event))
       assert not ':C1' in Name # Name = Name.replace(':C1', ':c1')
@@ -242,36 +242,58 @@ def read_perf_toplev(filename):
       else: d[x] = v
   return d
 
+def patch_metrics(d):
+  SLOTS = 'TOPDOWN.SLOTS'
+  if not SLOTS in d: return
+  slots = d[SLOTS]
+  del d[SLOTS]
+  d[SLOTS + ':perf_metrics'] = slots
+  fields = ['BACKEND_BOUND', 'FRONTEND_BOUND', 'RETIRING', 'BAD_SPECULATION']
+  l2map = (('MEMORY_BOUND', 'mem-bound'), ('FETCH_LATENCY', 'fetch-lat'), ('HEAVY_OPERATIONS', 'heavy-ops'),
+           ('BRANCH_MISPREDICTS', 'br-mispredict'))
+  for (x, y) in l2map:
+    if 'PERF_METRICS.' + x in d: fields += [x]
+  p = 'cpu/topdown-'.upper()
+  if p + 'fetch-lat/'.upper() in d:
+    for (x, y) in l2map:
+      k = '%s%s/' % (p, y.upper())
+      if k in d:
+        d['PERF_METRICS.' + x] = d[k]
+        fields += [x]
+        del d[k]
+  for k in fields:
+    m = n = 'PERF_METRICS.' + k
+    if not m in d:
+      n = m.lower().replace('.', '_')
+    d[m] = int(255.0 * d[n] / slots)
+    if m != n: del d[n]
+  return d
+
 def csv2stat(filename):
   if not filename.endswith('.csv'): C.error("Expecting csv format: '%s'" % filename)
   d = read_perf_toplev(filename)
+  NOMUX = 'vl6-nomux-perf.csv'
+  def nomux(): return filename.endswith(NOMUX)
+  def basename():
+    x = re.match(r'.*\.(toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
+    if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
+    return filename.replace(x.group(1), '')
+  d = patch_metrics(d)
+  base = basename()
+  if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
+  return perf_log2stat(base + 'perf_stat-r3.log', read_toplev(C.toplev_log2csv(filename), 'SMT_on'), d)
+
+def perf_log2stat(log, smt_on, d={}):
+  repeat = re.findall('.perf_stat-r([1-9]).log', log)[0]
+  base = log.replace('.perf_stat-r%s.log' % repeat, '')
+  bottlenecks = len(d) == 0
   def params(smt_on):
     d['knob.ncores'] = pmu.cpu('corecount')
     d['knob.nsockets'] = pmu.cpu('socketcount')
     d['knob.nthreads'] = 2 if smt_on else 1
-    d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', '4.5-full-perf')
+    d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', tma.get('version'))
     d['knob.uarch'] = pmu.cpu('CPU')
     return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK')
-  def patch_metrics(SLOTS='TOPDOWN.SLOTS'):
-    if not (SLOTS in d and 'PERF_METRICS.FRONTEND_BOUND' in d): return
-    slots = d[SLOTS]
-    del d[SLOTS]
-    d[SLOTS + ':perf_metrics'] = slots
-    fields = ['BACKEND_BOUND', 'FRONTEND_BOUND', 'RETIRING', 'BAD_SPECULATION']
-    l2map = (('MEMORY_BOUND', 'mem-bound'), ('FETCH_LATENCY', 'fetch-lat'), ('HEAVY_OPERATIONS', 'heavy-ops'), ('BRANCH_MISPREDICTS', 'br-mispredict'))
-    for (x, y) in l2map:
-      if 'PERF_METRICS.'+x in d: fields += [x]
-    p = 'cpu/topdown-'.upper()
-    if p + 'fetch-lat/'.upper() in d:
-      for (x, y) in l2map:
-        k = '%s%s/' % (p, y.upper())
-        if k in d:
-          d['PERF_METRICS.' + x] = d[k]
-          fields += [x]
-          del d[k]
-    for k in fields:
-      m = 'PERF_METRICS.' + k
-      d[m] = int(255.0 * d[m] / slots)
   def user_events(f):
     ue = {}
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
@@ -281,18 +303,10 @@ def csv2stat(filename):
       if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2
     return ue
-  NOMUX = 'vl6-nomux-perf.csv'
-  def nomux(): return filename.endswith(NOMUX)
-  def basename():
-    x = re.match(r'.*\.(toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
-    if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
-    return filename.replace(x.group(1), '')
-  patch_metrics()
-  base = basename()
-  uarch = params(read_toplev(C.toplev_log2csv(filename), 'SMT_on'))
-  if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
-  d.update(user_events(base + 'perf_stat-r3.log'))
-  stat = base + uarch + '.stat'
+  uarch = params(smt_on)
+  d.update(user_events(log))
+  if bottlenecks: d = patch_metrics(d)
+  stat = '.'.join((base + ('-bottlenecks' if bottlenecks else ''), uarch, 'stat'))
   with open(stat, 'w') as out:
     for x in sorted(d.keys(), reverse=True):
       out.write('%s %s\n' % (x, str(d[x])))

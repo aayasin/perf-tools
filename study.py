@@ -74,7 +74,7 @@ def modes_list():
 
 def parse_args():
   def conf(x): return Conf[x][DM] if DM in Conf[x] else None
-  ap = C.argument_parser('analyze two or more modes (configs)', mask=0x911a,
+  ap = C.argument_parser('analyze two or more modes (configs)', mask=0x1911a,
          defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
   ap.add_argument('config', nargs='*', default=[])
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)

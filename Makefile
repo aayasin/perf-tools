@@ -94,7 +94,7 @@ do-help.txt: do.py common.py pmu.py tma.py
 	./pmu.py
 	./$< -h > $@ && sed -i 's|/home/admin1/ayasin/perf-tools|\.|' $@
 	$(DO) profile --tune :flameg:1 :forgive:1 :help:-1 :msr:1 :tma-group:"'Auto-Detect'" :sample:3 --mode profile \
-	    -pm fffff > /dev/null && cat profile-mask-help.md
+	    -pm ffffff > /dev/null && cat profile-mask-help.md
 
 update:
 	$(DO) tools-update -v1
@@ -103,7 +103,7 @@ test-build:
 	grep -q 'Backend_Bound.Core_Bound.Ports_Utilization.Ports_Utilized_1' datadep-20e6.toplev-vl2.log
 	grep Time datadep-20e6.toplev-vl2.log
 	set -o pipefail; ./do.py profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
-	    -pm 10006 -r 1 | $(SHOW) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
+	    -pm 20006 -r 1 | $(SHOW) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
 test-default:
 	$(DO1) -pm $(PM)
 test-study: study.py stats.py run.sh do.py
@@ -152,9 +152,9 @@ pre-push: help
 	$(DO) profile -a './workloads/BC.sh 7' -d1 > BC-7.log 2>&1 || $(FAIL) # tests --delay
 	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
 	$(MAKE) test-default DO_ARGS=":calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \
-	    CMD='suspend-smt profile tar' PM=1931a &&\
+	    CMD='suspend-smt profile tar' PM=3931a &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-*.log && test -f $(AP)-u.$(CPU).results.tar.gz\
-	    # tests unfiltered- calibrated-sampling; PEBS, tma group & over-time profile-steps, tar command
+	    # tests unfiltered- calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command
 	$(MAKE) test-default APP=./$(AP) PM=313e DO_ARGS=":perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
 	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
 	mkdir test-dir; cd test-dir; ln -s ../run.sh; ln -s ../common.py; make test-default APP=../pmu-tools/workloads/BC2s \

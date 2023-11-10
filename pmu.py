@@ -73,6 +73,8 @@ def basic_events():
   if goldencove(): events += ['r0160', 'r0262']
   return ','.join(events)
 
+def fixed_events(): return ('INST_RETIRED.ANY', 'CPU_CLK_UNHALTED.THREAD', 'CPU_CLK_UNHALTED.REF_TSC', 'TOPDOWN.SLOTS')
+
 # TODO: lookup Metric's attribute in pmu-tools/ratio; no hardcoding!
 def is_uncore_metric(m):
   return m in ('DRAM_BW_Use', 'Power', 'Socket_CLKS') or C.startswith(

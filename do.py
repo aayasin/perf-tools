@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.78
+__version__ = 2.8
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -106,7 +106,7 @@ do = {'run':        C.RUN_DEF,
 }
 args = argparse.Namespace()
 
-def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=True, background=False, export=None):
+def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=1, background=False, export=None):
   def get_time_cmd():
     X, i = x.split(), 0
     while C.any_in(('=', 'python'), X[i]): i += 1
@@ -145,7 +145,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=Tr
       do['cmds_file'].write(x + '\n')
       do['cmds_file'].flush()
   return C.exe_cmd(x, msg, redir_out, debug, run, log, fail, background)
-def exe1(x, m=None, fail=True, log=True):
+def exe1(x, m=None, fail=1, log=True):
   if args.stdout and '| tee' in x: x, log = x.split('| tee')[0], False
   return exe(x, m, redir_out=None, fail=fail, log=log)
 def exe_to_null(x): return exe1(x + ' > /dev/null')
@@ -232,7 +232,7 @@ def tools_update(kernels=[], mask=0x7):
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
 def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' % (p, C.file2str(p), C.flag2str(' >> ', out)))
 def find_perf():
-  exe(Find_perf + " | tee find-perf.txt", fail=False)
+  exe(Find_perf + " | tee find-perf.txt", fail=0)
   for x in C.file2lines('find-perf.txt'):
     C.printc('%s: %s' % (x, exe_1line('%s --version' % x)), col=C.color.BLACK)
 
@@ -348,7 +348,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   perf, toplev, ocperf = get_perf_toplev()
   base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
   logs = {'stat': None, 'code': base + '-code.log', 'tma': None}
-  def profile_exe(cmd, msg, step, mode='redirect', tune=''):
+  def profile_exe(cmd, msg, step, mode='redirect', tune='', fail=0):
     if do['help'] < 0:
       if ' -r3' in cmd: tune = '[--repeat 3%s]' % (' --tune :levels:2' if ' -vl2 ' in cmd else '')
       elif ' -I10' in cmd: tune = '[--tune :interval:10]'
@@ -358,7 +358,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       return
     if mode == 'log-setup': return log_setup()
     if args.sys_wide and not (' -a ' in cmd): C.error("Incorrect system wide in profile-step='%s' cmd='%s'" % (msg, cmd))
-    if mode == 'perf-stat': return exe1(cmd, msg, fail=False)
+    if mode == 'perf-stat': return exe1(cmd, msg, fail=fail)
     else: return exe(cmd, msg)
   def profile_mask_help(filename = 'profile-mask-help.md'):
     hdr = ('%7s' % 'mask', '%-50s' % 'profile-step', 'additional [optional] arguments')
@@ -388,6 +388,7 @@ def profile(mask, toplev_args=['mvl6', None]):
                                                         ',+srcline' if do['loop-srcline'] else '',
                                                         ' 2>>' + err if do['loop-srcline'] else '')
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'], csv=False,
+                basic_events=do['perf-stat-add'] > 1, last_events=',' + do['perf-stat-def'], warn=True,
                 grep = "| egrep 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
     evts, perf_args = events, [flags, '-x,' if csv else '--log-fd=1', do['perf-stat'] ]
@@ -397,13 +398,13 @@ def profile(mask, toplev_args=['mvl6', None]):
       es, fs = tma.fixed_metrics()
       evts += append(es, evts)
       if fs: perf_args += fs
-    if do['perf-stat-add'] > 1 and do['core']: evts += append(pmu.basic_events(), evts)
+    if basic_events and do['core']: evts += append(pmu.basic_events(), evts)
     if args.events: evts += append(pmu.perf_format(args.events), evts)
-    if args.events or args.metrics: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
-    if evts != '': perf_args += ' -e "cpu-clock,%s,%s"' % (evts, do['perf-stat-def'])
+    if args.events or args.metrics or grep is None: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
+    if evts != '': perf_args += ' -e "cpu-clock,%s%s"' % (evts, last_events)
     log = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log')
     stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
-    ret = profile_exe(perf + stat, msg, step, mode='perf-stat')
+    ret = profile_exe(perf + stat, msg, step, mode='perf-stat', fail=0 if warn else -1)
     if args.stdout or do['tee']==0 or do['help']<0: return C.error('perf-stat failed') if ret else None
     if args.mode == 'process': return log
     if not isfile(log) or os.path.getsize(log) == 0:
@@ -426,7 +427,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       exe(' '.join([perf_report_syms, '-i', data, '| grep -A11 Samples']))
       C.error("Most samples in 'perf' tool. Try run longer")
     return comm
-  def perf_script(x, msg, data, export='', fail=True, K=1e3):
+  def perf_script(x, msg, data, export='', fail=1, K=1e3):
     if do['perf-scr']:
       samples = K * do['perf-scr']
       if perf_script.first: C.info('processing first %d samples only' % samples)
@@ -765,7 +766,15 @@ def profile(mask, toplev_args=['mvl6', None]):
     profile_exe(cmd + " | tee %s | %s" % (logs['tma'], grep_nz), 'topdown-%s no multiplexing' % toplev_args[0], 7)
 
   if en(16):
-    csv_file = perf_stat('-I%d' % do['interval'], 'over-time counting at %dms interval' % do['interval'], 16, csv=True)
+    if profiling():
+      if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
+      if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
+    logs['bott'] = perf_stat('-r1', 'bottlenecks-view', 16, tma.get('perf-groups'),
+              perfmetrics=None, basic_events=False, last_events='', grep="| egrep 'seconds [st]|inst_retired_any '", warn=False)
+    if do['help'] >= 0: stats.perf_log2stat(logs['bott'], 0)
+
+  if en(17):
+    csv_file = perf_stat('-I%d' % do['interval'], 'over-time counting at %dms interval' % do['interval'], 17, csv=True)
     if args.events:
       for e in args.events.split(','): exe('egrep -i %s %s > %s' % (e, csv_file, csv_file.replace('.csv', '-%s.csv' % e)))
 
@@ -783,10 +792,10 @@ def profile(mask, toplev_args=['mvl6', None]):
     x = '-i %s | cut -d: -f3-4 | cut -d, -f1 | sort | uniq -c' % perf_data
     exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None)
 
-  if en(17) and do['flameg']:
+  if en(20) and do['flameg']:
     flags = '-ag -F 49' # -c %d' % pmu.period()
     perf_data = '%s.perf.data' % record_name(flags)
-    profile_exe('%s record %s -o %s -- %s' % (perf, flags, perf_data, r), 'FlameGraph', 17, tune='flameg')
+    profile_exe('%s record %s -o %s -- %s' % (perf, flags, perf_data, r), 'FlameGraph', 20, tune='flameg')
     x = '-i %s %s > %s.svg ' % (perf_data,
       ' | ./FlameGraph/'.join(['', 'stackcollapse-perf.pl', 'flamegraph.pl']), perf_data)
     exe(' '.join((perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 2))

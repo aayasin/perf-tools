@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 1.97 # see version line of do.py
+__version__= x86.__version__ + 1.98 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -90,6 +90,7 @@ def header_cost(line):
   return str2int(C.str2list(line.split(':')[2])[2], (line, None))
 
 def line_ip_hex(line):
+  if is_label(line): return None
   x = re.match(r"\s+(\S+)\s+(\S+)", line)
   # assert x, "expect <address> at left of '%s'" % line
   return x.group(1).lstrip("0")
@@ -135,7 +136,7 @@ def line_inst(line):
   elif re.match(r"^[pv]", r.group(1)):
     for i in range(vec_size):
       if re.findall(INT_VEC(i), line): return vec_len(i)
-    warn(0x100, 'vec-int: ' + ' '.join(line.split()[1:]))
+    warn(0x400, 'vec-int: ' + ' '.join(line.split()[1:]))
     return 'vecX-int'
   return None
 
@@ -375,6 +376,8 @@ def inc_stat(stat):
     return True
 
 IPTB  = 'inst-per-taken-br--IpTB'
+IPLFC  = 'inst-per-leaf-func-call'
+NOLFC  = 'inst-per-leaf-func-name' # name-of-leaf-func-call would plot it away from IPFLC!
 FUNCP = 'Params_of_func'
 FUNCR = 'Regs_by_func'
 def count_of(t, lines, x, hist):
@@ -386,7 +389,7 @@ def count_of(t, lines, x, hist):
   return r
 
 def edge_en_init(indirect_en):
-  for x in ('IPC', IPTB, FUNCR, FUNCP): hsts[x] = {}
+  for x in ('IPC', IPTB, IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
   if indirect_en:
     for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
@@ -440,7 +443,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     return 'header-only: ' + (dso if 'kallsyms' in dso else ' '.join((get_field(l, 'sym'), dso)))
   global lbr_events, bwd_br_tgts, edge_en
   valid, lines, bwd_br_tgts = 0, [], []
-  assert not labels, "labels argument must be False!"
+  labels = verbose & 0x1 and not loop_ipc
+  assert verbose & 0x1 or not labels, "labels argument must be False!"
   glob['size_stats_en'] = skip_bad and not labels and not loop_ipc
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
@@ -481,8 +485,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         return lines if len(lines) > min_lines and not skip_bad else None
       header = is_header(line)
       if header:
-        # first sample here (of a given event)
         ev = header.group(3)[:-1]
+        # first sample here (of a given event)
         if not ev in lbr_events:
           if not len(lbr_events) and '[' in header.group(1):
             for k in header_field.keys(): header_field[k] += 1
@@ -552,8 +556,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         break
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
       # TODO: replace with this line when labels is True
-      #if skip_bad and len(lines) and not is_label(line) and not line.strip().startswith('0'):
-      if skip_bad and len(lines) and not line.strip().startswith('0'):
+      if skip_bad and len(lines) and not is_label(line) and not line.strip().startswith('0'):
         if debug and debug == timestamp:
           exit(line, lines, "bad line")
         valid = skip_sample(lines[0])
@@ -565,7 +568,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         break
       ip = None if header or is_label(line) or 'not reaching sample' in line else line_ip(line, lines)
       new_line = is_line_start(ip, xip)
-      if edge_en and new_line:
+      if not is_label(line) and edge_en and new_line:
         footprint.add(ip >> 6)
         pages.add(ip >> 12)
       if len(lines) and not is_label(line):
@@ -594,7 +597,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
             if edge_en:
               inc(hsts[IPTB], insts); insts = 0
               if 'IPC' in line: inc(hsts['IPC'], line_timing(line)[1])
-              if (verbose & 0x1): #FUNCR
+              if verbose & 0x2: #FUNCR
                 x = get_taken_idx(lines, -1)
                 if x >= 0:
                   if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
@@ -609,16 +612,29 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           if xip in indirects:
             inc(hsts['indirect_%s_targets' % hex(xip)], ip)
             inc(hsts['indirect_%s_paths' % hex(xip)], '%s.%s.%s' % (hex(get_taken(lines, -2)['from']), hex(xip), hex(ip)))
-          detect_loop(ip, lines, loop_ipc, takens, srcline)
+          #C.printf('dbg1#%s#\n' % line.strip())
+          if not labels: detect_loop(ip, lines, loop_ipc, takens, srcline)
         if skip_bad: tc_state = loop_stats(line, loop_ipc, tc_state)
       if len(lines) or event in line:
         line = line.rstrip('\r\n')
-        if has_timing(line):
-          cycles = line_timing(line)[0]
-          stat['total_cycles'] += cycles
-          if is_loop_line(line):
-            stat['total_loops_cycles'] += cycles
-        if mispred_ip and is_taken(line) and mispred_ip == line_ip(line) and 'MISPRED' in line: valid += 1
+        if not is_label(line):
+          if edge_en and verbose & 0x1 and is_type('ret', line):
+            x = len(lines) - 1
+            while x > 0 and not is_type('ret', lines[x]):
+              if is_type('call', lines[x]):
+                size = len(lines) - x
+                name = lines[x+1].strip() if x < len(lines)-1 and is_label(lines[x+1]) else 'Missing-func-name'
+                inc(hsts[IPLFC], size)
+                inc(hsts[NOLFC], name)
+                warn(0x100, 'leaf-function name: %s with size: %d' % (name, size))
+                break
+              x -= 1
+          if has_timing(line):
+            cycles = line_timing(line)[0]
+            stat['total_cycles'] += cycles
+            if edge_en and is_loop_line(line):
+              stat['total_loops_cycles'] += cycles
+          if mispred_ip and is_taken(line) and mispred_ip == line_ip(line) and 'MISPRED' in line: valid += 1
         lines += [ line ]
       xip = ip
     if read_sample.dump: print_sample(lines, read_sample.dump)
@@ -777,7 +793,7 @@ def print_hist(hist_t, Threshold=0.01):
   hist, name, loop, loop_ipc, sorter, weighted = hist_t[0:]
   tot = sum(hist.values())
   d = {}
-  d['type'] = 'paths' if 'paths' in name else ('hex' if 'indir' in name else 'number')
+  d['type'] = 'str' if C.any_in(('name', 'paths'), name) else ('hex' if 'indir' in name else 'number')
   d['mode'] = str(C.hist2slist(hist)[-1][0])
   keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
@@ -791,7 +807,7 @@ def print_hist(hist_t, Threshold=0.01):
     left, threshold = 0, int(Threshold * tot)
     for k in sorted(hist.keys(), key=sorter):
       if hist[k] >= threshold and hist[k] > 1:
-        bucket = ('%70s' % k) if d['type'] == 'paths' else '%5s' % (hex(k) if d['type'] == 'hex' else k)
+        bucket = ('%70s' % k) if d['type'] == 'str' else '%5s' % (hex(k) if d['type'] == 'hex' else k)
         print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
     if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))

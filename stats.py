@@ -374,6 +374,7 @@ def inst_fusions(hitcounts, info):
           for i, block_line in enumerate(block):
             if is_mov(block_line): find_cand(block[i:])
           hotness_key, block = restart()  # restart for next block
+  assert C.exe_one_line(C.grep(' ALL instructions:', info)), 'invalid %s' % info
   total = int(C.exe_one_line(C.grep(' ALL instructions:', info)).split(':')[1].strip())
   calc_stats()
   for stat, value in stats_data.items():

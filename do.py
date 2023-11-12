@@ -677,8 +677,8 @@ def profile(mask, toplev_args=['mvl6', None]):
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
         cycles = get_stat(pmu.event('cycles'), 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
-        if args.verbose > 2: lbr_env += " LBR_VERBOSE=0x800"
-        if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=%d" % do['lbr-verbose']
+        if args.verbose > 2: do['lbr-verbose'] |= 0x800
+        if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=0x%x" % (do['lbr-verbose'] | C.env2int('LBR_VERBOSE', base=16))
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         exe('echo > %s' % err)
         misp, cmd, msg = '', perf_F(), '@info'

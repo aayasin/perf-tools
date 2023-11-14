@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.8
+__version__ = 2.81
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -421,12 +421,12 @@ def profile(mask, toplev_args=['mvl6', None]):
     if not do['perf-filter']: return None
     if do['comm']: return do['comm']
     # might be doable to optimize out this 'perf script' with 'perf buildid-list' e.g.
-    comm = exe_1line(perf + " script -i %s -F comm | %s | tail -1" % (data, sort2u), 1)
+    comm = exe_1line(perf + " script -i %s -F comm | %s | tee %s.comms.log | tail -1" % (data, sort2u, data), 1)
     if comm == 'perf' or comm.startswith('perf-'):
       # e.g. a perf tool overhead bug in Intel event names handling
       exe(' '.join([perf_report_syms, '-i', data, '| grep -A11 Samples']))
       C.error("Most samples in 'perf' tool. Try run longer")
-    return comm
+    return "'%s'" % comm if ' ' in comm else comm
   def perf_script(x, msg, data, export='', fail=1, K=1e3):
     if do['perf-scr']:
       samples = K * do['perf-scr']

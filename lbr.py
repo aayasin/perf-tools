@@ -465,7 +465,8 @@ def edge_stats(line, lines, xip, size):
       if is_type('call', lines[x]):
         ok = x < len(lines) - 1
         name = lines[x + 1].strip()[:-1] if ok and is_label(lines[x + 1]) else 'Missing-func-name-%s' % (
-          '0x'+line_ip_hex(lines[x + 1]) if ok else str(insts_per_call))
+          '0x'+line_ip_hex(lines[x + 1]) if ok else 'unknown')
+        name += '-%d' % insts_per_call
         inc(hsts[IPLFC], insts_per_call)
         inc(hsts[NOLFC], name)
         if verbose & 0x10:

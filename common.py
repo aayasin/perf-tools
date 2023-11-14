@@ -48,19 +48,21 @@ def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   if outfile: fappend(msg, outfile)
 log_stdio=None
 
+log_db = {'info': {}, 'warn': {}}
+def warning(type='warn'): return ('warning' if type == 'warn' else type).upper()
+def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3, type='warn'):
+  inc(log_db[type], msg)
+  if suppress_after and log_db[type][msg] > suppress_after: return
+  if bold: col += color.BOLD
+  if type == 'warn':
+    WARN = env2int('WARN')
+    if level > WARN: return
+  suffix = '.' if type == 'info' else ('; suppressing' if log_db[type][msg] == suppress_after else '')
+  printc('%s: %s%s' % (warning(type), msg, suffix), col)
+def warn_summary(type='warn'):
+  if len(log_db[type]): print('Top %ss: (%d total unique)\n' % (warning(type), len(log_db[type])), hist2str(log_db[type]))
 def info(msg, bold=False, col=color.GREY):
-  if bold: col += color.BOLD
-  printc('INFO: %s .'%msg, col)
-
-warn_db = {}
-def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3):
-  inc(warn_db, msg)
-  if suppress_after and warn_db[msg] > suppress_after: return
-  WARN = env2int('WARN')
-  if bold: col += color.BOLD
-  if level <= WARN: printc('WARNING: %s%s' % (msg, '; suppressing' if warn_db[msg]==suppress_after else ''), col)
-def warn_summary():
-  if len(warn_db): print('Top warnings: (%d total unique)\n' % len(warn_db), hist2str(warn_db))
+  return warn(msg, bold, col, type='info', suppress_after=1)
 
 dump_stack_on_error = 0
 def error(msg):
@@ -232,7 +234,7 @@ def dict_load(f):
     return d
 
 def iter2str(x, sep=",\n\t"):
-  return str(x).replace("', ", ":\t").replace("), ('", sep).replace("[('", '').replace(')]', '\n')
+  return str(x).replace("', ", ":\t").replace("), ('", sep).replace("[('", '\t').replace(')]', '\n')
 def dict2str(d, sep=",\n\t"): return iter2str(sorted(d.items()), sep)
 def hist2str(h, top=20): return iter2str(hist2slist(h)[-top:])
 def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])

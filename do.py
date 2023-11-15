@@ -941,6 +941,7 @@ def main():
     elif c == 'find-perf':    find_perf()
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
+    elif c == 'eventlist-update': tools_update(mask=0x4)
     # TODO: generalize disable/enable/suspend of things that follow
     elif c == 'disable-smt':  smt()
     elif c == 'enable-smt':   smt('on')

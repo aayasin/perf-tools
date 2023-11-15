@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.81
+__version__ = 2.82
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -300,6 +300,7 @@ def log_setup(out=Setup_log, c='setup-cpuid.log', d='setup-dmesg.log'):
             '/sys/devices/system/node/node0/memory_side_cache/index1/size'):
     if isfile(f): prn_sysfile(f, out)
   log_patch("sudo sysctl -a | tee setup-sysctl.log | egrep 'randomize_va_space|hugepages ='")
+  C.fappend('IP-address: %s' % exe_1line('hostname -i'), out)
   exe("env > setup-env.log")
   new_line()          #CPU
   exe("lscpu | tee setup-lscpu.log | egrep 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)

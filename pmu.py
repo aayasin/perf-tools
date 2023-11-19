@@ -188,6 +188,7 @@ def cpu_msrs():
   msrs = [0x048, 0x08b,         # IA32_SPEC_CTRL, microcode update signature
           0x1a4,                # Prefetch Control
           0x033,                # Memory Control
+          0x345,                # IA32_PERF_CAPABILITIES
   ]
   if goldencove(): msrs += [0x6a0, 0x6a2]
   if server():

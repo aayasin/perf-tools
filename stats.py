@@ -252,7 +252,7 @@ def patch_metrics(d):
   l2map = (('MEMORY_BOUND', 'mem-bound'), ('FETCH_LATENCY', 'fetch-lat'), ('HEAVY_OPERATIONS', 'heavy-ops'),
            ('BRANCH_MISPREDICTS', 'br-mispredict'))
   for (x, y) in l2map:
-    if 'PERF_METRICS.' + x in d: fields += [x]
+    if 'PERF_METRICS.' + x in d or 'perf_metrics_'+x.lower() in d: fields += [x]
   p = 'cpu/topdown-'.upper()
   if p + 'fetch-lat/'.upper() in d:
     for (x, y) in l2map:

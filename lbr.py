@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 1.98 # see version line of do.py
+__version__= x86.__version__ + 1.99 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -400,6 +400,7 @@ def edge_en_init(indirect_en):
   if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'] = {}
 
 def edge_stats(line, lines, xip, size):
+  if is_label(line): return
   # An instruction may be counted individually and/or per imix class
   for x in Insts:
     if is_type(x, line):
@@ -415,49 +416,58 @@ def edge_stats(line, lines, xip, size):
   if new_line:
     footprint.add(ip >> 6)
     pages.add(ip >> 12)
-  # TODO: fixme when lines[-1] is a label in every instance of lines[-1] in rest of this function's code!
-  if 'dsb-heatmap' in hsts and (is_taken(lines[-1]) or new_line):
+  # lines[-1]/lines[-2] etc w/ no labels
+  def prev_line(i=-1):
+    idx = 0
+    while i < 0:
+      idx -= 1
+      while is_label(lines[idx]):
+        idx -= 1
+      i += 1
+    return lines[idx]
+  p_line = prev_line()
+  if 'dsb-heatmap' in hsts and (is_taken(p_line) or new_line):
     inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
-  # TODO: consider the branch instruction's bytes (once support added to perf-script)
-  if 'indirect-x2g' in hsts and is_type(x86.INDIRECT, lines[-1]) and abs(ip - xip) >= 2 ** 31:
+  ilen = get_ilen(p_line)
+  if 'indirect-x2g' in hsts and is_type(x86.INDIRECT, p_line) and ilen and abs(ip - xip + ilen) >= 2 ** 31:
     inc(hsts['indirect-x2g'], xip)
-    if 'MISP' in lines[-1]: inc(hsts['indirect-x2g-misp'], xip)
+    if 'MISP' in p_line: inc(hsts['indirect-x2g-misp'], xip)
   if xip in indirects:
     inc(hsts['indirect_%s_targets' % hex(xip)], ip)
     inc(hsts['indirect_%s_paths' % hex(xip)], '%s.%s.%s' % (hex(get_taken(lines, -2)['from']), hex(xip), hex(ip)))
-  if is_type(x86.COND_BR, lines[-1]) and is_taken(lines[-1]):
+  if is_type(x86.COND_BR, p_line) and is_taken(p_line):
     glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
   # checks all lines but first
   if is_type(x86.COND_BR, line):
     if is_taken(line): glob['cond_taken-not-first'] += 1
     else: glob['cond_non-taken'] += 1
-    if x86.is_jcc_fusion(lines[-1], line):
+    if x86.is_jcc_fusion(p_line, line):
       glob['cond_fusible'] += 1
-      if len(lines) > 2 and is_type(x86.TEST_CMP, lines[-1]) and is_type(x86.LOAD, lines[-2]):
+      if size > 1 and is_type(x86.TEST_CMP, p_line) and is_type(x86.LOAD, prev_line(-2)):
         inc_pair('LD-CMP', suffix='fusible')
     else:
       glob['cond_non-fusible'] += 1
-      if x86.is_mem_imm(lines[-1]):
-        inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if is_type(x86.TEST_CMP, lines[-1]) else 'OTHER',
-                                      '' if is_type(x86.MEM_IDX, lines[-1]) else 'NO'))
+      if x86.is_mem_imm(p_line):
+        inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if is_type(x86.TEST_CMP, p_line) else 'OTHER',
+                                      '' if is_type(x86.MEM_IDX, p_line) else 'NO'))
       else:
         counted = False
         for x in user_jcc_pair:
-          if is_type(x.lower(), lines[-1]):
+          if is_type(x.lower(), p_line):
             counted = inc_pair(x)
             break
         if counted: pass
-        elif is_type(x86.COND_BR, lines[-1]): counted = inc_pair('JCC')
-        elif is_type(x86.COMI, lines[-1]): counted = inc_pair('COMI')
-        if len(lines) > 2 and x86.is_jcc_fusion(lines[-2], line):
+        elif is_type(x86.COND_BR, p_line): counted = inc_pair('JCC')
+        elif is_type(x86.COMI, p_line): counted = inc_pair('COMI')
+        if size > 1 and x86.is_jcc_fusion(prev_line(-2), line):
           def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
-          if is_type(x86.MOV, lines[-1]): inc_pair2('MOV')
-          elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", lines[-1]): inc_pair2('LEA-1')
+          if is_type(x86.MOV, p_line): inc_pair2('MOV')
+          elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", p_line): inc_pair2('LEA-1')
   # check erratum for line (with no consideration of macro-fusion with previous line)
-  if is_jcc_erratum(line, None if size == 1 else lines[-1]): inc_stat('JCC-erratum')
-  if size > 1 and not x86.is_jcc_fusion(lines[-1], line):
-    if x86.is_ld_op_fusion(lines[-2], lines[-1]): inc_pair('LD', 'OP', suffix='fusible')
-    elif x86.is_mov_op_fusion(lines[-2], lines[-1]): inc_pair('MOV', 'OP', suffix='fusible')
+  if is_jcc_erratum(line, None if size == 1 else p_line): inc_stat('JCC-erratum')
+  if size > 1 and not x86.is_jcc_fusion(p_line, line):
+    if x86.is_ld_op_fusion(prev_line(-2), p_line): inc_pair('LD', 'OP', suffix='fusible')
+    elif x86.is_mov_op_fusion(prev_line(-2), p_line): inc_pair('MOV', 'OP', suffix='fusible')
   if verbose & 0x1 and is_type('ret', line):
     insts_per_call, x = 0, len(lines) - 1
     while x > 0:
@@ -699,14 +709,12 @@ def is_jcc_erratum(line, previous=None):
   # JCC/CALL/RET/JMP
   if not is_type(x86.COND_BR, line) and not is_type(x86.CALL_RET, line) \
           and not is_type(x86.JMP_RET, line): return False
-  pattern = r"ilen:\s+(\d+)"
-  ilen = re.search(pattern, line)
-  if not ilen: return False
   ip = line_ip(line)
-  length = int(ilen.group(1))
+  length = get_ilen(line)
+  if not length: return False
   if previous and x86.is_jcc_fusion(previous, line):
     ip = line_ip(previous)
-    length += int(re.search(pattern, previous).group(1))
+    length += get_ilen(previous)
   next_ip = ip + length
   return not ip >> 5 == next_ip >> 5
 
@@ -716,6 +724,10 @@ def is_label(line):
   return line.endswith(':') or (len(line.split()) == 1 and line.endswith(']')) or \
       (len(line.split()) > 1 and line.split()[-2].endswith(':')) or \
       (':' in line and line.split(':')[-1].isdigit())
+
+def get_ilen(line):
+  ilen = re.search(r"ilen:\s+(\d+)", line)
+  return int(ilen.group(1)) if ilen else None
 
 def get_srcline(line):
   if line.endswith(':') or line.startswith('['): return None

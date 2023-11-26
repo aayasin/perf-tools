@@ -55,16 +55,16 @@ do = {'run':        C.RUN_DEF,
   'help':           1,
   'interval':       10,
   'imix':           0x3f, # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens, 5: misp report
-  'jcc-erratum':    0,
   'loop-ideal-ipc': 0,
   'loop-srcline':   0,
   'loops':          min(pmu.cpu('corecount'), 30),
   'log-stdout':     1,
   'lbr-branch-stats': 1,
-  'lbr-verbose':    0,
   'lbr-indirects':  None,
+  'lbr-jcc-erratum': 0,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
+  'lbr-verbose':    0,
   'ldlat':          int(LDLAT_DEF),
   'levels':         2,
   'metrics':        tma.get('key-info'),
@@ -385,7 +385,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')):] + px.join(rapl) + ('/' if '/' in px else '')
     return 'msr/tsc/' + (power() if args.power and not pmu.v5p() else '')
   def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
-  def perf_F(): return "-F +brstackinsn%s%s --xed%s" % ('len' if do['jcc-erratum'] else '',
+  def ilen(): return do['lbr-jcc-erratum'] or do['lbr-indirects']
+  def perf_F(): return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen() else '',
                                                         ',+srcline' if do['loop-srcline'] else '',
                                                         ' 2>>' + err if do['loop-srcline'] else '')
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'], csv=False,

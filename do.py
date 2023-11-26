@@ -629,19 +629,21 @@ def profile(mask, toplev_args=['mvl6', None]):
       for h in hists: hist_cmd += " && %s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % h, info, '-A33'), h)
       exe("%s && tail %s | grep -v '[cC]ount of' %s" % (C.grep('code footprint', info), info, hist_cmd),
           "@top loops & more in " + info)
+    # TODO: move this code to a seperate 'analyze' module!
     def calc_misp_ratio():
-      misp_file, header, takens, mispreds = data + '.mispreds.log', 'Branch Misprediction Report', {}, {}
+      misp_file, header, takens_freq, mispreds = data + '.mispreds.log', 'Branch Misprediction Report (taken-only)', {}, {}
       exe_v0(msg='@'+header.lower())
       assert isfile(misp_file) and isfile(data+'.takens.log')
       for l in C.file2lines(data+'.takens.log')[:-1]:
         b = C.str2list(l)
-        takens[ b[2] ] = int(b[1])
+        takens_freq[ b[2] ] = int(b[1])
       for l in C.file2lines(misp_file)[:-1]:
         b = C.str2list(l)
         m = int(b[1])
-        mispreds[ (' '.join(b[2:]), C.ratio(m, takens[b[2]])) ] = m * takens[b[2]]
+        mispreds[ (' '.join(b[2:]), C.ratio(m, takens_freq[b[2]])) ] = m * takens_freq[b[2]]
+      # significance := hitcounts x mispredicts (based on taken-branch IP)
       C.fappend('\n%s:\n' % header + '\t'.join(('significance', '%7s' % 'ratio', 'instruction addr & ASM')), misp_file)
-      for b in C.hist2slist(mispreds): C.fappend('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0])), misp_file)
+      for b in C.hist2slist(mispreds): C.fappend('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0])), misp_file) if b[1] > 1 else None
     lbr_hdr = '# LBR-based Statistics:'
     if not isfile(info) or do['reprocess'] > 1:
       if do['size']: static_stats()

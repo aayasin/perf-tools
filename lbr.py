@@ -430,10 +430,11 @@ def edge_stats(line, lines, xip, size):
   p_line = prev_line()
   if 'dsb-heatmap' in hsts and (is_taken(p_line) or new_line):
     inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
-  ilen = get_ilen(p_line)
-  if 'indirect-x2g' in hsts and is_type(x86.INDIRECT, p_line) and ilen and abs(ip - xip + ilen) >= 2 ** 31:
-    inc(hsts['indirect-x2g'], xip)
-    if 'MISP' in p_line: inc(hsts['indirect-x2g-misp'], xip)
+  if 'indirect-x2g' in hsts and is_type(x86.INDIRECT, p_line):
+    ilen = get_ilen(p_line) or 2
+    if abs(ip - (xip + ilen)) >= 2 ** 31:
+      inc(hsts['indirect-x2g'], xip)
+      if 'MISP' in p_line: inc(hsts['indirect-x2g-misp'], xip)
   if xip in indirects:
     inc(hsts['indirect_%s_targets' % hex_ip(xip)], ip)
     inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))

@@ -50,19 +50,20 @@ log_stdio=None
 
 log_db = {'info': {}, 'warn': {}}
 def warning(type='warn'): return ('warning' if type == 'warn' else type).upper()
-def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3, type='warn'):
+def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3, type='warn', extra=None):
   inc(log_db[type], msg)
   if suppress_after and log_db[type][msg] > suppress_after: return
   if bold: col += color.BOLD
   if type == 'warn':
     WARN = env2int('WARN')
     if level > WARN: return
-  suffix = '.' if type == 'info' else ('; suppressing' if log_db[type][msg] == suppress_after else '')
+  suffix = extra if type == 'info' else ('; suppressing' if log_db[type][msg] == suppress_after else '')
   printc('%s: %s%s' % (warning(type), msg, suffix), col)
 def warn_summary(type='warn'):
   if len(log_db[type]): print('Top %ss: (%d total unique)\n' % (warning(type), len(log_db[type])), hist2str(log_db[type]))
-def info(msg, bold=False, col=color.GREY):
-  return warn(msg, bold, col, type='info', suppress_after=1)
+def info_p(msg, extra):
+  return warn(msg, col=color.GREY, type='info', suppress_after=1, extra='; %s' % extra if extra else '.')
+def info(msg):  return info_p(msg, None)
 
 dump_stack_on_error = 0
 def error(msg):

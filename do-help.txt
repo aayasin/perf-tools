@@ -6,9 +6,9 @@ positional arguments:
                         aslr disable-atom disable-fix-freq disable-hugepages
                         disable-prefetches disable-smt enable-atom enable-fix-
                         freq enable-hugepages enable-prefetches enable-smt
-                        find-perf help install-python log profile prof-no-mux
-                        reboot setup-all setup-perf suspend-smt sync-date tar
-                        tools-update version
+                        eventlist-update find-perf help install-python log
+                        profile prof-no-mux reboot setup-all setup-perf
+                        suspend-smt sync-date tar tools-update version
 
 optional arguments:
   -h, --help            show this help message and exit

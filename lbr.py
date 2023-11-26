@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 1.99 # see version line of do.py
+__version__= x86.__version__ + 2.00 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -35,7 +35,7 @@ user_imix = C.env2list('LBR_IMIX', ['vpmovmskb', 'imul'])
 user_loop_imix = C.env2list('LBR_LOOP_IMIX', ['zcnt'])
 user_jcc_pair = C.env2list('LBR_JCC_PAIR', ['JZ', 'JNZ'])
 
-def hex(ip): return '0x%x' % ip if ip > 0 else '-'
+def hex_ip(ip): return '0x%x' % ip if ip > 0 else '-'
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 def ratio(a, b): return C.ratio(a, b) if b else '-'
 def read_line(): return sys.stdin.readline()
@@ -240,7 +240,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       if ip == loop_ipc:
         for x in paths_range():
           if not 'paths-%d'%x in loop: loop['paths-%d'%x] = {}
-          inc(loop['paths-%d'%x], ';'.join([hex(a) for a in lbr_takens[-x:]]))
+          inc(loop['paths-%d'%x], ';'.join([hex_ip(a) for a in lbr_takens[-x:]]))
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf, erratum = 1, {}, [], 0, 0, 0, 0 if 'ilen:' in lines[-1] else None
@@ -265,6 +265,8 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
             size, len(conds), op_jcc_mf, mov_op_mf, ld_op_mf
           if not erratum is None: loop['jcc-erratum'] = erratum
           for i in types: loop[i] = cnt[i]
+          hexa = lambda x: hex(x)[2:]
+          loop['ID'] = hexa(loop['load']) + hexa(loop['store']) + hexa(loop['Conds']) + hexa(loop['lea'])
           if len(conds):
             loop['Cond_polarity'] = {}
             for c in conds: loop['Cond_polarity'][c] = {'tk': 0, 'nt': 0}
@@ -292,15 +294,15 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       for l in loops:
         if ip > l and xip < loops[l]['back']:
           inner += 1
-          outs.add(hex(l))
+          outs.add(hex_ip(l))
           loops[l]['outer'] = 1
-          loops[l]['inner-loops'].add(hex(ip))
+          loops[l]['inner-loops'].add(hex_ip(ip))
         if ip < l and xip > loops[l]['back']:
           outer = 1
-          ins.add(hex(l))
+          ins.add(hex_ip(l))
           loops[l]['inner'] += 1
-          loops[l]['outer-loops'].add(hex(ip))
-      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'attributes': '',
+          loops[l]['outer-loops'].add(hex_ip(ip))
+      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'ID': None, 'attributes': '',
         'entry-block': 0 if xip > ip else find_block_ip()[0], #'BK': {hex(xip): 1, },
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
@@ -433,8 +435,8 @@ def edge_stats(line, lines, xip, size):
     inc(hsts['indirect-x2g'], xip)
     if 'MISP' in p_line: inc(hsts['indirect-x2g-misp'], xip)
   if xip in indirects:
-    inc(hsts['indirect_%s_targets' % hex(xip)], ip)
-    inc(hsts['indirect_%s_paths' % hex(xip)], '%s.%s.%s' % (hex(get_taken(lines, -2)['from']), hex(xip), hex(ip)))
+    inc(hsts['indirect_%s_targets' % hex_ip(xip)], ip)
+    inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
   if is_type(x86.COND_BR, p_line) and is_taken(p_line):
     glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
   # checks all lines but first
@@ -548,8 +550,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           def f2s(x): return C.flag2str(' ', C.env2str(x, prefix=True))
           if len(lbr_events) == 1: x += ' primary= %s edge=%d%s%s' % (event, edge_en, f2s('LBR_STOP'), f2s('LBR_IMIX'))
           if ip_filter: x += ' ip_filter= %s' % str(ip_filter)
-          if loop_ipc: x += ' loop= %s%s' % (hex(loop_ipc), C.flag2str(' history= ', C.env2int('LBR_PATH_HISTORY')))
-          if verbose: x += ' verbose= %s' % hex(verbose)
+          if loop_ipc: x += ' loop= %s%s' % (hex_ip(loop_ipc), C.flag2str(' history= ', C.env2int('LBR_PATH_HISTORY')))
+          if verbose: x += ' verbose= %s' % hex_ip(verbose)
           if not header.group(2).isdigit(): C.printf(line)
           C.printf(x+'\n')
         inc(stat['events'], ev)
@@ -779,7 +781,7 @@ def tripcount_mean(loop, loop_ipc):
   l = C.str2list(prev_line)
   if hex_ipc in l[1]: return None  # no inst before loop
   if not re.search(x86.JMP_RET, prev_line): before += int(l[0])  # JCC before loop is not considered a special case
-  jmp_line = C.exe_one_line(C.grep('%s' % 'jmp*\s' + hex(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
+  jmp_line = C.exe_one_line(C.grep('%s' % 'jmp*\s' + hex_ip(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
   if not jmp_line == '': before += int(C.str2list(jmp_line)[0])
   next_line = C.str2list(C.exe_one_line(C.grep('0%x' % loop['back'], hitcounts, '-A1')))
   index = 6 if 'ilen:' in next_line else 4
@@ -804,7 +806,7 @@ def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
 def print_glob_hist(hist, name, weighted=False, Threshold=0.01):
   d = print_hist((hist, name, None, None, None, weighted), Threshold)
   if not type(d) is dict: return d
-  if d['type'] == 'hex': d['mode'] = hex(int(d['mode']))
+  if d['type'] == 'hex': d['mode'] = hex_ip(int(d['mode']))
   del d['type']
   print('%s histogram summary: %s' % (name, hist_fmt(d)))
   return d['total']
@@ -824,11 +826,11 @@ def print_hist(hist_t, Threshold=0.01):
     if mean: d['mean'] = mean
   d['num-buckets'] = len(hist)
   if d['num-buckets'] > 1:
-    C.printc('%s histogram%s:' % (name, ' of loop %s' % hex(loop_ipc) if loop_ipc else ''))
+    C.printc('%s histogram%s:' % (name, ' of loop %s' % hex_ip(loop_ipc) if loop_ipc else ''))
     left, threshold = 0, int(Threshold * tot)
     for k in sorted(hist.keys(), key=sorter):
       if hist[k] >= threshold and hist[k] > 1:
-        bucket = ('%70s' % k) if d['type'] == 'str' else '%5s' % (hex(k) if d['type'] == 'hex' else k)
+        bucket = ('%70s' % k) if d['type'] == 'str' else '%5s' % (hex_ip(k) if d['type'] == 'hex' else k)
         print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
     if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
@@ -884,7 +886,7 @@ def print_global_stats():
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')
     for x in indirects:
       if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
-        print_stat('branch at %s' % hex(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
+        print_stat('branch at %s' % hex_ip(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
                    prefix='misprediction-ratio', comment='paths histogram')
 
 def print_common(total):
@@ -914,18 +916,18 @@ def print_all(nloops=10, loop_ipc=0):
       lp['FL-cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
       if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1 and lp['taken'] < 2:
         for c in lp['Cond_polarity'].keys():
-          lp['%s_taken' % hex(c)] = ratio(lp['Cond_polarity'][c]['tk'], lp['Cond_polarity'][c]['tk'] + lp['Cond_polarity'][c]['nt'])
+          lp['%s_taken' % hex_ip(c)] = ratio(lp['Cond_polarity'][c]['tk'], lp['Cond_polarity'][c]['tk'] + lp['Cond_polarity'][c]['nt'])
       tot = print_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0]))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
       if hitcounts and lp['size']:
         if lp['taken'] == 0:
           C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size'] if verbose & 0x40 else '-A%d' % (lp['size']-1)),
-          'Hitcounts & ASM of loop %s' % hex(loop_ipc))
-          if llvm_log: lp['IPC-ideal'] = llvm_mca_lbr.get_llvm(hitcounts, llvm_log, lp, hex(loop_ipc))
+          'Hitcounts & ASM of loop %s' % hex_ip(loop_ipc))
+          if llvm_log: lp['IPC-ideal'] = llvm_mca_lbr.get_llvm(hitcounts, llvm_log, lp, hex_ip(loop_ipc))
         else: lp['attributes'] += ';likely_non-contiguous'
       find_print_loop(loop_ipc, sloops)
     else:
-      C.warn('Loop %s was not observed' % hex(loop_ipc))
+      C.warn('Loop %s was not observed' % hex_ip(loop_ipc))
   if nloops and len(loops):
     if os.getenv("LBR_LOOPS_LOG"):
       log = open(os.getenv("LBR_LOOPS_LOG"), 'w')
@@ -944,7 +946,7 @@ def print_all(nloops=10, loop_ipc=0):
     if 'lbr-cov' in stat and stat['lbr-cov'] < 1: C.error('LBR poor coverage (%.2f%%) of overall time' % stat['lbr-cov'])
 
 def print_br(br):
-  print('[from: %s, to: %s, taken: %d]' % (hex(br['from']), hex(br['to']), br['taken']))
+  print('[from: %s, to: %s, taken: %d]' % (hex_ip(br['from']), hex_ip(br['to']), br['taken']))
 
 def find_print_loop(ip, sloops):
   num = 1
@@ -959,7 +961,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   if not isinstance(ip, int): ip = int(ip, 16) #should use (int, long) but fails on python3
   def printl(s, end=''): return print(s, file=print_to, end=end)
   if not ip in loops:
-    printl('No loop was detected at %s!' % hex(ip), '\n')
+    printl('No loop was detected at %s!' % hex_ip(ip), '\n')
     return
   loop = loops[ip].copy()
   def set2str(s, top=0 if detailed else 3):
@@ -975,19 +977,19 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   fixl = ['hotness']
   if 'srcline' in loop: fixl.append('srcline')
   if glob['loop_cycles']: fixl.append('FL-cycles%')
-  fixl.append('size')
+  fixl += ['size', 'ID']
   loop['hotness'] = '%6d' % loop['hotness']
   loop['size'] = str(loop['size']) if loop['size'] else '-'
-  printl('%soop#%d: [ip: %s, ' % ('L' if detailed else 'l', num, hex(ip)))
+  printl('%soop#%d: [ip: %s, ' % ('L' if detailed else 'l', num, hex_ip(ip)))
   for x in fixl: printl('%s: %s, ' % (x, loop[x]))
   if not glob['loop_stats_en']: del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
-  dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'back', 'entry-block', 'IPC', 'tripcount']
+  dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'ID', 'back', 'entry-block', 'IPC', 'tripcount']
   for x in paths_range(): dell += ['paths-%d'%x]
   if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
-  for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex(loop[x])))
+  for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex_ip(loop[x])))
   for x, y in (('inn', 'out'), ('out', 'inn')):
     if loop[x + 'er'] > 0: set2str(y + 'er-loops')
     else: dell += [y + 'er-loops']

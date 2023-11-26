@@ -560,7 +560,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
            min_lines and (len_m1 < min_lines) or\
            header_ip(lines[0]) != line_ip(lines[len_m1]):
           valid = 0
-          invalid('bogus', 'too short' if len_m1 else header_only_str(lines[0]))
+          if 'out of order events' in line: invalid('bogus', 'out of order events')
+          else: invalid('bogus', 'too short' if len_m1 else (header_only_str(lines[0]) if len(lines) else 'no header'))
           # apparently there is a perf-script bug (seen with perf tool 6.1)
           update_size_stats()
           if debug and debug == timestamp:

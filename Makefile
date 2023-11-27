@@ -107,14 +107,16 @@ test-build:
 	    -pm 20006 -r 1 | $(SHOW) ) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
 test-default: ./CLTRAMP3D
 	$(DO1) -pm $(PM)
+TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_ARGS)
+TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp $(DO_ARGS)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
-	@echo ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 > $@
-	./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 >> $@ 2>&1 || $(FAIL)
+	@echo $(TS_A) > $@
+	$(TS_A) >> $@ 2>&1 || $(FAIL)
 	@tail $@
 	test -f run-cfg1-t1.$(CPU).stat && test -f run-cfg2-t1.$(CPU).stat
-	@echo ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp >> $@
-	./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp >> $@ 2>&1
+	@echo $(TS_B) >> $@
+	$(TS_B) >> $@ 2>&1
 	test -f BC2s-cfg1-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
 	test -f BC2s-cfg2-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
 test-stats: stats.py
@@ -158,8 +160,9 @@ pre-push: help
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command
 	$(MAKE) test-default APP=./$(AP) PM=313e DO_ARGS=":perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
 	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
-	mkdir test-dir; cd test-dir; ln -s ../run.sh; ln -s ../common.py; make test-default APP=../pmu-tools/workloads/BC2s \
-	    DO=../do.py -f ../Makefile > ../test-dir.log 2>&1   # tests default from another directory, toplev describe
+	mkdir test-dir; cd test-dir; ln -s ../run.sh; ln -s ../common.py; ln -s ../CLTRAMP3D && \
+	    make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1\
+	    # tests default from another directory, toplev describe
 	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command
 	$(MAKE) test-study                                      # tests study script (errors only)
 	$(MAKE) test-stats                                      # tests stats module

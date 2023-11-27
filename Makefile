@@ -3,9 +3,9 @@ AP = CLTRAMP3D
 APP = taskset 0x4 ./$(AP)
 CMD = profile
 CPU = $(shell ./pmu.py CPU)
-DO = ./do.py
-DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10 $(DO_ARGS)
-DO2 = $(DO) profile -a 'workloads/BC.sh 3' $(DO_ARGS)
+DO = ./do.py $(DO_ARGS)
+DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10
+DO2 = $(DO) profile -a 'workloads/BC.sh 3'
 FAIL = (echo "failed! $$?"; exit 1)
 MAKE = make --no-print-directory
 METRIC = -m IpCall
@@ -17,6 +17,7 @@ PY3 = python3.6
 RERUN = -pm 0x80
 SHELL := /bin/bash
 SHOW = tee
+SKIP_EX = false # Skip extra checks
 ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 
 all: tramp3d-v4
@@ -30,7 +31,7 @@ gcc11:
 	$(MGR) install gcc-11
 	sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110 --slave /usr/bin/g++ g++ /usr/bin/g++-11 --slave /usr/bin/gcov gcov /usr/bin/gcov-11
 	gcc --version
-install: link-python llvm openmp
+install: link-python llvm openmp tramp3d-v4
 	make -s -C workloads/mmm install
 link-python:
 	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
@@ -43,7 +44,7 @@ intel:
 	cd dtlb; ./build.sh
 	#git clone https://github.com/intel-innersource/applications.benchmarking.cpu-micros.inst-lat-bw
 	#wget https://downloadmirror.intel.com/763324/mlc_v3.10.tgz
-tramp3d-v4: pmu-tools/workloads/CLTRAMP3D
+tramp3d-v4: pmu-tools/workloads/CLTRAMP3D /usr/bin/clang++
 	cd pmu-tools/workloads; ./CLTRAMP3D; cp tramp3d-v4.cpp CLTRAMP3D ../..; rm tramp3d-v4.cpp
 	sed -i "s/11 tramp3d-v4.cpp/11 tramp3d-v4.cpp -o $@/" CLTRAMP3D
 	./CLTRAMP3D
@@ -102,9 +103,9 @@ test-build:
 	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS -n '+Core_Bound*' -pm 22 | $(SHOW)
 	grep -q 'Backend_Bound.Core_Bound.Ports_Utilization.Ports_Utilized_1' datadep-20e6.toplev-vl2.log
 	grep Time datadep-20e6.toplev-vl2.log
-	set -o pipefail; ./do.py profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
-	    -pm 20006 -r 1 | $(SHOW) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
-test-default:
+	$(SKIP_EX) || ( set -o pipefail; ./do.py profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
+	    -pm 20006 -r 1 | $(SHOW) ) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
+test-default: ./CLTRAMP3D
 	$(DO1) -pm $(PM)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
@@ -149,9 +150,9 @@ pre-push: help
 	$(MAKE) test-default PM=313e                            # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
-	$(DO) profile -a './workloads/BC.sh 7' -d1 > BC-7.log 2>&1 || $(FAIL) # tests --delay
+	$(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL) # tests --delay
 	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
-	$(MAKE) test-default DO_ARGS=":calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \
+	$(MAKE) test-default DO_ARGS="--tune :calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \
 	    CMD='suspend-smt profile tar' PM=3931a &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-*.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command

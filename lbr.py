@@ -476,15 +476,17 @@ def edge_stats(line, lines, xip, size):
     while x > 0:
       if is_type('ret', lines[x]): break # no support for non-leaf function calls
       if is_type('call', lines[x]):
-        ok = x < len(lines) - 1
+        inc(hsts[IPLFC], insts_per_call)
+        callder_idx, ok = x, x < len(lines) - 1
         name = lines[x + 1].strip()[:-1] if ok and is_label(lines[x + 1]) else 'Missing-func-name-%s' % (
           '0x'+line_ip_hex(lines[x + 1]) if ok else 'unknown')
-        name += '-%d' % insts_per_call
-        inc(hsts[IPLFC], insts_per_call)
-        inc(hsts[NOLFC], name)
+        while callder_idx > 0:
+          if is_label(lines[callder_idx]): break
+          callder_idx -= 1
+        name = ' -> '.join((lines[callder_idx].strip()[:-1] if callder_idx > 0 else '?', name))
+        inc(hsts[NOLFC], name + '-%d' % insts_per_call)
         if verbose & 0x10:
-          C.info('leaf-function name %s with size %d ' % (name, insts_per_call))
-          if hsts[NOLFC][name] == 1: C.info('\t\n'.join(['\t'] + lines[-(len(lines)-x):] + [line]))
+          C.info_p('call to leaf-func %s of size %d' % (name, insts_per_call), '\t\n'.join(['\t'] + lines[-(len(lines)-x):] + [line]))
         break
       if not is_label(lines[x]): insts_per_call += 1
       x -= 1
@@ -888,7 +890,7 @@ def print_global_stats():
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')
     for x in indirects:
       if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
-        print_stat('branch at %s' % hex_ip(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
+        print_stat('a cross-2GB branch at %s' % hex_ip(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
                    prefix='misprediction-ratio', comment='paths histogram')
 
 def print_common(total):

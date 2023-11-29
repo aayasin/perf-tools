@@ -15,11 +15,10 @@ __author__ = 'ayasin'
 import common as C, pmu
 
 def fixed_metrics(intel_names=False, force_glc=False):
-  events, flags = ','.join(pmu.fixed_events()) if intel_names else 'instructions,cycles,ref-cycles', None
+  events, flags = ','.join(pmu.fixed_events(intel_names)), None
   if pmu.perfmetrics():
     prefix = ',topdown-'
     def prepend(l): return prefix.join([''] + l)
-    if not intel_names: events = events.replace(pmu.fixed_events()[0], 'slots')
     events += prepend(['retiring', 'bad-spec', 'fe-bound', 'be-bound'])
     if pmu.goldencove() or force_glc:
       events += prepend(['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound'])

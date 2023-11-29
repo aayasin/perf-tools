@@ -73,8 +73,14 @@ def basic_events():
   if goldencove(): events += ['r0160', 'r0262']
   return ','.join(events)
 
-def fixed_events(): return (('TOPDOWN.SLOTS',) if perfmetrics() else ()) + (
-  'INST_RETIRED.ANY', 'CPU_CLK_UNHALTED.THREAD', 'CPU_CLK_UNHALTED.REF_TSC')
+Legacy_fixed = (('INST_RETIRED.ANY', 'instructions'),
+                ('CPU_CLK_UNHALTED.THREAD', 'cycles'),
+                ('CPU_CLK_UNHALTED.REF_TSC', 'ref-cycles'))
+def fixed_events(intel_names):
+  es, idx = [], 0 if intel_names else 1
+  for x in Legacy_fixed: es += [x[idx]]
+  if perfmetrics(): es.insert(0, ('TOPDOWN.SLOTS', 'slots')[idx])
+  return es
 
 # TODO: lookup Metric's attribute in pmu-tools/ratio; no hardcoding!
 def is_uncore_metric(m):

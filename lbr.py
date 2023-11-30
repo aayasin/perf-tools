@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.00 # see version line of do.py
+__version__= x86.__version__ + 2.01 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -378,8 +378,9 @@ def inc_stat(stat):
     return True
 
 IPTB  = 'inst-per-taken-br--IpTB'
-IPLFC  = 'inst-per-leaf-func-call'
-NOLFC  = 'inst-per-leaf-func-name' # name-of-leaf-func-call would plot it away from IPFLC!
+IPLFC = 'inst-per-leaf-func-call'
+NOLFC = 'inst-per-leaf-func-name' # name-of-leaf-func-call would plot it away from IPFLC!
+FUNCI = 'Function-invocations'
 FUNCP = 'Params_of_func'
 FUNCR = 'Regs_by_func'
 def count_of(t, lines, x, hist):
@@ -391,7 +392,7 @@ def count_of(t, lines, x, hist):
   return r
 
 def edge_en_init(indirect_en):
-  for x in ('IPC', IPTB, IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
+  for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
   if indirect_en:
     for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
@@ -468,9 +469,6 @@ def edge_stats(line, lines, xip, size):
           elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", p_line): inc_pair2('LEA-1')
   # check erratum for line (with no consideration of macro-fusion with previous line)
   if is_jcc_erratum(line, None if size == 1 else p_line): inc_stat('JCC-erratum')
-  if size > 1 and not x86.is_jcc_fusion(p_line, line):
-    if x86.is_ld_op_fusion(prev_line(-2), p_line): inc_pair('LD', 'OP', suffix='fusible')
-    elif x86.is_mov_op_fusion(prev_line(-2), p_line): inc_pair('MOV', 'OP', suffix='fusible')
   if verbose & 0x1 and is_type('ret', line):
     insts_per_call, x = 0, len(lines) - 1
     while x > 0:
@@ -490,6 +488,11 @@ def edge_stats(line, lines, xip, size):
         break
       if not is_label(lines[x]): insts_per_call += 1
       x -= 1
+  if size <= 1: return # a sample with >= 2 instructions after this point
+  if not x86.is_jcc_fusion(p_line, line):
+    if x86.is_ld_op_fusion(prev_line(-2), p_line): inc_pair('LD', 'OP', suffix='fusible')
+    elif x86.is_mov_op_fusion(prev_line(-2), p_line): inc_pair('MOV', 'OP', suffix='fusible')
+  if is_type('call', p_line): inc(hsts[FUNCI], ip)
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_latency=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
@@ -518,6 +521,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
+    # size is # instructions in sample while insts is # instruction since last taken
     insts, size, takens, xip, timestamp, srcline = 0, 0, [], None, None, None
     tc_state = 'new'
     def update_size_stats():
@@ -820,7 +824,7 @@ def print_hist(hist_t, Threshold=0.01):
   hist, name, loop, loop_ipc, sorter, weighted = hist_t[0:]
   tot = sum(hist.values())
   d = {}
-  d['type'] = 'str' if C.any_in(('name', 'paths'), name) else ('hex' if 'indir' in name else 'number')
+  d['type'] = 'str' if C.any_in(('name', 'paths'), name) else 'hex' if C.any_in(('indir', 'Function'), name) else 'number'
   d['mode'] = str(C.hist2slist(hist)[-1][0])
   keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
@@ -879,6 +883,7 @@ def print_global_stats():
              ratio_of=('total cycles', stat['total_cycles']))
   for n in (4, 5, 6): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
                                  prefix='proxy count', ratio_of=('loops', len(loops)))
+  print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
   if glob['size_stats_en']:
     for x in Insts_cond: print_imix_stat(x + ' conditional', glob['cond_' + x])
     print_imix_stat('unaccounted non-fusible conditional', glob['cond_non-fusible'] - glob['counted_non-fusible'])

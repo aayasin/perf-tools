@@ -70,7 +70,7 @@ def ldlat_event(lat):
 def basic_events():
   events = [event('sentries')]
   if v5p(): events += ['r2424']
-  if goldencove(): events += ['r0160', 'r0262']
+  if goldencove(): events += ['r0262']
   return ','.join(events)
 
 Legacy_fixed = (('INST_RETIRED.ANY', 'instructions'),

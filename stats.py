@@ -134,7 +134,8 @@ def read_perf(f):
 def parse_perf(l):
   Renames = {'insn-per-cycle': 'IPC',
              'GHz': 'Frequency'}
-  def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if '+-' in l else None
+  multirun = '+-' in l
+  def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if multirun else None
   items = l.strip().split()
   name, val, var, name2, val2, name3, val3 = None, -1, None, None, -1, None, -1
   if not re.match(r'^[1-9 ]', l): pass
@@ -168,7 +169,8 @@ def parse_perf(l):
       name3 = ' '.join(items[metric_idx+4:metric_idx+6]).title()
     elif not C.any_in(('/sec', 'of'), items[metric_idx]):
       val2 = items[name_idx + 2]
-      name2 = '-'.join(items[metric_idx:]).split('(')[0][:-1]
+      name2 = '-'.join(items[metric_idx:])
+      if multirun: name2 = name2.split('(')[0][:-1]
       if '%' in val2:
         val2 = val2.replace('%', '')
         name2 = name2.title()

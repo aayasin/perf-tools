@@ -20,7 +20,7 @@ def fixed_metrics(intel_names=False, force_glc=False):
     prefix = ',topdown-'
     def prepend(l): return prefix.join([''] + l)
     events += prepend(['retiring', 'bad-spec', 'fe-bound', 'be-bound'])
-    if pmu.goldencove() or force_glc:
+    if pmu.goldencove_on() or force_glc:
       events += prepend(['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound'])
       flags = ' --td-level=2'
     events = '{%s}' % events
@@ -35,7 +35,7 @@ metrics = {
   'fixed':        '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
   'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
                     C.flag2str(',+IpAssist', pmu.v4p()) +
-                    C.flag2str(',+Memory_Bound*/3', pmu.goldencove()), # +UopPI once ICL mux fixed, +ORO with TMA 4.5
+                    C.flag2str(',+Memory_Bound*/3', pmu.goldencove_on()),
   'version':      '4.6-full-perf',
 }
 

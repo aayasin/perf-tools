@@ -32,16 +32,19 @@ def alderlake():  return name() == 'alderlake_hybrid'
 def sapphire():   return name() == 'sapphire_rapids'
 def meteorlake(): return name() == 'meteorlake_hybrid'
 # aggregations
-def goldencove(): return alderlake() or sapphire() or meteorlake()
-def perfmetrics():  return icelake() or goldencove()
+def goldencove():   return alderlake() or sapphire()
+def redwoodcove():  return meteorlake()
+def perfmetrics():  return icelake() or goldencove() or goldencove_on()
 # Skylake onwards
 def v4p(): return os.path.exists(sys_devices_cpu() + '/format/frontend') # PEBS_FRONTEND introduced by Skylake (& no root needed)
   # int(msr_read(0x345)[2], 16) >= 3 # Skylake introduced PEBS_FMT=3 (!= PerfMon Version 4)
 # Icelake onward PMU, e.g. Intel PerfMon Version 5+
 def v5p(): return perfmetrics()
+# Golden Cove onward PMUs have Arch LBR
+def goldencove_on():  return cpu_has_feature('arch_lbr')
+
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
-def ldlat_aux():  return alderlake() or sapphire()
 
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
@@ -62,15 +65,16 @@ def event_name(x):
 
 def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
+def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
 
 def ldlat_event(lat):
   return '"{%s/mem-loads-aux,period=%d/,%s/mem-loads,ldlat=%s/pp}" -d -W' % (pmu(),
-         1e12, pmu(), lat) if ldlat_aux() else 'ldlat-loads --ldlat %s' % lat
+         1e12, pmu(), lat) if goldencove() else 'ldlat-loads --ldlat %s' % lat
 
 def basic_events():
   events = [event('sentries')]
   if v5p(): events += ['r2424']
-  if goldencove(): events += ['r0262']
+  if goldencove_on(): events += ['r0262']
   return ','.join(events)
 
 Legacy_fixed = (('INST_RETIRED.ANY', 'instructions'),
@@ -106,7 +110,7 @@ def get_events(tag='MTL'):
     else: C.error('pmu.get_events(%s): unsupported rate=%d' % (tag, rate))
   return TPEBS[tag].replace(',', ':p,') + ':p'
 
-def period(): return 2000003
+def default_period(): return 2000003
 
 # perf_events add-ons
 def perf_format(es):
@@ -197,7 +201,7 @@ def cpu_msrs():
           0x033,                # Memory Control
           0x345,                # IA32_PERF_CAPABILITIES
   ]
-  if goldencove(): msrs += [0x6a0, 0x6a2]
+  if goldencove_on(): msrs += [0x6a0, 0x6a2] # IA32_{U,S}_CET
   if server():
     msrs += [0x610]         # RAPL. TODO: assert SNB-EP onwards
     msrs += [0x1b1, 0x19c]  # Thermal status-prochot for package/core.
@@ -210,14 +214,14 @@ def cpu_peak_kernels(widths=range(4, 7)):
 def cpu_pipeline_width():
   width = 4
   if icelake(): width = 5
-  elif goldencove(): width = 6
+  elif goldencove() or redwoodcove(): width = 6
   return width
 
 # deeper uarch stuff
 
 # returns MSB bit of DSB's set-index, if uarch is supported
 def dsb_msb():
-  return 10 if goldencove() else (9 if skylake() or icelake() else None)
+  return 10 if goldencove() or redwoodcove() else (9 if skylake() or icelake() else None)
 
 def dsb_set_index(ip):
   left = dsb_msb()

@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.83
+__version__ = 2.84
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -78,11 +78,11 @@ do = {'run':        C.RUN_DEF,
   'packages':       ['cpuid', 'dmidecode', 'numactl'] + list(tunable2pkg.keys()),
   'perf-ann-top':   3,
   'perf-filter':    1,
-  'perf-lbr':       '-j any,save_type -e %s -c 700001' % pmu.lbr_event(),
+  'perf-lbr':       '-j any,save_type -e %s -c %d' % (pmu.lbr_event(), pmu.lbr_period()),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
   'perf-pebs':      '-b -e %s -c 1000003' % pmu.event('dsb-miss'),
   'perf-pebs-top':  0,
-  'perf-pt':        "-e '{intel_pt//u,%su}' -c 700001 -m,64M" % pmu.lbr_event(), # noretcomp
+  'perf-pt':        "-e '{intel_pt//u,%su}' -c %d -m,64M" % (pmu.lbr_event(), pmu.lbr_period()), # noretcomp
   'perf-record':    ' -g ', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
   'perf-report-append': '',
   'perf-scr':       0,
@@ -466,7 +466,7 @@ def profile(mask, toplev_args=['mvl6', None]):
                       events=a_events() if do['perf-stat-add'] > -1 else '')
   if en(3) and do['sample']:
     data = '%s.perf.data' % record_name(do['perf-record'])
-    profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.period(), data, do['perf-record'], r),
+    profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.default_period(), data, do['perf-record'], r),
                 'sampling %s' % do['perf-record'].replace(' -g ', 'w/ stacks'), 3, tune='sample')
     if do['log-stdout'] and profiling() and do['forgive'] < 2:
       record_out = C.file2lines(C.log_stdio)
@@ -756,7 +756,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       perf_script("-F +brstackinsn --xed %s > /dev/null" % cmd, "@ stats on PEBS", data)
 
   if en(10):
-    data = perf_record('ldlat', 10, record='record' if pmu.ldlat_aux() else 'mem record')[0]
+    data = perf_record('ldlat', 10, record='record' if pmu.goldencove() else 'mem record')[0]
     exe("%s mem report --stdio -i %s -F+symbol_iaddr -v " # workaround: missing -F+ip in perf-mem-report
         "-w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
         "| tee %s.ldlat.log | grep -A12 -B4 Overhead | tail -17" % (perf, data, data), "@ top-10 samples", redir_out=None)

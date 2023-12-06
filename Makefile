@@ -4,8 +4,8 @@ APP = taskset 0x4 ./$(AP)
 CMD = profile
 CPU = $(shell ./pmu.py CPU)
 DO = ./do.py $(DO_ARGS)
-DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10
-DO2 = $(DO) profile -a 'workloads/BC.sh 3'
+DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10 $(DO_ARGS)
+DO2 = $(DO) profile -a 'workloads/BC.sh 3' $(DO_ARGS)
 FAIL = (echo "failed! $$?"; exit 1)
 MAKE = make --no-print-directory
 METRIC = -m IpCall
@@ -31,12 +31,14 @@ gcc11:
 	$(MGR) install gcc-11
 	sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110 --slave /usr/bin/g++ g++ /usr/bin/g++-11 --slave /usr/bin/gcov gcov /usr/bin/gcov-11
 	gcc --version
-install: link-python llvm openmp tramp3d-v4
+PKG=curl clang stress-ng
+install: /usr/bin/python openmp tramp3d-v4
 	make -s -C workloads/mmm install
+	$(MGR) install $(PKG)
+install1:
+	$(MGR) install $(PKG)
 link-python:
 	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
-llvm:
-	$(MGR) -y -q install curl clang
 diff:
 	git diff | grep -v '^\-' | less
 intel:

@@ -48,19 +48,22 @@ def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   if outfile: fappend(msg, outfile)
 log_stdio=None
 
-def info(msg, bold=False, col=color.GREY):
+log_db = {'info': {}, 'warn': {}}
+def warning(type='warn'): return ('warning' if type == 'warn' else type).upper()
+def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3, type='warn', extra=None):
+  inc(log_db[type], msg)
+  if suppress_after and log_db[type][msg] > suppress_after: return
   if bold: col += color.BOLD
-  printc('INFO: %s .'%msg, col)
-
-warn_db = {}
-def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3):
-  inc(warn_db, msg)
-  if suppress_after and warn_db[msg] > suppress_after: return
-  WARN = env2int('WARN')
-  if bold: col += color.BOLD
-  if level <= WARN: printc('WARNING: %s%s' % (msg, '; suppressing' if warn_db[msg]==suppress_after else ''), col)
-def warn_summary():
-  if len(warn_db): print('Top warnings: (%d total unique)\n' % len(warn_db), hist2str(warn_db))
+  if type == 'warn':
+    WARN = env2int('WARN')
+    if level > WARN: return
+  suffix = extra if type == 'info' else ('; suppressing' if log_db[type][msg] == suppress_after else '')
+  printc('%s: %s%s' % (warning(type), msg, suffix), col)
+def warn_summary(type='warn'):
+  if len(log_db[type]): print('Top %ss: (%d total unique)\n' % (warning(type), len(log_db[type])), hist2str(log_db[type]))
+def info_p(msg, extra):
+  return warn(msg, col=color.GREY, type='info', suppress_after=1, extra='; %s' % extra if extra else '.')
+def info(msg):  return info_p(msg, None)
 
 dump_stack_on_error = 0
 def error(msg):
@@ -96,9 +99,9 @@ def annotate(stuff, label=''):
 # @redir_out:  redirect output of the (first non-piped) command as specified
 # @run:   do run the specified command
 # @log:   log the commands's output into log_stdio (if any)
-# @fail:  exit with error if command fails
+# @fail:  1: exit with error if command fails; 0: warn; -1: no-warn
 # @background: run the specified command in background (do not block)
-def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=True, background=False):
+def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=1, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
   if msg:
     if '@' in msg: msg='\t' + msg.replace('@', '')
@@ -117,7 +120,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=T
       ret = os.system(x)
   if ret != 0:
     msg = "Command \"%s\" failed with '%d'" % (x.replace("\n", "\\n"), ret)
-    error(msg) if fail else warn(msg)
+    error(msg) if fail > 0 else (None if fail else warn(msg))
   return ret
 
 def exe_output(x, sep=";"):
@@ -232,7 +235,7 @@ def dict_load(f):
     return d
 
 def iter2str(x, sep=",\n\t"):
-  return str(x).replace("', ", ":\t").replace("), ('", sep).replace("[('", '').replace(')]', '\n')
+  return str(x).replace("', ", ":\t").replace("), ('", sep).replace("[('", '\t').replace(')]', '\n')
 def dict2str(d, sep=",\n\t"): return iter2str(sorted(d.items()), sep)
 def hist2str(h, top=20): return iter2str(hist2slist(h)[-top:])
 def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])

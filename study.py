@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.73
+__version__= 0.74
 
 import common as C, pmu, stats
 import argparse, os, sys, time
@@ -74,7 +74,7 @@ def modes_list():
 
 def parse_args():
   def conf(x): return Conf[x][DM] if DM in Conf[x] else None
-  ap = C.argument_parser('analyze two or more modes (configs)', mask=0x911a,
+  ap = C.argument_parser('analyze two or more modes (configs)', mask=0x1911a,
          defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
   ap.add_argument('config', nargs='*', default=[])
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)
@@ -123,13 +123,14 @@ def main():
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
 
+  C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'EVENTMAP')] + sys.argv), '.study.cmd')
   if args.stages & 0x1:
     enable_it=0
     if not args.smt and pmu.cpu('smt-on'):
       exe('%s disable-smt disable-aslr -v1' % do0)
       enable_it=1
     if args.stages & 0x8: exe(do_cmd('version log'))
-    if 'misp' in args.mode: args.profile_mask |= 0x200
+    if C.any_in(('misp', 'dsb-glc'), args.mode): args.profile_mask |= 0x200
     for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
     if enable_it: exe('%s enable-smt -v1' % do0)
 

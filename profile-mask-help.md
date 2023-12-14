@@ -19,8 +19,9 @@
 2000 | topdown FE Bottlenecks                             | 
 4000 | TMA sampling (MTL with 23 events)                  | 
 8000 | topdown Auto-Detect group                          | 
-10000 | over-time counting at 10ms interval                | [--tune :interval:10]
-20000 | FlameGraph                                         | setup-all --tune :flameg:1
+10000 | bottlenecks-view                                   | 
+20000 | over-time counting at 10ms interval                | [--tune :interval:10]
 40000 | tracing MSRs                                       | setup-all --tune :msr:1
 80000 | sampling-PT                                        | 
+100000 | FlameGraph                                         | setup-all --tune :flameg:1
 

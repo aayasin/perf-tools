@@ -7,22 +7,23 @@
 #   This program is distributed in the hope it will be useful, but WITHOUT ANY WARRANTY; without even the implied
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-# Inteface to the Top-down Microarchitecture Analysis (TMA) logic
+# Interface to the Top-down Microarchitecture Analysis (TMA) logic
 #
 from __future__ import print_function
 __author__ = 'ayasin'
 
 import common as C, pmu
 
-def fixed_metrics():
-  events, flags = 'instructions,cycles,ref-cycles', None
+def fixed_metrics(intel_names=False, force_glc=False):
+  events, flags = ','.join(pmu.fixed_events(intel_names)), None
   if pmu.perfmetrics():
     prefix = ',topdown-'
-    events += prefix.join([',{slots', 'retiring', 'bad-spec', 'fe-bound', 'be-bound'])
-    if pmu.goldencove():
-      events += prefix.join(['', 'heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound}'])
+    def prepend(l): return prefix.join([''] + l)
+    events += prepend(['retiring', 'bad-spec', 'fe-bound', 'be-bound'])
+    if pmu.goldencove_on() or force_glc:
+      events += prepend(['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound'])
       flags = ' --td-level=2'
-    else:  events += '}'
+    events = '{%s}' % events
     if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
   return events, flags
 
@@ -34,21 +35,25 @@ metrics = {
   'fixed':        '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
   'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
                     C.flag2str(',+IpAssist', pmu.v4p()) +
-                    C.flag2str(',+Memory_Bound*/3', pmu.goldencove()), # +UopPI once ICL mux fixed, +ORO with TMA 4.5
+                    C.flag2str(',+Memory_Bound*/3', pmu.goldencove_on()),
+  'version':      '4.6-full-perf',
 }
 
 def get(tag):
   combo_tags = '[fe-]bottlenecks[-only] zero-ok '
   def prepend_info(x): return ','.join((metrics['fixed'], x))
+  def settings_file(x): return '/'.join((C.dirname(), 'settings', x))
   if tag =='bottlenecks': return prepend_info(','.join((metrics['bot-fe'], metrics['bot-rest'])))
   if tag =='bottlenecks-only': return ','.join((metrics['bot-fe'], metrics['bot-rest']))
   if tag =='fe-bottlenecks': return prepend_info(metrics['bot-fe'])
-  model = pmu.cpu('CPU')
+  model = pmu.cpu('CPU') or C.env2str('TMA_CPU', 'SPR')
   if tag == 'zero-ok':
-    ZeroOk = C.csv2dict(C.dirname()+'/settings/tma-zero-ok.csv')
+    ZeroOk = C.csv2dict(settings_file('tma-zero-ok.csv'))
     return ZeroOk[model].split(';')
   if tag == 'dedup-nodes':
-    Dedup = C.csv2dict(C.dirname()+'/settings/tma-many-counters.csv')
+    Dedup = C.csv2dict(settings_file('tma-many-counters.csv'))
     return Dedup[model].replace(';', ',')
+  if tag == 'perf-groups':
+    return ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model)))
   assert tag in metrics, "Unsupported tma.get(%s)! Supported tags: %s" % (tag, combo_tags + ' '.join(metrics.keys()))
   return metrics[tag]

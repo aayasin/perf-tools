@@ -4,7 +4,8 @@
 ![Python linting](https://github.com/aayasin/perf-tools/workflows/Python%20linting/badge.svg)
 --->
 
-A collection of performance analysis tools, recipes, micro-benchmarks &amp; more
+perf-tools is an open-source package that profiles workloads, identifies issues, and maps them to application code.
+It is the home for a collection of performance analysis tools, recipes, micro-benchmarks &amp; more
 
 ## Overview
 * **do.py** -- The main driver with handy shortcuts for setting up and doing profiling, over [Linux perf](https://perf.wiki.kernel.org)

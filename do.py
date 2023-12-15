@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.84
+__version__ = 2.85
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -340,7 +340,6 @@ def get_perf_toplev():
   if args.verbose > 5: ptools['toplev.py'] = 'OCVERBOSE=1 %s' % ptools['toplev.py']
   if do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
-    if pmu.meteorlake(): ptools['toplev.py'] += ' --force-cpu=adl'
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
   return (perf, ptools['toplev.py'], ptools['ocperf'])
 

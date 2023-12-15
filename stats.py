@@ -222,14 +222,18 @@ def read_toplev(filename, metric=None):
 
 def read_perf_toplev(filename):
   perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
-  d = {}
+  d = {'num-zero-stats': 0, 'num-not_counted-stats': 0}
   if debug > 2: print('reading %s' % filename)
   with open(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
     for r in reader:
       if r['Event'] in ('Event', 'dummy'): continue
       x = r['Event']
+      if '<not counted>' in r['Value']:
+        d['num-not_counted-stats'] += 1
+        continue
       v = int(float(r['Value']))
+      if v == 0: d['num-zero-stats'] += 1
       if x == 'msr/tsc/': x = 'tsc'
       elif x == 'duration_time':
         x = 'DurationTimeInMilliSeconds'

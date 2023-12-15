@@ -140,7 +140,7 @@ test-tripcount-mean: lbr.py do.py kernels/x86.py
 	else exit 1}' || $(FAIL)
 
 clean:
-	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D-u*cmd
+	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D*cmd
 pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
@@ -162,7 +162,7 @@ pre-push: help
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command
 	$(MAKE) test-default APP=./$(AP) PM=313e DO_ARGS="--tune :perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
 	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
-	mkdir test-dir; cd test-dir; ln -s ../run.sh; ln -s ../common.py; ln -s ../CLTRAMP3D && \
+	mkdir -p test-dir; cd test-dir; ln -sf ../run.sh; ln -sf ../common.py; ln -sf ../CLTRAMP3D && \
 	    make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1\
 	    # tests default from another directory, toplev describe
 	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command
@@ -170,7 +170,7 @@ pre-push: help
 	$(MAKE) test-stats                                      # tests stats module
 	$(MAKE) test-srcline                                    # tests srcline loop stat
 	$(MAKE) test-tripcount-mean                             # tests tripcount-mean calculation
-	$(PY3) $(DO) profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1  || echo skip
+	$(PY3) $(DO) profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
 	$(PY2) $(DO) profile --tune :time:2 -v3 > .do-time2.log 2>&1 || $(FAIL) # tests default w/ :time (errors only)

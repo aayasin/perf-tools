@@ -36,7 +36,8 @@ metrics = {
   'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
                     C.flag2str(',+IpAssist', pmu.v4p()) +
                     C.flag2str(',+Memory_Bound*/3', pmu.goldencove_on()),
-  'version':      '4.6-full-perf',
+  'version':      '4.7-full-perf',
+  'num-mux-groups':   58, # -pm 0x80 on ICX
 }
 
 def get(tag):

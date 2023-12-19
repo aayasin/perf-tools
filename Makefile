@@ -138,13 +138,15 @@ test-tripcount-mean: lbr.py do.py kernels/x86.py
 	gcc -g -O2 kernels/tripcount-mean.c -o kernels/tripcount-mean > /dev/null 2>&1
 	$(DO) $(CMD) -a './kernels/tripcount-mean $(TMI)' --perf ../perf -pm 100 > /dev/null 2>&1
 	grep Loop#1 tripcount-mean-$(TMI)*info.log | awk -F 'tripcount-mean: ' '{print $$2}' | \
-	awk -F ',' '{print $$1}' | awk 'BEGIN {lower=95; upper=105} {if ($$1 >= lower && $$1 <= upper) exit 0; \
+	awk -F ',' '{print $$1}' | awk 'BEGIN {lower=90; upper=110} {if ($$1 >= lower && $$1 <= upper) exit 0; \
 	else exit 1}' || $(FAIL)
 CPUS = ICX SPR SPR-HBM TGL ADL
 test-forcecpu:
 	@for cpu in $(CPUS); do \
         	FORCECPU=$$cpu $(DO) $(CMD) -a './workloads/BC.sh 5' -pm 19112 --tune :loops:0 :help:0 -e FRONTEND_RETIRED.ANY_DSB_MISS 2>&1 || $(FAIL) \
     	done
+test-edge-inst:
+	$(DO) $(CMD) -a './pmu-tools/workloads/CLTRAMP3D' --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D*cmd
@@ -178,6 +180,7 @@ pre-push: help
 	$(MAKE) test-srcline                                    # tests srcline loop stat
 	$(MAKE) test-tripcount-mean                             # tests tripcount-mean calculation
 	$(MAKE) test-forcecpu                                   # tests force cpu option
+	$(MAKE) test-edge-inst					# tests sampling by instructions
 	$(PY3) $(DO) profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC

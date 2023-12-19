@@ -31,7 +31,7 @@ gcc11:
 	$(MGR) install gcc-11
 	sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110 --slave /usr/bin/g++ g++ /usr/bin/g++-11 --slave /usr/bin/gcov gcov /usr/bin/gcov-11
 	gcc --version
-PKG=curl clang stress-ng
+PKG=curl clang libstdc++-12-dev stress-ng
 install: /usr/bin/python openmp tramp3d-v4
 	make -s -C workloads/mmm install
 	$(MGR) install $(PKG)

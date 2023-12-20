@@ -1,4 +1,5 @@
 // Microbenchmark for branch mispredictions
+// Author: Sinduri Gundu
 // Dec 2023
 
 #include <stdlib.h>

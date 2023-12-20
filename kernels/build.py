@@ -103,6 +103,7 @@ for kernel in kernels:
 #Special Builds
 build_kernel('callchain', flags='-O0 -fno-inline')
 build_kernel('false-sharing', flags='-O0 -pthread')
+build_kernel('cond_jmp', flags='-O0')
 if goldencove():
     build_kernel('tpause', flags='-march=native')# requires newer GCC and binutils
 build_kernel('tpause', output='rdtsc', flags='-march=native -DRDTSC_ONLY')

@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.85
+__version__ = 2.86
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -36,6 +36,7 @@ Find_perf = 'sudo find / -name perf -executable -type f | grep ^/'
 Setup_log = 'setup-system.log'
 Time = '/usr/bin/time'
 LDLAT_DEF = '7'
+PERF_MUX_INTERVAL = 53
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'batch':          0,
@@ -243,7 +244,7 @@ def setup_perf(actions=('set', 'log'), out=None):
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
     ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e6), 'root'),
-    ('/sys/devices/%s/perf_event_mux_interval_ms' % pmu.pmu(), 100, ),
+    ('/sys/devices/%s/perf_event_mux_interval_ms' % pmu.pmu(), PERF_MUX_INTERVAL, ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/nmi_watchdog', 0, ),
     ('/proc/sys/kernel/soft_watchdog', 0, ),
@@ -546,9 +547,9 @@ def profile(mask, toplev_args=['mvl6', None]):
         exe("%s --stdio -i %s > %s " % (perf_view(c), perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
   if en(12):
-    cmd, log = toplev_V('-mvl2 --no-sort %s' % ('' if args.sys_wide else ' --no-uncore'),
+    cmd, logs['info'] = toplev_V('-mvl2 --no-sort %s' % ('' if args.sys_wide else ' --no-uncore'),
                         nodes='+IPC,'+tma.get('bottlenecks-only').replace('+', '-'))
-    profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'Info metrics', 12)
+    profile_exe(cmd + ' | tee %s | %s' % (logs['info'], grep_nz), 'Info metrics', 12)
 
   if en(13):
     cmd, log = toplev_V('-vvl2', nodes=tma.get('fe-bottlenecks') + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
@@ -805,8 +806,14 @@ def profile(mask, toplev_args=['mvl6', None]):
     print('firefox %s.svg &' % perf_data)
 
   if do['help'] < 0: profile_mask_help()
-  else:
-    if args.repeat == 3 and (mask_eq(0x1012) or mask_eq(0x82)): stats.csv2stat(C.toplev_log2csv(logs['tma']))
+  elif args.repeat == 3 and (mask_eq(0x1012) or mask_eq(0x82)):
+    stats.csv2stat(C.toplev_log2csv(logs['tma']))
+    d, not_counted_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])), 'num-not_counted-stats', 'DurationTimeInMilliSeconds'
+    not_counted = d[not_counted_name]
+    if not mask_eq(0x80):
+      assert d[time] > tma.get('num-mux-groups') * PERF_MUX_INTERVAL, "Too short run time! %f [ms]" % d[time]
+      not_counted += stats.read_perf_toplev(C.toplev_log2csv(logs['info']))[not_counted_name]
+    assert not_counted == 0, "invalid collection! %s=%d log= %s" % (not_counted_name, not_counted, logs['tma'])
   #profile-end
 
 def do_logs(cmd, ext=[], tag=''):

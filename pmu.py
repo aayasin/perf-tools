@@ -146,6 +146,18 @@ def cpu_has_feature(feature):
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags
 
+def force_cpu_toplev(forcecpu): return ('sprmax' if forcecpu.upper() == 'SPR-HBM' else forcecpu.lower()) if forcecpu else ''
+def force_cpu(cpu):
+  if '-' in cpu: cpu = cpu.split('-')[0]
+  events_dir = '%s/.cache/pmu-events' % os.path.expanduser('~')
+  cpus = C.exe_output(C.grep(r"%s.*,[Cc]ore" % cpu.upper(),
+                                  '%s/mapfile.csv' % events_dir, '-E'), sep='\n').split('\n')
+  if cpus == '': C.error("no eventlist found for the forced CPU")
+  cpu_id, key = cpus[0].split(',')[0], 'hybridcore' if cpus[0].count('_') == 2 else 'core'
+  if '[' in cpu_id: cpu_id = cpu_id.split('[')[0] + cpu_id[-2]
+  event_list = "%s/%s-%s.json" % (events_dir, cpu_id, 'hybridcore' if cpus[0].count('_') == 2 else 'core')
+  if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
+  return event_list
 
 pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
 def cpu(what, default=None):
@@ -158,9 +170,11 @@ def cpu(what, default=None):
     return cpu.state if what == 'ALL' else (cpu.state[what] if what in cpu.state else warn())
   if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
       'git clone --recurse-submodules https://github.com/aayasin/perf-tools'))
+  forcecpu = C.env2str('FORCECPU')
   def versions():
     def Cpu(m): M={'sprmax': 'spr-hbm'}; return (M[m] if m in M else m).upper()
-    d, v = {}, C.exe_one_line("%s/toplev.py --version 2>&1 | tail -1" % pmutools).strip()
+    d, v = {}, C.exe_one_line("%s/toplev.py --version%s 2>&1 | tail -1" %
+                              (pmutools, (' --force-cpu %s' % force_cpu_toplev(forcecpu)) if forcecpu else '')).strip()
     for x in v.split(','):
       xs = x.split(':')
       if len(xs) > 1:
@@ -171,17 +185,18 @@ def cpu(what, default=None):
   try:
     sys.path.append(pmutools)
     import tl_cpu, event_download
-    cs = tl_cpu.CPU((), False, tl_cpu.Env()) # cpu.state
+    cs = tl_cpu.CPU(known_cpus=((forcecpu, ()),) if forcecpu else ()) # cpu.state
     if what == 'get-cs': return cs
     cpu.state = {
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
-      'eventlist':    event_download.eventlist_name(),
+      'eventlist':    force_cpu(forcecpu) if forcecpu else event_download.eventlist_name(),
       'model':        cs.model,
       #'name':         cs.true_name,
       'smt-on':       cs.ht,
       'socketcount':  cs.sockets,
       'x86':          int(platform.machine().startswith('x86')),
+      'forcecpu':     int(True if forcecpu else False)
     }
     cpu.state.update(versions())
     return cpu(what, default)

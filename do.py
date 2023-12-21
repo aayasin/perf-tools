@@ -40,7 +40,7 @@ globs = {
   'uname-a':            C.exe_one_line('uname -a')
   }
 if globs['uname-a'].startswith('Darwin'):
-  C.error("Are you on MacOS? it is not supported (uname -a = %s" % globs['uname-a'])
+  C.error("Are you on MacOS? it is not supported; 'uname -a =' %s" % globs['uname-a'])
 
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,

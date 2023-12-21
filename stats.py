@@ -222,7 +222,7 @@ def read_toplev(filename, metric=None):
 
 def read_perf_toplev(filename):
   perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
-  d = {'num-zero-stats': 0, 'num-not_counted-stats': 0}
+  d = {'num-zero-stats': 0, 'num-not_counted-stats': 0, 'num-not_supported-stats': 0}
   if debug > 2: print('reading %s' % filename)
   with open(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
@@ -231,6 +231,9 @@ def read_perf_toplev(filename):
       x = r['Event']
       if '<not counted>' in r['Value']:
         d['num-not_counted-stats'] += 1
+        continue
+      if '<not supported>' in r['Value']:
+        d['num-not_supported-stats'] += 1
         continue
       v = int(float(r['Value']))
       if v == 0: d['num-zero-stats'] += 1
@@ -297,6 +300,7 @@ def perf_log2stat(log, smt_on, d={}):
     d['knob.ncores'] = pmu.cpu('corecount')
     d['knob.nsockets'] = pmu.cpu('socketcount')
     d['knob.nthreads'] = 2 if smt_on else 1
+    d['knob.forcecpu'] = 1 if C.env2str('FORCECPU') else 0
     d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', tma.get('version'))
     d['knob.uarch'] = pmu.cpu('CPU')
     return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK')

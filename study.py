@@ -11,10 +11,11 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.74
+__version__= 0.84
 
 import common as C, pmu, stats
-import argparse, os, sys, time
+import os, sys, time, re
+from lbr import stat_name
 
 def dump_sample():
   print("""#!/bin/bash
@@ -84,6 +85,49 @@ def parse_args():
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
   ap.add_argument('--smt', action='store_const', const=True, default=False)
+
+  # side-by-side comparison
+  description = """
+  side-by-side comparison for 2 configs:
+    all configs stats are written to *stats.log side by side with diff and ratio, sorted by ratio high to low.
+    output includes:
+      top & bottom ratios tables after filtering (see description table below).
+      table of string stats that differ between configs.
+      table of loops with regression in IPC-mode.
+    :var stats are excluded
+    None or zero stats are excluded by default, use -sa to view them.
+    
+    top & bottom tables filtering:
+      *stat*                 | *diff-condition*          | *ratio-condition*     | *comment*
+      ==================================================================================================================
+      info.log global stat   | >= diff-thresh after      | ratio of all info.log | starts with '[cC]ount of' and includes 'cond'/'inst'/'pairs'
+                             | multiplying w/ LBR factor | insts >= lbr-thresh%  |
+      metric                 | -                         | -                     | starts with uppercase and doesn't include
+                             |                           |                       | 'instructions'/'pairs'/'branches'/'insts-class'/'insts-subclass'
+      event (counter)        | >= diff-thresh            | -                     |
+      info.log proxy stat    | -                         | -                     |
+      info.log per-loop stat | -                         | -                     | exclude it with -sl (--skip-loops)
+      
+  side-by-side args"""
+  side_by_side = ap.add_argument_group(description)
+  def add_arg(name, default, help):
+    l = name.split('-')
+    side_by_side.add_argument('-%s%s' % (l[0][0], l[1][0]), '--%s' % name, default=default, type=type(default), help=help)
+  side_by_side.add_argument('--loop-id', default='imix-ID', choices=['imix-ID', 'srcline'],
+                            help="loop stat to use as loop ID")
+  add_arg('diff-threshold', 10000.0, "diff threshold to filter top & bottom tables")
+  add_arg('round-factor', 3, "round factor for calculations")
+  add_arg('table-size', 10, "top & bottom tables size")
+  side_by_side.add_argument('-w', '--table-width', nargs='*', default=[30],
+                            help="fields widths in tables, non-specified column will use the final width")
+  side_by_side.add_argument('-sl', '--skip-loops', action='store_true',
+                            help="skip loops stats")
+  side_by_side.add_argument('-sa', '--show-all', action='store_true',
+                            help='show stats with None or zero values')
+  side_by_side.add_argument('--skip', nargs='*', default=[],
+                            help='stats sub-names to skip, e.g. "--skip cond" will skip all stats including "cond"')
+  add_arg('lbr-threshold', 0.01, "info.log global stats are included in top & bottom tables "
+                                 "if stat/all instructions in info.log > this thresh%%")
   args = ap.parse_args()
   if args.dump: dump_sample()
   C.printc('mode: %s' % DM)
@@ -95,12 +139,159 @@ def parse_args():
   assert args.repeat > 2, "stats module requires '--repeat 3' at least"
   if DM in ('dsb-align', ): pass
   else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN events")
+  if args.stages & 0x4 and len(args.config) == 2:
+    assert sys.version_info >= (3, 0), "stage 4 requires Python 3 or above."
+    for element in args.table_width:
+      assert int(element) >= 15, "field width in side-by-side must be at least 15"
   return args
 
 args = None
 def app(flavor):
   if args.attempt == '-1': return args.app
   return "'%s %s %s'" % (args.app, flavor, 't%s' % args.attempt if args.attempt.isdigit() else args.attempt)
+
+def compare_stats(app1, app2):
+  app1_str, app2_str = C.command_basename(app1), C.command_basename(app2)
+  lbr_factor1 = lbr_factor2 = lbr_all_insts1 = lbr_all_insts2 = None
+  all_stats = []
+  # calculate diff or ratio
+  def calc(value1, value2, op='ratio'):
+    if not op == 'diff' and not op == 'ratio': return None
+    if not value1 and value2 is None: return 'N/A'
+    if not value1: return value2
+    if value2 is None: return -value1 if op == 'diff' and isinstance(value1, (int, float)) else 'N/A'
+    if not isinstance(value1, (int, float)) or not isinstance(value2, (int, float)): return 'N/A'
+    return round(value2 - value1, args.round_factor) if op == 'diff' \
+      else round(float(value2) / value1, args.round_factor)
+  # considers both removing args --show-all and --skip
+  # removes ':var' stats
+  def hide(key, value1, value2):
+    return (not args.show_all and (not value1 or not value2 or ':var' in key)) or C.any_in(args.skip, key)
+  # filtering what stats get into top & bottom tables
+  # see description in study.py -h
+  def filter(key, value1, value2, diff, ratio):
+    glob_stat = re.search('([cC]ount) of', key) and C.any_in(['cond', 'inst', 'pairs'], key)
+    if glob_stat:
+      if (value1 and 100*float(value1)/lbr_all_insts1 < args.lbr_threshold) or \
+              (value2 and 100*float(value2)/lbr_all_insts2 < args.lbr_threshold): return False
+      if value1: value1 = value1 * lbr_factor1
+      if value2: value2 = value2 * lbr_factor2
+      diff = calc(value1, value2, op='diff')
+    is_metric = key[0].isupper() and not \
+      re.search(r"(instructions|pairs|branches|insts-class|insts-subclass)$", key.lower())
+    diff_cond = isinstance(diff, (int, float)) and \
+                (key.startswith('Loop') or is_metric or key.startswith('proxy count')
+                 or abs(diff) >= args.diff_threshold)
+    ratio_cond = isinstance(ratio, (int, float)) and not (not value1 and value2 == 0)
+    return diff_cond and ratio_cond
+  # filtering what stats get into strings table
+  def filter_string(key, value1, value2):
+    return (isinstance(value1, str) or isinstance(value2, str)) and value1 != value2 and \
+        not key == 'App' and not key.startswith('Loop')
+  # line format in tables
+  def format_line(k, v1, v2, d, r):
+    def fv(v): return round(v, args.round_factor) if isinstance(v, (int, float)) else str(v)
+    def width(i): return int(args.table_width[i]) if len(args.table_width) > i else int(args.table_width[-1])
+    return "{:>{width}}".format(k[-width(0):], width=width(0)) + " | " + \
+           "{:>{width}}".format(fv(v1), width=width(1)) + " | " + \
+           "{:>{width}}".format(fv(v2), width=width(2)) + " | " + \
+           "{:>{width}}".format(d, width=width(3)) + " | " + \
+           "{:>{width}}".format(r, width=width(4))
+  def print_list(l):
+    print(header)
+    print(sep)
+    for k, v1, v2, d, r in l: print(format_line(k, v1, v2, d, r))
+    print('\n')
+  def get_info_file(app):
+    for filename in os.listdir(os.getcwd()):
+      if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+).perf.data.info.log" % app, filename):
+        return filename
+    return None
+  # safe dict[key]
+  def get_value(d, k): return d[k] if k in d else None
+  # print table of loops with regressed IPC between configs
+  def print_regressed_ipcs():
+    loops_num = len([key for key in stats1 if re.search("Loop#[0-9]+ ip", key)])
+    regress_ipcs, loops_paired = [], []
+    # vars to check if first 10 loops have matching IDs between configs
+    ids_to_check, diff_ids = loops_num if loops_num < 10 else 10, 0
+    for i1 in range(1, loops_num+1):
+      ipc1 = get_value(stats1, 'Loop#%s IPC-mode' % i1)
+      if not ipc1: continue
+      id = stats1['Loop#%s ID' % i1]
+      id2 = get_value(stats2, 'Loop#%s ID' % i1)
+      if i1 <= ids_to_check and id != id2: diff_ids += 1
+      if id == id2 and i1 not in loops_paired: i2 = i1
+      else:
+        i2 = None
+        for key in stats2:
+          if re.search("Loop#[0-9]+ ID", key) and stats2[key] == id:
+            n = int(key.split()[0].replace('Loop#', ''))
+            if n not in loops_paired:
+              i2 = n
+              break
+      if not i2: continue
+      ipc2 = get_value(stats2, 'Loop#%s IPC-mode' % i2)
+      if ipc1 > ipc2 and (ipc2 or args.show_none):
+        key = 'Loop:%s #%s #%s IPC-mode' % (id, i1, i2)
+        if not C.any_in(args.skip, key):
+          regress_ipcs.append((key, ipc1, ipc2, calc(ipc1, ipc2, op='diff'), calc(ipc1, ipc2)))
+          loops_paired.append(i2)
+    if len(regress_ipcs) > 0:
+      print("Loops with regressed IPC:")
+      print_list(regress_ipcs)
+    if ids_to_check and float(diff_ids)/ids_to_check >= 0.5:
+      C.warn("Loops seem to be non-matching between configs!")
+
+  # compare_stats() starts here
+  C.printc('\tconfigs side-by-side', C.color.BOLD)
+  info1, info2 = get_info_file(app1_str), get_info_file(app2_str)
+  # adding info files stats
+  if info1 and info2:
+    stats.sDB[app1_str].update(stats.read_info(info1, read_loops=not args.skip_loops, loop_id=args.loop_id))
+    stats.sDB[app2_str].update(stats.read_info(info2, read_loops=not args.skip_loops, loop_id=args.loop_id))
+    lbr_all_insts_key = stat_name('ALL', ratio_of=('ALL', ))
+    lbr_all_insts1, lbr_all_insts2 = stats.get(lbr_all_insts_key, app1), stats.get(lbr_all_insts_key, app2)
+    lbr_factor1 = float(stats.get('instructions', app1)) / lbr_all_insts1
+    lbr_factor2 = float(stats.get('instructions', app2)) / lbr_all_insts2
+  stats1, stats2 = stats.sDB[app1_str], stats.sDB[app2_str]
+  header = format_line('Stat', app1, app2, 'Diff', 'Ratio')
+  sep = '-' * len(header)
+  for key, value1 in stats1.items():
+    value2 = get_value(stats2, key)
+    if not hide(key, value1, value2):
+      all_stats.append((key, value1, value2, calc(value1, value2, op='diff'), calc(value1, value2)))
+  # passing on elements of stats2 that aren't in stats1
+  if args.show_all:
+    for key, value2 in stats2.items():
+      if key not in stats1 and not hide(key, None, value2):
+        all_stats.append((key, None, value2, calc(None, value2, op='diff'), calc(None, value2)))
+  # sorting stats high to low by ratio
+  all_stats.sort(key=lambda item: float(item[4]) if isinstance(item[4], (int, float)) else float('-inf'), reverse=True)
+  # generating side-by-side all stats log
+  out_file = f"{app1_str}_{app2_str}.stats.log"
+  with open(out_file, 'w') as f:
+    f.write(header + '\n')
+    f.write(sep + '\n')
+    for (k, v1, v2, d, r) in all_stats: f.write(format_line(k, v1, v2, d, r) + '\n')
+  print(f"Full side-by-side stats written to '{out_file}'\n")
+  # print top and bottom ratios tables after filtering
+  filtered_stats = [(k, v1, v2, d, r) for k, v1, v2, d, r in all_stats if filter(k, v1, v2, d, r)]
+  if len(filtered_stats) <= args.table_size: top, bottom = filtered_stats, filtered_stats[::-1]
+  else:
+    bottom = filtered_stats[-args.table_size:][::-1]
+    top = filtered_stats[:args.table_size]
+  print(f'Top {args.table_size}:')
+  print_list(top)
+  print(f'Bottom {args.table_size}:')
+  print_list(bottom)
+  # print diff string stats table
+  strings_stats = [(k, v1, v2, d, r) for k, v1, v2, d, r in all_stats if filter_string(k, v1, v2)]
+  if len(strings_stats) > 0:
+    print('String diffs:')
+    print_list(strings_stats)
+  # print table of loops with regressed IPC
+  if not args.skip_loops: print_regressed_ipcs()
 
 def main():
   do0 = C.realpath('do.py')
@@ -155,6 +346,7 @@ def main():
       bef, aft = args.config[0], args.config[1]
       C.printc('Speedup (%s/%s): %sx' % (aft, bef, str(round(stats.get('time', app(bef)) / stats.get('time', app(aft)),
                3 if args.verbose else 2))))
+      compare_stats(app(bef), app(aft))
 
   if args.stages & 0x10:
     if args.stages & 0x2: time.sleep(60)

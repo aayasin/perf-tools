@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.01 # see version line of do.py
+__version__= x86.__version__ + 2.02 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -266,7 +266,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           if not erratum is None: loop['jcc-erratum'] = erratum
           for i in types: loop[i] = cnt[i]
           hexa = lambda x: hex(x)[2:]
-          loop['ID'] = hexa(loop['load']) + hexa(loop['store']) + hexa(loop['Conds']) + hexa(loop['lea'])
+          loop['imix-ID'] = hexa(loop['load']) + hexa(loop['store']) + hexa(loop['Conds']) + hexa(loop['lea'])
           if len(conds):
             loop['Cond_polarity'] = {}
             for c in conds: loop['Cond_polarity'][c] = {'tk': 0, 'nt': 0}
@@ -302,7 +302,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           ins.add(hex_ip(l))
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(hex_ip(ip))
-      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'ID': None, 'attributes': '',
+      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'imix-ID': None, 'attributes': '',
         'entry-block': 0 if xip > ip else find_block_ip()[0], #'BK': {hex(xip): 1, },
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
@@ -849,8 +849,9 @@ def print_hist(hist_t, Threshold=0.01):
 def print_hist_sum(name, h):
   s = sum(hsts[h].values())
   print_stat(name, s, comment='histogram' if s else '')
-def print_stat(name, count, prefix='count', comment='', ratio_of=None, log=None):
-  def c(x): return x.replace(':', '-')
+
+c = lambda x: x.replace(':', '-')
+def stat_name(name, prefix='count', ratio_of=None):
   def nm(x):
     if not ratio_of or ratio_of[0] != 'ALL': return x
     n = (x if 'cond' in name or 'fusible' in name else x.upper()) + ' '
@@ -861,9 +862,11 @@ def print_stat(name, count, prefix='count', comment='', ratio_of=None, log=None)
     elif 'fusible' in name: n += 'pairs'
     else: n += 'instructions'
     return n
+  return '%s of %s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 60 - len(prefix)))
+def print_stat(name, count, prefix='count', comment='', ratio_of=None, log=None):
   if len(comment): comment = '\t:(see %s below)' % c(comment)
   elif ratio_of: comment = '\t: %7s of %s' % (ratio(count, ratio_of[1]), ratio_of[0])
-  res = '%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 60 - len(prefix)), str(count), comment)
+  res = '%s: %10s%s' % (stat_name(name, prefix=prefix, ratio_of=ratio_of), str(count), comment)
   C.fappend(res, log) if log else print(res)
 def print_estimate(name, s): print_stat(name, s, 'estimate')
 def print_imix_stat(n, c): print_stat(n, c, ratio_of=('ALL', glob['all']))
@@ -883,6 +886,8 @@ def print_global_stats():
              ratio_of=('total cycles', stat['total_cycles']))
   for n in (4, 5, 6): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
                                  prefix='proxy count', ratio_of=('loops', len(loops)))
+  print_stat(nc('non-contiguous loops'), len([l for l in loops.keys() if 'non-contiguous' in loops[l]['attributes']]),
+             prefix='proxy count', ratio_of=('loops', len(loops)))
   print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
   if glob['size_stats_en']:
     for x in Insts_cond: print_imix_stat(x + ' conditional', glob['cond_' + x])
@@ -986,7 +991,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   fixl = ['hotness']
   if 'srcline' in loop: fixl.append('srcline')
   if glob['loop_cycles']: fixl.append('FL-cycles%')
-  fixl += ['size', 'ID']
+  fixl += ['size', 'imix-ID']
   loop['hotness'] = '%6d' % loop['hotness']
   loop['size'] = str(loop['size']) if loop['size'] else '-'
   printl('%soop#%d: [ip: %s, ' % ('L' if detailed else 'l', num, hex_ip(ip)))
@@ -994,7 +999,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   if not glob['loop_stats_en']: del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
-  dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'ID', 'back', 'entry-block', 'IPC', 'tripcount']
+  dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'imix-ID', 'back', 'entry-block', 'IPC', 'tripcount']
   for x in paths_range(): dell += ['paths-%d'%x]
   if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)

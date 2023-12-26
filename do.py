@@ -860,9 +860,12 @@ def build_kernel(dir='./kernels/'):
 def parse_args():
   def help_s_arg(x): return x + ' profiling for x seconds. disabled by default'
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
+  epilog = """environment variables:
+    FORCECPU - force a specific CPU all over e.g. SPR, spr.
+  """
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
     defs={'perf': 'perf', 'pmu-tools': '%s %s/pmu-tools' % (do['python'], C.dirname()),
-          'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']})
+          'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']}, epilog=epilog)
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')

@@ -378,7 +378,6 @@ def inc_stat(stat):
     return True
 
 IPTB  = 'inst-per-taken-br--IpTB'
-IPFCB = {'name': 'inst-per-forward-cond-br', 'insts': 0}
 IPLFC = 'inst-per-leaf-func-call'
 NOLFC = 'inst-per-leaf-func-name' # name-of-leaf-func-call would plot it away from IPFLC!
 FUNCI = 'Function-invocations'
@@ -393,7 +392,7 @@ def count_of(t, lines, x, hist):
   return r
 
 def edge_en_init(indirect_en):
-  for x in (FUNCI, 'IPC', IPTB, IPFCB['name'], IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
+  for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
   if indirect_en:
     for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
@@ -443,7 +442,6 @@ def edge_stats(line, lines, xip, size):
   if is_type(x86.COND_BR, xline) and is_taken(xline):
     glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
   # checks all lines but first
-  IPFCB['insts'] += 1
   if is_type(x86.COND_BR, line):
     if is_taken(line): glob['cond_taken-not-first'] += 1
     else: glob['cond_non-taken'] += 1

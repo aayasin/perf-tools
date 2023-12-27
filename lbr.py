@@ -469,10 +469,6 @@ def edge_stats(line, lines, xip, size):
           def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
           if is_type(x86.MOV, xline): inc_pair2('MOV')
           elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
-    dst_ip = str2int(x86.get('dst', line), (line, None))
-    if dst_ip > ip:
-      inc(hsts[IPFCB['name']], IPFCB['insts'])
-      IPFCB['insts'] = 0
   # check erratum for line (with no consideration of macro-fusion with previous line)
   if is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
   if verbose & 0x1 and is_type('ret', line):

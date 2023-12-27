@@ -355,6 +355,7 @@ hsts = {}
 footprint = set()
 pages = set()
 indirects = set()
+ips_after_uncond_jmp = set()
 
 def inc_pair(first, second='JCC', suffix='non-fusible'):
   c = '%s-%s %s' % (first, second, suffix)
@@ -378,7 +379,6 @@ def inc_stat(stat):
     return True
 
 IPTB  = 'inst-per-taken-br--IpTB'
-IPFCB = {'name': 'inst-per-forward-cond-br', 'insts': 0}
 IPLFC = 'inst-per-leaf-func-call'
 NOLFC = 'inst-per-leaf-func-name' # name-of-leaf-func-call would plot it away from IPFLC!
 FUNCI = 'Function-invocations'
@@ -393,7 +393,7 @@ def count_of(t, lines, x, hist):
   return r
 
 def edge_en_init(indirect_en):
-  for x in (FUNCI, 'IPC', IPTB, IPFCB['name'], IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
+  for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
   if indirect_en:
     for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
@@ -443,7 +443,6 @@ def edge_stats(line, lines, xip, size):
   if is_type(x86.COND_BR, xline) and is_taken(xline):
     glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
   # checks all lines but first
-  IPFCB['insts'] += 1
   if is_type(x86.COND_BR, line):
     if is_taken(line): glob['cond_taken-not-first'] += 1
     else: glob['cond_non-taken'] += 1
@@ -621,7 +620,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         invalid('bad', tag)
         break
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
-      # TODO: replace with this line when labels is True
       if skip_bad and len(lines) and not is_label(line) and not line.strip().startswith('0'):
         if debug and debug == timestamp:
           exit(line, lines, "bad line")
@@ -650,14 +648,15 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
       if not labels and size > 0: detect_loop(ip, lines, loop_ipc, takens, srcline)
       if skip_bad: tc_state = loop_stats(line, loop_ipc, tc_state)
       if edge_en:
-        if len(takens):
-          if is_taken(line):
-            if verbose & 0x2: #FUNCR
-              x = get_taken_idx(lines, -1)
-              if x >= 0:
-                if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
-                if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
+        if len(takens) and is_taken(line) and verbose & 0x2: #FUNCR
+          x = get_taken_idx(lines, -1)
+          if x >= 0:
+            if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
+            if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
         edge_stats(line, lines, xip, size)
+      if (edge_en or 'DSB_MISS' in event) and is_type('jmp', line):
+        ilen = get_ilen(line)
+        if ilen: ips_after_uncond_jmp.add(ip + ilen)
       assert len(lines) or event in line
       line = line.rstrip('\r\n')
       if has_timing(line):
@@ -717,6 +716,8 @@ def is_jmp_next(br, # a hacky implementation for now
 
 def has_timing(line): return line.endswith('IPC')
 def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else False
+
+def is_after_uncond_jmp(ip): return ip in ips_after_uncond_jmp
 
 def is_jcc_erratum(line, previous=None):
   # JCC/CALL/RET/JMP

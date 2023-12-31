@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.87
+__version__ = 2.88
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -395,8 +395,9 @@ def profile(mask, toplev_args=['mvl6', None]):
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')):] + px.join(rapl) + ('/' if '/' in px else '')
     return 'msr/tsc/' + (power() if args.power and not pmu.v5p() else '')
   def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
-  def ilen(): return do['lbr-jcc-erratum'] or do['lbr-indirects']
-  def perf_F(): return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen() else '',
+  def perf_F(ilen=False):
+    ilen = ilen or do['lbr-jcc-erratum'] or do['lbr-indirects']
+    return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
                                                         ',+srcline' if do['loop-srcline'] else '',
                                                         ' 2>>' + err if do['loop-srcline'] else '')
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'], csv=False,
@@ -752,10 +753,10 @@ def profile(mask, toplev_args=['mvl6', None]):
     elif not is_dsb: pass
     elif top == 1:
       # asserts in skip_sample() only if piped!!
-      perf_script("-F +brstackinsn --xed | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
-        C.realpath('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
+      perf_script("%s | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
+        perf_F(ilen=True), C.realpath('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
     else:
-      perf_script("-F +brstackinsn --xed | ./lbr_stats %s | tee -a %s.ips.log" % (do['lbr-stats'], data),
+      perf_script("%s | ./lbr_stats %s | tee -a %s.ips.log" % (perf_F(ilen=True), do['lbr-stats'], data),
                   "@ stats on PEBS event", data)
     if top > 1:
       cmd = ''
@@ -763,7 +764,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         top_ip = exe_1line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
         cmd += ' | tee >(%s %s >> %s.ctxt.log) ' % (C.realpath('lbr_stats'), top_ip, data)
         top -= 1
-      perf_script("-F +brstackinsn --xed %s > /dev/null" % cmd, "@ stats on PEBS", data)
+      perf_script("%s %s > /dev/null" % (perf_F(ilen=True), cmd), "@ stats on PEBS", data)
 
   if en(10):
     data = perf_record('ldlat', 10, record='record' if pmu.goldencove() else 'mem record')[0]

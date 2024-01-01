@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.88
+__version__ = 2.89
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -607,7 +607,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     return perf_data, n
   
   if en(8) and do['sample'] > 1:
-    assert pmu.lbr_event()[:-1] in do['perf-lbr'] or do['forgive'] > 2, 'Incorrect event for LBR in: ' + do['perf-lbr']
+    assert C.any_in((pmu.lbr_event()[:-1], 'instructions:ppp') ,do['perf-lbr']) or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
     data, nsamples = perf_record('lbr', 8)
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
@@ -687,6 +687,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       loops = '%s.loops.log' % data
       llvm_mca = '%s.llvm_mca.log' % data
       err = '%s.error.log' % data
+      ev = C.flag_value(do['perf-lbr'], '-e')
       print_info('\n%s\n#\n' % lbr_hdr)
       if not isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
@@ -699,8 +700,8 @@ def profile(mask, toplev_args=['mvl6', None]):
         misp, cmd, msg = '', perf_F(), '@info'
         if do['imix']:
           print_cmd(' '.join(('4debug', perf, 'script', perf_ic(data, perf_script.comm), cmd, '| less')), False)
-          cmd += " | tee >(%s %s %s >> %s) %s | GREP_INST | %s " % (
-            lbr_env, C.realpath('lbr_stats'), do['lbr-stats-tk'], info, misp, clean)
+          cmd += " | tee >(%s %s %s %s >> %s) %s | GREP_INST | %s " % (
+            lbr_env, C.realpath('lbr_stats'), do['lbr-stats-tk'], ev, info, misp, clean)
           if do['imix'] & 0x1:
             cmd += "| tee >(sort| sed 's/\s\+/\\t/g'|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
             msg += ', hitcounts'
@@ -724,11 +725,11 @@ def profile(mask, toplev_args=['mvl6', None]):
         cmd, top = '', min(do['loops'], int(exe_1line('wc -l %s' % loops, 0)))
         do['loops'] = top
         while top > 1:
-          cmd += ' | tee >(%s %s >> %s) ' % (C.realpath('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
+          cmd += ' | tee >(%s %s %s >> %s) ' % (C.realpath('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], ev, info)
           top -= 1
-        cmd += ' | ./loop_stats %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], info)
-        print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, C.realpath('loop_stats'),
-          exe_1line('tail -1 %s' % loops, 2)[:-1], info))
+        cmd += ' | ./loop_stats %s %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info)
+        print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s %s >> %s" % (data, comm, C.realpath('loop_stats'),
+          exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info))
         perf_script("%s %s && %s" % (perf_F(), cmd,
                     C.grep('FL-cycles...[1-9][0-9]?', info, color=1)), "@detailed stats for hot loops", data,
                     export='PTOOLS_HITS=%s %s' % (hits, ('LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] else ''))

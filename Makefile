@@ -142,8 +142,8 @@ test-tripcount-mean: lbr.py do.py kernels/x86.py
 	else exit 1}' || $(FAIL)
 CPUS = ICX SPR SPR-HBM TGL ADL
 test-forcecpu:
-	@for cpu in $(CPUS); do \
-        	FORCECPU=$$cpu $(DO) $(CMD) -a './workloads/BC.sh 5' -pm 19112 --tune :loops:0 :help:0 -e FRONTEND_RETIRED.ANY_DSB_MISS 2>&1 || { $(FAIL); break; } \
+	for cpu in $(CPUS); do \
+        	FORCECPU=$$cpu $(DO) $(CMD) -a "./workloads/BC.sh 5 $$cpu" -pm 19112 --tune :loops:0 :help:0 -e FRONTEND_RETIRED.ANY_DSB_MISS 2>&1 || { $(FAIL); break; } \
     	done
 test-edge-inst:
 	$(DO) $(CMD) -a './pmu-tools/workloads/CLTRAMP3D' --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)

@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.91
+__version__= 0.92
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -65,19 +65,49 @@ def rollup_all(stat=None):
   print('wrote:', csv_file)
   print(C.dict2str(sDB['ALL']))
 
-def cc(x): return x.replace(',', '')
-def read_info(info):
+def convert(v, adjust_percent=True):
+  if not type(v) == str: return v
+  v = v.strip()
+  if v.isdigit(): return int(v)  # e.g. 13
+  if v.replace('.', '', 1).isdigit(): return float(v)  # e.g. 1.13
+  v2 = v.replace(',', '')
+  if v2.isdigit() or v2.replace('.', '', 1).isdigit(): return convert(v2)  # e.g. 12,122,321 -> 12122321
+  if '%' in v:  # e.g. 1.3% -> 1.3 or 0.013
+    v = float(v.replace('%', ''))
+    return v / 100 if adjust_percent else v
+  return str(v)
+
+def read_loops_info(info, loop_id='imix-ID'):
+  assert os.path.isfile(info), 'Missing file: %s' % info
+  d = {}
+  loops = C.exe_output(C.grep('Loop#', info), sep='\n')
+  if loops != '':  # loops stats found
+    for loop in loops.split('\n'):
+      if loop_id == 'srcline' and not 'srcline:' in loop:
+        C.warn('Must run with srcline for loops stats, run with --tune :loop-srcline:1')
+        break
+      key = loop.split(':')[0].strip()
+      loop_attrs = re.split(r',(?![^\[]*\])', loop[loop.index('[') + 1:-1])
+      for attr in loop_attrs:
+        attr_list = attr.split(':')
+        stat = attr_list[0].strip()
+        stat_name = 'ID' if loop_id == stat else stat
+        d['%s %s' % (key, stat_name)] = convert(attr_list[1].strip())
+  return d
+
+def read_info(info, read_loops=False, loop_id='imix-ID'):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
   for l in C.file2lines(info):
-    if 'IPC histogram' in l: break
+    if 'IPC histogram of' in l: break  # stops upon detailed loops stats
     s, v = (None, ) * 2
     if 'WARNING' in l: pass
     elif re.findall('([cC]ount|estimate) of', l):
       l = l.split(':')
-      s = l[0]#' '.join(l[0].split()) # re.sub('  +', ' ', l[0])
-      v = cc(l[1])
-    if v: d[s] = float(v) if '.' in v else int(v)
+      s = l[0].strip()#' '.join(l[0].split()) # re.sub('  +', ' ', l[0])
+      v = convert(l[1])
+    if v: d[s] = convert(v)
+  if read_loops: d.update(read_loops_info(info, loop_id))
   return d
 
 def rollup(c, perf_stat_file=None):
@@ -118,6 +148,7 @@ def read_perf(f):
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
   for l in lines:
     if debug > 3: print('debug:', l)
+    if 'atom' in l: continue
     try:
       name, val, var, name2, val2, name3, val3 = parse_perf(l)
       if name:
@@ -146,7 +177,7 @@ def parse_perf(l):
     val2 = int(l.split("(")[1].split(' ')[0]) if '(' in l else 1
   elif 'time elapsed' in l:
     name = 'time'
-    val = float(items[0])
+    val = convert(items[0])
     var = get_var(2)
   elif '#' in l:
     name_idx = 2 if '-clock' in l else 1
@@ -157,26 +188,23 @@ def parse_perf(l):
       assert not ':C1' in Name # Name = Name.replace(':C1', ':c1')
       if stats['verbose']: print(name, '->', Name)
       name = Name
-    val = cc(items[0])
-    val = float(val) if name_idx == 2 else int(val)
+    val = convert(items[0])
     var = get_var()
     metric_idx = name_idx + 3
     if name == 'cycles:k': pass
     elif l.count('#') == 2: # TMA-L2 metrics of Golden Cove
-      val2 = float(items[name_idx+2].replace('%', ''))
-      val3 = float(items[name_idx+6].replace('%', ''))
+      val2 = convert(items[name_idx+2], adjust_percent=False)
+      val3 = convert(items[name_idx+6], adjust_percent=False)
       name2 = ' '.join(items[metric_idx:metric_idx+2]).title()
       name3 = ' '.join(items[metric_idx+4:metric_idx+6]).title()
     elif not C.any_in(('/sec', 'of'), items[metric_idx]):
       val2 = items[name_idx + 2]
       name2 = '-'.join(items[metric_idx:])
       if multirun: name2 = name2.split('(')[0][:-1]
-      if '%' in val2:
-        val2 = val2.replace('%', '')
-        name2 = name2.title()
+      if '%' in val2: name2 = name2.title()
       elif name2 in Renames: name2 = Renames[name2]
+      val2 = convert(val2, adjust_percent=False)
       name2 = name2.replace('-', '_')
-      val2 = float(val2)
   if debug > 4: print('debug:', name, val, var, name2, val2, name3, val3)
   return name, val, var, name2, val2, name3, val3
 
@@ -207,8 +235,7 @@ def read_toplev(filename, metric=None):
       elif l.startswith('warning'):
         d['zero-counts'] = l.split(':')[2].strip()
       elif l.startswith('Info'):
-        for m in ('Instructions', 'IpTB', 'UopPI', 'SMT_on'):
-          if m in items[1]: d[items[1]] = float(cc(items[3]))
+        d[items[1]] = convert(items[3])
     except ValueError:
       C.warn("cannot parse: '%s'" % l)
     except AttributeError:
@@ -222,7 +249,7 @@ def read_toplev(filename, metric=None):
 
 def read_perf_toplev(filename):
   perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
-  d = {'num-zero-stats': 0, 'num-not_counted-stats': 0}
+  d = {'num-zero-stats': 0, 'num-not_counted-stats': 0, 'num-not_supported-stats': 0}
   if debug > 2: print('reading %s' % filename)
   with open(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
@@ -231,6 +258,9 @@ def read_perf_toplev(filename):
       x = r['Event']
       if '<not counted>' in r['Value']:
         d['num-not_counted-stats'] += 1
+        continue
+      if '<not supported>' in r['Value']:
+        d['num-not_supported-stats'] += 1
         continue
       v = int(float(r['Value']))
       if v == 0: d['num-zero-stats'] += 1
@@ -297,6 +327,7 @@ def perf_log2stat(log, smt_on, d={}):
     d['knob.ncores'] = pmu.cpu('corecount')
     d['knob.nsockets'] = pmu.cpu('socketcount')
     d['knob.nthreads'] = 2 if smt_on else 1
+    d['knob.forcecpu'] = 1 if C.env2str('FORCECPU') else 0
     d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', tma.get('version'))
     d['knob.uarch'] = pmu.cpu('CPU')
     return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK')

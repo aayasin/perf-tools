@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.86
+__version__ = 2.89
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -27,21 +27,25 @@ from getpass import getuser
 from math import log10
 from platform import python_version
 
-Uname_a = C.exe_one_line('uname -a')
-if Uname_a.startswith('Darwin'): C.error("Are you on MacOS? it is not supported (uname -a = %s" % Uname_a)
-tunable2pkg = {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python3-pip'}
-
 def isfile(f): return f and os.path.isfile(f)
-Find_perf = 'sudo find / -name perf -executable -type f | grep ^/'
-Setup_log = 'setup-system.log'
-Time = '/usr/bin/time'
-LDLAT_DEF = '7'
-PERF_MUX_INTERVAL = 53
+globs = {
+  'cmds_file':          None,
+  'find-perf':          'sudo find / -name perf -executable -type f | grep ^/',
+  'force-cpu':          C.env2str('FORCECPU'),
+  'ldlat-def':          '7',
+  'perf-mux-interval':  53,
+  'setup-log':          'setup-system.log',
+  'time':               '/usr/bin/time',
+  'tunable2pkg':        {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python3-pip'},
+  'uname-a':            C.exe_one_line('uname -a')
+  }
+if globs['uname-a'].startswith('Darwin'):
+  C.error("Are you on MacOS? it is not supported; 'uname -a =' %s" % globs['uname-a'])
+
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'batch':          0,
   'calibrate':      0,
-  'cmds_file':      None,
   'comm':           None,
   'compiler':       'gcc -O2 -ffast-math', # ~/tools/llvm-6.0.0/bin/clang',
   'container':      0,
@@ -66,7 +70,7 @@ do = {'run':        C.RUN_DEF,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
   'lbr-verbose':    0,
-  'ldlat':          int(LDLAT_DEF),
+  'ldlat':          int(globs['ldlat-def']),
   'levels':         2,
   'metrics':        tma.get('key-info'),
   'model':          'MTL',
@@ -76,11 +80,11 @@ do = {'run':        C.RUN_DEF,
   'numactl':        1,
   'objdump':        'binutils-gdb/binutils/objdump' if isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
-  'packages':       ['cpuid', 'dmidecode', 'numactl'] + list(tunable2pkg.keys()),
+  'packages':       ['cpuid', 'dmidecode', 'numactl'] + list(globs['tunable2pkg'].keys()),
   'perf-ann-top':   3,
   'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c %d' % (pmu.lbr_event(), pmu.lbr_period()),
-  'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(LDLAT_DEF),
+  'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(globs['ldlat-def']),
   'perf-pebs':      '-b -e %s -c 1000003' % pmu.event('dsb-miss'),
   'perf-pebs-top':  0,
   'perf-pt':        "-e '{intel_pt//u,%su}' -c %d -m,64M" % (pmu.lbr_event(), pmu.lbr_period()), # noretcomp
@@ -115,7 +119,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=1,
     while C.any_in(('--no-desc',), X[j]): j += 1
     kk = C.flag_value(x, '-e') or '' if ' record' in x else C.flag_value(x, '-F') if ' script' in x else X[j+1]
     cmd_name = C.chop('-'.join((X[i].split('/')[-1], X[j], kk)))
-    time_str = '%s %s' % (Time, '-f "\\t%%E time-real:%s"' % cmd_name if do['time'] > 1 else '')
+    time_str = '%s %s' % (globs['time'], '-f "\\t%%E time-real:%s"' % cmd_name if do['time'] > 1 else '')
     X.insert(1 if '=' in X[0] else 0, time_str)
     return ' '.join(X)
   if msg and do['batch']: msg += " for '%s'" % args.app
@@ -142,9 +146,9 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=1,
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], do['pmu']):
       C.warn('CPU model is unrecognized; consider Linux kernel update (https://intelpedia.intel.com/IntelNext#Intel_Next_OS)', suppress_after=1)
-    if do['cmds_file'] and (not 'loop_stats' in x or args.verbose > 3) and (not x.startswith('#') or args.verbose > 2 or do['batch']):
-      do['cmds_file'].write(x + '\n')
-      do['cmds_file'].flush()
+    if globs['cmds_file'] and (not 'loop_stats' in x or args.verbose > 3) and (not x.startswith('#') or args.verbose > 2 or do['batch']):
+      globs['cmds_file'].write(x + '\n')
+      globs['cmds_file'].flush()
   return C.exe_cmd(x, msg, redir_out, debug, run, log, fail, background)
 def exe1(x, m=None, fail=1, log=True):
   if args.stdout and '| tee' in x: x, log = x.split('| tee')[0], False
@@ -154,9 +158,9 @@ def exe_v0(x='true', msg=None): return C.exe_cmd(x, msg) # don't append to cmds_
 def prn_line(f): exe_v0('echo >> %s' % f)
 def print_cmd(x, show=True):
   if show and not do['batch'] and args.verbose >= 0: C.printc(x)
-  if len(vars(args))>0 and do['cmds_file']: do['cmds_file'].write('# ' + x + '\n')
+  if len(vars(args))>0 and globs['cmds_file']: globs['cmds_file'].write('# ' + x + '\n')
 
-def bash(x, px=None): return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if 'tee >(' in x or x.startswith(Time) or px else x
+def bash(x, px=None): return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if 'tee >(' in x or x.startswith(globs['time']) or px else x
 def exe_1line(x, f=None, heavy=True):
   return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(bash(x), f, args.verbose > 1)
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
@@ -191,18 +195,18 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
   if args.install_perf:
     if args.install_perf == 'install':
       if do['package-mgr'] == 'dnf': exe('sudo yum install perf', 'installing perf')
-      else: packages += ['linux-tools-generic && ' + Find_perf]
+      else: packages += ['linux-tools-generic && ' + globs['find-perf']]
     elif args.install_perf == 'build':
       b='./build-perf.sh'
       if 'apt-get' in C.file2str(b): exe('sed -i s/apt\-get/%s/ %s'%(do['package-mgr'],b))
       exe('%s | tee %s.log'%(b, b.replace('.sh','')), 'building perf anew')
     elif args.install_perf == 'patch':
       exe_v0(msg='setting default perf')
-      a_perf = C.exe_output(Find_perf + ' | grep -v /usr/bin/perf | head -1', '')
+      a_perf = C.exe_output(globs['find-perf'] + ' | grep -v /usr/bin/perf | head -1', '')
       exe('ln -f -s %s /usr/bin/perf'%a_perf)
     else: C.error('Unsupported --perf-install option: '+args.install_perf)
   for x in do['packages']:
-    if do[x]: packages += [tunable2pkg[x] if x in tunable2pkg else x]
+    if do[x]: packages += [globs['tunable2pkg'][x] if x in globs['tunable2pkg'] else x]
   #if len(packages) and not do['package-mgr'].startswith('apt'): exe(installer.replace('install', 'makecache --refresh'), 'updating %s DB' % do['package-mgr'])
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
@@ -233,7 +237,7 @@ def tools_update(kernels=[], mask=0x7):
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
 def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' % (p, C.file2str(p), C.flag2str(' >> ', out)))
 def find_perf():
-  exe(Find_perf + " | tee find-perf.txt", fail=0)
+  exe(globs['find-perf'] + " | tee find-perf.txt", fail=0)
   for x in C.file2lines('find-perf.txt'):
     C.printc('%s: %s' % (x, exe_1line('%s --version' % x)), col=C.color.BLACK)
 
@@ -244,7 +248,7 @@ def setup_perf(actions=('set', 'log'), out=None):
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
     ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e6), 'root'),
-    ('/sys/devices/%s/perf_event_mux_interval_ms' % pmu.pmu(), PERF_MUX_INTERVAL, ),
+    ('/sys/devices/%s/perf_event_mux_interval_ms' % pmu.pmu(), globs['perf-mux-interval'], ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/nmi_watchdog', 0, ),
     ('/proc/sys/kernel/soft_watchdog', 0, ),
@@ -288,12 +292,13 @@ def msr_set(m, mask, set=True):
     return (v | mask) if set else (v & ~mask)
 def msr_clear(m, mask): return msr_set(m, mask, set=False)
 
-def log_setup(out=Setup_log, c='setup-cpuid.log', d='setup-dmesg.log'):
+def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   def label(x, tool='dmesg'): return C.grep(x, flags='-H --label %s' % tool)
   def log_patch(x, patch='| sed s/=/:\ /'): return exe("%s %s >> %s" % (x, patch, out))
   def new_line(): return prn_line(out)
   def version(tool): C.fappend('%s: %s' % (tool, exe_1line('%s --version | head -1' % tool)), out)
-  C.printc(do['pmu']) #OS
+  forcecpu = globs['force-cpu']
+  C.printc('%s%s' % (('%s/' % forcecpu.lower()) if forcecpu else '', do['pmu'])) #OS
   if args.mode == 'process': return
   exe('uname -a | sed s/Linux/Linux:/ > ' + out, 'logging setup')
   log_patch("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME'")
@@ -315,7 +320,8 @@ def log_setup(out=Setup_log, c='setup-cpuid.log', d='setup-dmesg.log'):
     label('Command line|Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
   new_line()          #PMU
-  C.fappend('PMU: %s\nTMA version:\t%s' % (do['pmu'], pmu.cpu('TMA version')), out)
+  C.fappend('PMU: %s\n%sTMA version:\t%s' % (do['pmu'], ("Force CPU: %s\n" % forcecpu.lower()) if forcecpu else '',
+                                             pmu.cpu('TMA version')), out)
   version(args.perf); setup_perf('log', out)
   new_line()          #Tools
   C.fappend('python version: ' + python_version(), out)
@@ -339,7 +345,11 @@ def get_perf_toplev():
     C.check_executable('/'.join((args.pmu_tools.split()[-1], x)))
     ptools[x] = env + args.pmu_tools + '/' + x
   if args.verbose > 5: ptools['toplev.py'] = 'OCVERBOSE=1 %s' % ptools['toplev.py']
-  if do['core']:
+  forcecpu = globs['force-cpu']
+  if forcecpu:
+    ptools['toplev.py'] += ' --force-cpu=%s' % pmu.force_cpu_toplev(forcecpu)
+    ptools['ocperf'] = 'EVENTMAP=%s %s' % (pmu.force_cpu(forcecpu), ptools['ocperf'])
+  elif do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
   return (perf, ptools['toplev.py'], ptools['ocperf'])
@@ -385,8 +395,9 @@ def profile(mask, toplev_args=['mvl6', None]):
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')):] + px.join(rapl) + ('/' if '/' in px else '')
     return 'msr/tsc/' + (power() if args.power and not pmu.v5p() else '')
   def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
-  def ilen(): return do['lbr-jcc-erratum'] or do['lbr-indirects']
-  def perf_F(): return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen() else '',
+  def perf_F(ilen=False):
+    ilen = ilen or do['lbr-jcc-erratum'] or do['lbr-indirects']
+    return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
                                                         ',+srcline' if do['loop-srcline'] else '',
                                                         ' 2>>' + err if do['loop-srcline'] else '')
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'], csv=False,
@@ -596,7 +607,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     return perf_data, n
   
   if en(8) and do['sample'] > 1:
-    assert pmu.lbr_event()[:-1] in do['perf-lbr'] or do['forgive'] > 2, 'Incorrect event for LBR in: ' + do['perf-lbr']
+    assert C.any_in((pmu.lbr_event()[:-1], 'instructions:ppp') ,do['perf-lbr']) or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
     data, nsamples = perf_record('lbr', 8)
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
@@ -676,6 +687,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       loops = '%s.loops.log' % data
       llvm_mca = '%s.llvm_mca.log' % data
       err = '%s.error.log' % data
+      ev = C.flag_value(do['perf-lbr'], '-e')
       print_info('\n%s\n#\n' % lbr_hdr)
       if not isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
@@ -688,8 +700,8 @@ def profile(mask, toplev_args=['mvl6', None]):
         misp, cmd, msg = '', perf_F(), '@info'
         if do['imix']:
           print_cmd(' '.join(('4debug', perf, 'script', perf_ic(data, perf_script.comm), cmd, '| less')), False)
-          cmd += " | tee >(%s %s %s >> %s) %s | GREP_INST | %s " % (
-            lbr_env, C.realpath('lbr_stats'), do['lbr-stats-tk'], info, misp, clean)
+          cmd += " | tee >(%s %s %s %s >> %s) %s | GREP_INST | %s " % (
+            lbr_env, C.realpath('lbr_stats'), do['lbr-stats-tk'], ev, info, misp, clean)
           if do['imix'] & 0x1:
             cmd += "| tee >(sort| sed 's/\s\+/\\t/g'|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
             msg += ', hitcounts'
@@ -713,11 +725,11 @@ def profile(mask, toplev_args=['mvl6', None]):
         cmd, top = '', min(do['loops'], int(exe_1line('wc -l %s' % loops, 0)))
         do['loops'] = top
         while top > 1:
-          cmd += ' | tee >(%s %s >> %s) ' % (C.realpath('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], info)
+          cmd += ' | tee >(%s %s %s >> %s) ' % (C.realpath('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], ev, info)
           top -= 1
-        cmd += ' | ./loop_stats %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], info)
-        print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s >> %s" % (data, comm, C.realpath('loop_stats'),
-          exe_1line('tail -1 %s' % loops, 2)[:-1], info))
+        cmd += ' | ./loop_stats %s %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info)
+        print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s %s >> %s" % (data, comm, C.realpath('loop_stats'),
+          exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info))
         perf_script("%s %s && %s" % (perf_F(), cmd,
                     C.grep('FL-cycles...[1-9][0-9]?', info, color=1)), "@detailed stats for hot loops", data,
                     export='PTOOLS_HITS=%s %s' % (hits, ('LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] else ''))
@@ -742,10 +754,10 @@ def profile(mask, toplev_args=['mvl6', None]):
     elif not is_dsb: pass
     elif top == 1:
       # asserts in skip_sample() only if piped!!
-      perf_script("-F +brstackinsn --xed | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
-        C.realpath('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
+      perf_script("%s | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
+        perf_F(ilen=True), C.realpath('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
     else:
-      perf_script("-F +brstackinsn --xed | ./lbr_stats %s | tee -a %s.ips.log" % (do['lbr-stats'], data),
+      perf_script("%s | ./lbr_stats %s | tee -a %s.ips.log" % (perf_F(ilen=True), do['lbr-stats'], data),
                   "@ stats on PEBS event", data)
     if top > 1:
       cmd = ''
@@ -753,7 +765,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         top_ip = exe_1line("egrep '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
         cmd += ' | tee >(%s %s >> %s.ctxt.log) ' % (C.realpath('lbr_stats'), top_ip, data)
         top -= 1
-      perf_script("-F +brstackinsn --xed %s > /dev/null" % cmd, "@ stats on PEBS", data)
+      perf_script("%s %s > /dev/null" % (perf_F(ilen=True), cmd), "@ stats on PEBS", data)
 
   if en(10):
     data = perf_record('ldlat', 10, record='record' if pmu.goldencove() else 'mem record')[0]
@@ -808,12 +820,18 @@ def profile(mask, toplev_args=['mvl6', None]):
   if do['help'] < 0: profile_mask_help()
   elif args.repeat == 3 and (mask_eq(0x1012) or mask_eq(0x82)):
     stats.csv2stat(C.toplev_log2csv(logs['tma']))
-    d, not_counted_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])), 'num-not_counted-stats', 'DurationTimeInMilliSeconds'
-    not_counted = d[not_counted_name]
+    d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])), \
+                                                    'num-not_counted-stats', 'num-not_supported-stats', 'DurationTimeInMilliSeconds'
+    not_counted, not_supported = d[not_counted_name], d[not_supported_name]
     if not mask_eq(0x80):
-      assert d[time] > tma.get('num-mux-groups') * PERF_MUX_INTERVAL, "Too short run time! %f [ms]" % d[time]
-      not_counted += stats.read_perf_toplev(C.toplev_log2csv(logs['info']))[not_counted_name]
-    assert not_counted == 0, "invalid collection! %s=%d log= %s" % (not_counted_name, not_counted, logs['tma'])
+      assert d[time] > tma.get('num-mux-groups') * globs['perf-mux-interval'], "Too short run time! %f [ms]" % d[time]
+      toplev_d = stats.read_perf_toplev(C.toplev_log2csv(logs['info']))
+      not_counted += toplev_d[not_counted_name]
+      not_supported += toplev_d[not_supported_name]
+    if not_counted > 0 or not_supported > 0:
+      msg = "invalid collection! log= %s" % logs['tma']
+      if not_counted > 0: error("%s %s=%d" % (msg, not_counted_name, not_counted))
+      if not_supported > 0: error("%s %s=%d" % (msg, not_supported_name, not_supported))
   #profile-end
 
 def do_logs(cmd, ext=[], tag=''):
@@ -823,7 +841,7 @@ def do_logs(cmd, ext=[], tag=''):
     if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
   s = (uniq_name() if user_app() else '')
   if cmd == 'tar':
-    files = C.glob('.'+s+'*.cmd') + (C.glob('setup*') if isfile(Setup_log) else [])
+    files = C.glob('.'+s+'*.cmd') + (C.glob('setup*') if isfile(globs['setup-log']) else [])
     for f in C.glob(s+'*'):
       if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
     if isfile('run.sh'): files += ['run.sh']
@@ -844,9 +862,12 @@ def build_kernel(dir='./kernels/'):
 def parse_args():
   def help_s_arg(x): return x + ' profiling for x seconds. disabled by default'
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
+  epilog = """environment variables:
+    FORCECPU - force a specific CPU all over e.g. SPR, spr.
+  """
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
     defs={'perf': 'perf', 'pmu-tools': '%s %s/pmu-tools' % (do['python'], C.dirname()),
-          'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']})
+          'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']}, epilog=epilog)
   ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
@@ -888,7 +909,7 @@ def main():
   if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
   perfv = exe_1line(args.perf + ' --version', heavy=False)
   if C.any_in([x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')], perfv): C.error('Unsupported perf tool: ' + perfv)
-  do['perf-ldlat'] = do['perf-ldlat'].replace(LDLAT_DEF, str(do['ldlat']))
+  do['perf-ldlat'] = do['perf-ldlat'].replace(globs['ldlat-def'], str(do['ldlat']))
   if do['perf-stat-add'] > 0:
     x = ',branches,branch-misses'
     if args.repeat > 1: x += ',cycles:k'
@@ -930,8 +951,8 @@ def main():
     cmds_file = '.%s.cmd' % uniq_name()
     if isfile(cmds_file):
       C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)
-    do['cmds_file'] = open(cmds_file, 'w')
-    do['cmds_file'].write('# %s\n' % do_cmd)
+    globs['cmds_file'] = open(cmds_file, 'w')
+    globs['cmds_file'].write('# %s\n' % do_cmd)
   if args.verbose > 5: C.printc(str(args))
   if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1
@@ -1007,4 +1028,4 @@ def get(param):
 
 if __name__ == "__main__":
   main()
-  if do['cmds_file']: do['cmds_file'].close()
+  if globs['cmds_file']: globs['cmds_file'].close()

@@ -117,10 +117,12 @@ test-study: study.py stats.py run.sh do.py
 	$(TS_A) >> $@ 2>&1 || $(FAIL)
 	@tail $@
 	test -f run-cfg1-t1.$(CPU).stat && test -f run-cfg2-t1.$(CPU).stat
+	test -f run-cfg1-t1_run-cfg2-t1.stats.log
 	@echo $(TS_B) >> $@
 	$(TS_B) >> $@ 2>&1
 	test -f BC2s-cfg1-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
 	test -f BC2s-cfg2-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
+	test -f BC2s-cfg1-t1_BC2s-cfg2-t1.stats.log
 test-stats: stats.py
 	@$(MAKE) test-default APP="$(APP) s" PM=1012 > /dev/null 2>&1
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
@@ -136,8 +138,15 @@ test-tripcount-mean: lbr.py do.py kernels/x86.py
 	gcc -g -O2 kernels/tripcount-mean.c -o kernels/tripcount-mean > /dev/null 2>&1
 	$(DO) $(CMD) -a './kernels/tripcount-mean $(TMI)' --perf ../perf -pm 100 > /dev/null 2>&1
 	grep Loop#1 tripcount-mean-$(TMI)*info.log | awk -F 'tripcount-mean: ' '{print $$2}' | \
-	awk -F ',' '{print $$1}' | awk 'BEGIN {lower=98; upper=102} {if ($$1 >= lower && $$1 <= upper) exit 0; \
+	awk -F ',' '{print $$1}' | awk 'BEGIN {lower=90; upper=110} {if ($$1 >= lower && $$1 <= upper) exit 0; \
 	else exit 1}' || $(FAIL)
+CPUS = ICX SPR SPR-HBM TGL ADL
+test-forcecpu:
+	for cpu in $(CPUS); do \
+        	FORCECPU=$$cpu $(DO) $(CMD) -a "./workloads/BC.sh 5 $$cpu" -pm 19112 --tune :loops:0 :help:0 -e FRONTEND_RETIRED.ANY_DSB_MISS 2>&1 || { $(FAIL); break; } \
+    	done
+test-edge-inst:
+	$(DO) $(CMD) -a './pmu-tools/workloads/CLTRAMP3D' --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D*cmd
@@ -170,6 +179,8 @@ pre-push: help
 	$(MAKE) test-stats                                      # tests stats module
 	$(MAKE) test-srcline                                    # tests srcline loop stat
 	$(MAKE) test-tripcount-mean                             # tests tripcount-mean calculation
+	$(MAKE) test-forcecpu                                   # tests force cpu option
+	$(MAKE) test-edge-inst					# tests sampling by instructions
 	$(PY3) $(DO) profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC

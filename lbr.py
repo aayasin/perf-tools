@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.01 # see version line of do.py
+__version__= x86.__version__ + 2.03 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -266,7 +266,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           if not erratum is None: loop['jcc-erratum'] = erratum
           for i in types: loop[i] = cnt[i]
           hexa = lambda x: hex(x)[2:]
-          loop['ID'] = hexa(loop['load']) + hexa(loop['store']) + hexa(loop['Conds']) + hexa(loop['lea'])
+          loop['imix-ID'] = hexa(loop['load']) + hexa(loop['store']) + hexa(loop['Conds']) + hexa(loop['lea'])
           if len(conds):
             loop['Cond_polarity'] = {}
             for c in conds: loop['Cond_polarity'][c] = {'tk': 0, 'nt': 0}
@@ -302,7 +302,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           ins.add(hex_ip(l))
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(hex_ip(ip))
-      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'ID': None, 'attributes': '',
+      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'imix-ID': None, 'attributes': '',
         'entry-block': 0 if xip > ip else find_block_ip()[0], #'BK': {hex(xip): 1, },
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
@@ -355,6 +355,7 @@ hsts = {}
 footprint = set()
 pages = set()
 indirects = set()
+ips_after_uncond_jmp = set()
 
 def inc_pair(first, second='JCC', suffix='non-fusible'):
   c = '%s-%s %s' % (first, second, suffix)
@@ -428,47 +429,47 @@ def edge_stats(line, lines, xip, size):
         idx -= 1
       i += 1
     return lines[idx]
-  p_line = prev_line()
-  if 'dsb-heatmap' in hsts and (is_taken(p_line) or new_line):
+  xline = prev_line()
+  if 'dsb-heatmap' in hsts and (is_taken(xline) or new_line):
     inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
-  if 'indirect-x2g' in hsts and is_type(x86.INDIRECT, p_line):
-    ilen = get_ilen(p_line) or 2
+  if 'indirect-x2g' in hsts and is_type(x86.INDIRECT, xline):
+    ilen = get_ilen(xline) or 2
     if abs(ip - (xip + ilen)) >= 2 ** 31:
       inc(hsts['indirect-x2g'], xip)
-      if 'MISP' in p_line: inc(hsts['indirect-x2g-misp'], xip)
+      if 'MISP' in xline: inc(hsts['indirect-x2g-misp'], xip)
   if xip in indirects:
     inc(hsts['indirect_%s_targets' % hex_ip(xip)], ip)
     inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
-  if is_type(x86.COND_BR, p_line) and is_taken(p_line):
+  if is_type(x86.COND_BR, xline) and is_taken(xline):
     glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
   # checks all lines but first
   if is_type(x86.COND_BR, line):
     if is_taken(line): glob['cond_taken-not-first'] += 1
     else: glob['cond_non-taken'] += 1
-    if x86.is_jcc_fusion(p_line, line):
+    if x86.is_jcc_fusion(xline, line):
       glob['cond_fusible'] += 1
-      if size > 1 and is_type(x86.TEST_CMP, p_line) and is_type(x86.LOAD, prev_line(-2)):
+      if size > 1 and is_type(x86.TEST_CMP, xline) and is_type(x86.LOAD, prev_line(-2)):
         inc_pair('LD-CMP', suffix='fusible')
     else:
       glob['cond_non-fusible'] += 1
-      if x86.is_mem_imm(p_line):
-        inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if is_type(x86.TEST_CMP, p_line) else 'OTHER',
-                                      '' if is_type(x86.MEM_IDX, p_line) else 'NO'))
+      if x86.is_mem_imm(xline):
+        inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if is_type(x86.TEST_CMP, xline) else 'OTHER',
+                                      '' if is_type(x86.MEM_IDX, xline) else 'NO'))
       else:
         counted = False
         for x in user_jcc_pair:
-          if is_type(x.lower(), p_line):
+          if is_type(x.lower(), xline):
             counted = inc_pair(x)
             break
         if counted: pass
-        elif is_type(x86.COND_BR, p_line): counted = inc_pair('JCC')
-        elif is_type(x86.COMI, p_line): counted = inc_pair('COMI')
+        elif is_type(x86.COND_BR, xline): counted = inc_pair('JCC')
+        elif is_type(x86.COMI, xline): counted = inc_pair('COMI')
         if size > 1 and x86.is_jcc_fusion(prev_line(-2), line):
           def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
-          if is_type(x86.MOV, p_line): inc_pair2('MOV')
-          elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", p_line): inc_pair2('LEA-1')
+          if is_type(x86.MOV, xline): inc_pair2('MOV')
+          elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
   # check erratum for line (with no consideration of macro-fusion with previous line)
-  if is_jcc_erratum(line, None if size == 1 else p_line): inc_stat('JCC-erratum')
+  if is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
   if verbose & 0x1 and is_type('ret', line):
     insts_per_call, x = 0, len(lines) - 1
     while x > 0:
@@ -489,10 +490,11 @@ def edge_stats(line, lines, xip, size):
       if not is_label(lines[x]): insts_per_call += 1
       x -= 1
   if size <= 1: return # a sample with >= 2 instructions after this point
-  if not x86.is_jcc_fusion(p_line, line):
-    if x86.is_ld_op_fusion(prev_line(-2), p_line): inc_pair('LD', 'OP', suffix='fusible')
-    elif x86.is_mov_op_fusion(prev_line(-2), p_line): inc_pair('MOV', 'OP', suffix='fusible')
-  if is_type('call', p_line): inc(hsts[FUNCI], ip)
+  if not x86.is_jcc_fusion(xline, line):
+    x2line = prev_line(-2)
+    if x86.is_ld_op_fusion(x2line, xline): inc_pair('LD', 'OP', suffix='fusible')
+    elif x86.is_mov_op_fusion(x2line, xline): inc_pair('MOV', 'OP', suffix='fusible')
+  if is_type('call', xline): inc(hsts[FUNCI], ip)
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_latency=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
@@ -618,7 +620,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         invalid('bad', tag)
         break
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
-      # TODO: replace with this line when labels is True
       if skip_bad and len(lines) and not is_label(line) and not line.strip().startswith('0'):
         if debug and debug == timestamp:
           exit(line, lines, "bad line")
@@ -647,14 +648,15 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
       if not labels and size > 0: detect_loop(ip, lines, loop_ipc, takens, srcline)
       if skip_bad: tc_state = loop_stats(line, loop_ipc, tc_state)
       if edge_en:
-        if len(takens):
-          if is_taken(line):
-            if verbose & 0x2: #FUNCR
-              x = get_taken_idx(lines, -1)
-              if x >= 0:
-                if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
-                if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
+        if len(takens) and is_taken(line) and verbose & 0x2: #FUNCR
+          x = get_taken_idx(lines, -1)
+          if x >= 0:
+            if is_type('call', line): count_of('st-stack', lines, x+1, FUNCP)
+            if is_type('call', lines[x]): count_of('push', lines, x+1, FUNCR)
         edge_stats(line, lines, xip, size)
+      if (edge_en or 'DSB_MISS' in event) and is_type('jmp', line):
+        ilen = get_ilen(line)
+        if ilen: ips_after_uncond_jmp.add(ip + ilen)
       assert len(lines) or event in line
       line = line.rstrip('\r\n')
       if has_timing(line):
@@ -714,6 +716,8 @@ def is_jmp_next(br, # a hacky implementation for now
 
 def has_timing(line): return line.endswith('IPC')
 def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else False
+
+def is_after_uncond_jmp(ip): return ip in ips_after_uncond_jmp
 
 def is_jcc_erratum(line, previous=None):
   # JCC/CALL/RET/JMP
@@ -849,8 +853,9 @@ def print_hist(hist_t, Threshold=0.01):
 def print_hist_sum(name, h):
   s = sum(hsts[h].values())
   print_stat(name, s, comment='histogram' if s else '')
-def print_stat(name, count, prefix='count', comment='', ratio_of=None, log=None):
-  def c(x): return x.replace(':', '-')
+
+c = lambda x: x.replace(':', '-')
+def stat_name(name, prefix='count', ratio_of=None):
   def nm(x):
     if not ratio_of or ratio_of[0] != 'ALL': return x
     n = (x if 'cond' in name or 'fusible' in name else x.upper()) + ' '
@@ -861,9 +866,11 @@ def print_stat(name, count, prefix='count', comment='', ratio_of=None, log=None)
     elif 'fusible' in name: n += 'pairs'
     else: n += 'instructions'
     return n
+  return '%s of %s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 60 - len(prefix)))
+def print_stat(name, count, prefix='count', comment='', ratio_of=None, log=None):
   if len(comment): comment = '\t:(see %s below)' % c(comment)
   elif ratio_of: comment = '\t: %7s of %s' % (ratio(count, ratio_of[1]), ratio_of[0])
-  res = '%s of %s: %10s%s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 60 - len(prefix)), str(count), comment)
+  res = '%s: %10s%s' % (stat_name(name, prefix=prefix, ratio_of=ratio_of), str(count), comment)
   C.fappend(res, log) if log else print(res)
 def print_estimate(name, s): print_stat(name, s, 'estimate')
 def print_imix_stat(n, c): print_stat(n, c, ratio_of=('ALL', glob['all']))
@@ -883,6 +890,8 @@ def print_global_stats():
              ratio_of=('total cycles', stat['total_cycles']))
   for n in (4, 5, 6): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
                                  prefix='proxy count', ratio_of=('loops', len(loops)))
+  print_stat(nc('non-contiguous loops'), len([l for l in loops.keys() if 'non-contiguous' in loops[l]['attributes']]),
+             prefix='proxy count', ratio_of=('loops', len(loops)))
   print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
   if glob['size_stats_en']:
     for x in Insts_cond: print_imix_stat(x + ' conditional', glob['cond_' + x])
@@ -986,7 +995,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   fixl = ['hotness']
   if 'srcline' in loop: fixl.append('srcline')
   if glob['loop_cycles']: fixl.append('FL-cycles%')
-  fixl += ['size', 'ID']
+  fixl += ['size', 'imix-ID']
   loop['hotness'] = '%6d' % loop['hotness']
   loop['size'] = str(loop['size']) if loop['size'] else '-'
   printl('%soop#%d: [ip: %s, ' % ('L' if detailed else 'l', num, hex_ip(ip)))
@@ -994,7 +1003,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   if not glob['loop_stats_en']: del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
-  dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'ID', 'back', 'entry-block', 'IPC', 'tripcount']
+  dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'imix-ID', 'back', 'entry-block', 'IPC', 'tripcount']
   for x in paths_range(): dell += ['paths-%d'%x]
   if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)

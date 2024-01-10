@@ -458,7 +458,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   perf_script.first = True
   perf_script.comm = do['comm']
   def record_name(flags): return '%s%s' % (out, C.chop(flags, (C.CHOP_STUFF, 'cpu_core', 'cpu')))
-  def get_stat(s, default): return stats.get_stat_log(s, logs['stat']) if isfile(logs['stat']) else default
+  def get_stat(s, default=None): return stats.get_stat_log(s, logs['stat']) if isfile(logs['stat']) else default
   def record_calibrate(x):
     factor = do['calibrate']
     if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs_utilized', 1)))
@@ -703,7 +703,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       print_info('\n%s\n#\n' % lbr_hdr)
       if not isfile(hits) or do['reprocess']:
         lbr_env = "LBR_LOOPS_LOG=%s" % loops
-        cycles = get_stat(pmu.event('cycles'), 0)
+        cycles = get_stat(pmu.event('cycles')) or get_stat('cycles', 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if args.verbose > 2: do['lbr-verbose'] |= 0x800
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=0x%x" % (do['lbr-verbose'] | C.env2int('LBR_VERBOSE', base=16))

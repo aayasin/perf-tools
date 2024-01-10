@@ -33,18 +33,20 @@ def print_metrics(app):
 
 def write_stat(app): return csv2stat(C.command_basename(app) + '.toplev-vl6-perf.csv')
 
+debug = 0
+sDB = {}
+stats = {'verbose': 0}
+
 # internal methods
 def get_stat_int(s, c, stat_file=None, val=-1):
   rollup(c, stat_file)
+  val = None
   try:
     val = sDB[c][s]
   except KeyError:
     C.warn('KeyError for stat: %s, in config: %s' % (s, c))
+  if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, stat_file, str(val)))
   return val
-
-debug = 0
-sDB = {}
-stats = {'verbose': 0}
 
 def rollup_all(stat=None):
   sDB['ALL'], csv_file, reload = {}, 'rollup.csv', None
@@ -118,7 +120,7 @@ def rollup(c, perf_stat_file=None):
   sDB[c] = read_perf(perf_stat_file)
   sDB[c].update(read_toplev(c + '.toplev-vl6.log'))
   sDB[c].update(read_toplev(c + '.toplev-mvl2.log'))
-  if debug: print_DB(c)
+  if debug > 1: print_DB(c)
 
 def print_DB(c):
   d = {}
@@ -143,11 +145,11 @@ def read_perf(f):
     if e == 'r2424': d['L2MPKI_Code'] = 1000 * val / inst
     if e == 'topdown-retiring': d['UopPI'] = v / inst
   if f == None: return calc_metric(None) # a hack!
-  if debug > 2: print('reading %s' % f)
+  if debug > 3: print('reading %s' % f)
   lines = C.file2lines(f)
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
   for l in lines:
-    if debug > 3: print('debug:', l)
+    if debug > 5: print('debug:', l)
     if 'atom' in l: continue
     try:
       name, val, var, name2, val2, name3, val3 = parse_perf(l)
@@ -159,7 +161,7 @@ def read_perf(f):
       if name3: d[name3] = val3
     except ValueError or IndexError:
       C.warn("cannot parse: '%s' in %s" % (l, f))
-  if debug > 1: print(d)
+  if debug > 2: print(d)
   return d
 
 def parse_perf(l):
@@ -179,7 +181,7 @@ def parse_perf(l):
     name = 'time'
     val = convert(items[0])
     var = get_var(2)
-  elif '#' in l:
+  elif '#' in l or 'cycles' in l:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
     if name.count('_') >= 1 and name.islower() and not re.match('^(cpu_core/|perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
@@ -205,7 +207,7 @@ def parse_perf(l):
       elif name2 in Renames: name2 = Renames[name2]
       val2 = convert(val2, adjust_percent=False)
       name2 = name2.replace('-', '_')
-  if debug > 4: print('debug:', name, val, var, name2, val2, name3, val3)
+  if debug > 6: print('debug:', name, val, var, name2, val2, name3, val3)
   return name, val, var, name2, val2, name3, val3
 
 # Should move this to a new analysis module
@@ -220,13 +222,13 @@ Key2group = {
 
 def read_toplev(filename, metric=None):
   d = {}
-  if debug > 2: print('reading %s' % filename)
+  if debug > 3: print('reading %s' % filename)
   if not os.path.exists(filename): return d
   for l in C.file2lines(filename):
     try:
       if not re.match(r"^(|core )(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
       items = l.strip().split()
-      if debug > 3: print('debug:', len(items), items, l)
+      if debug > 5: print('debug:', len(items), items, l)
       if items[0] == 'core': items.pop(0)
       if 'Info.Bot' in items[0]:
         d[items[1]] = float(items[3])
@@ -241,17 +243,17 @@ def read_toplev(filename, metric=None):
       C.warn("cannot parse: '%s'" % l)
     except AttributeError:
       C.warn("empty file: '%s'" % filename)
-  if debug > 1: print(d)
+  if debug > 2: print(d)
   if metric:
     r = d[metric] if metric in d else None
-    if debug: print('stats.read_toplev(filename=%s, metric=%s) = %s' % (filename, metric, str(r)))
+    if debug > 0: print('stats: read_toplev(filename=%s, metric=%s) = %s' % (filename, metric, str(r)))
     return r
   return d
 
 def read_perf_toplev(filename):
   perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
   d = {'num-zero-stats': 0, 'num-not_counted-stats': 0, 'num-not_supported-stats': 0}
-  if debug > 2: print('reading %s' % filename)
+  if debug > 3: print('reading %s' % filename)
   with open(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
     for r in reader:
@@ -335,7 +337,7 @@ def perf_log2stat(log, smt_on, d={}):
   def user_events(f):
     ue = {}
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
-    if debug > 2: print('reading %s' % f)
+    if debug > 3: print('reading %s' % f)
     for l in C.file2lines(f):
       name, val, etc, name2, val2 = parse_perf(l)[0:5]
       if name: ue[name] = val.replace(' ', '-') if type(val) == str else val

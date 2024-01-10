@@ -97,7 +97,6 @@ do = {'run':        C.RUN_DEF,
   'perf-stat-ipc':  'stat -e instructions,cycles',
   'pin':            'taskset 0x4',
   'plot':           0,
-  'pmu':            pmu.name(),
   'python':         sys.executable,
   'python-pkgs':    ['numpy', 'pandas', 'xlsxwriter'],
   'reprocess':      2,
@@ -144,7 +143,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=1,
     elif '--xed' in x and not isfile(C.Globals['xed']): C.error('!\n'.join(('xed was not installed',
       "required by '%s' in perf-script of '%s'" % (msg, x), 'try: ./do.py setup-all --tune :xed:1 ')))
     if background: x = x + ' &'
-    if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], do['pmu']):
+    if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], pmu.name()):
       C.warn('CPU model is unrecognized; consider Linux kernel update (https://intelpedia.intel.com/IntelNext#Intel_Next_OS)', suppress_after=1)
     if globs['cmds_file'] and (not 'loop_stats' in x or args.verbose > 3) and (not x.startswith('#') or args.verbose > 2 or do['batch']):
       globs['cmds_file'].write(x + '\n')
@@ -298,7 +297,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   def new_line(): return prn_line(out)
   def version(tool): C.fappend('%s: %s' % (tool, exe_1line('%s --version | head -1' % tool)), out)
   forcecpu = globs['force-cpu']
-  C.printc('%s%s' % (('%s/' % forcecpu.lower()) if forcecpu else '', do['pmu'])) #OS
+  C.printc('%s%s' % (('%s/' % forcecpu.lower()) if forcecpu else '', pmu.name(real=True))) #OS
   if args.mode == 'process': return
   exe('uname -a | sed s/Linux/Linux:/ > ' + out, 'logging setup')
   log_patch("cat /etc/os-release | egrep -v 'URL|ID_LIKE|CODENAME'")
@@ -320,7 +319,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
     label('Command line|Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
   new_line()          #PMU
-  C.fappend('PMU: %s\n%sTMA version:\t%s' % (do['pmu'], ("Force CPU: %s\n" % forcecpu.lower()) if forcecpu else '',
+  C.fappend('PMU: %s\n%sTMA version:\t%s' % (pmu.name(real=True), ("Force CPU: %s\n" % forcecpu.lower()) if forcecpu else '',
                                              pmu.cpu('TMA version')), out)
   version(args.perf); setup_perf('log', out)
   new_line()          #Tools

@@ -32,7 +32,7 @@ def skylake():    return name() in ('skylake', 'skl')
 def icelake():    return name() in ('icelake', 'icx')
 def alderlake():  return name() in ('alderlake_hybrid', 'adl')
 def sapphire():   return name() in ('sapphire_rapids', 'spr', 'spr-hbm')
-def meteorlake(): return name() == ('meteorlake_hybrid', 'mtl')
+def meteorlake(): return name() in ('meteorlake_hybrid', 'mtl')
 # aggregations
 def goldencove():   return alderlake() or sapphire()
 def redwoodcove():  return meteorlake()

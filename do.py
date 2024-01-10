@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.89
+__version__ = 2.90
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -127,7 +127,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=1,
   if not do['tee']: x = x.split('|')[0]
   x = x.replace('| ./', '| %s/' % C.dirname())
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
-  profiling = C.any_in([' stat', ' record', 'toplev.py'], x)
+  profiling = C.any_in([' stat', ' record', 'toplev.py', 'genretlat'], x)
   if do['time'] and profiling: timeit = True
   if timeit and not export: x = get_time_cmd()
   x = bash(x, export).replace('  ', ' ').strip()
@@ -273,7 +273,7 @@ def smt(x='off'):
   if do['super']: exe(args.pmu_tools + '/cputop "thread == 1" %sline | sudo sh'%x)
 def atom(x='offline'):
   exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
-  exe("for x in {16..23}; do echo %d | sudo tee /sys/devices/system/cpu/cpu$x/online; done" %
+  print(".. or try: for x in {16..23}; do echo %d | sudo tee /sys/devices/system/cpu/cpu$x/online; done" %
     (0 if x == 'offline' else 1))
 def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')):
   if x == 'on':
@@ -341,7 +341,7 @@ def get_perf_toplev():
   if perf != 'perf':
     C.check_executable(perf)
     env = 'PERF=%s ' % perf
-  for x in ('toplev.py', 'ocperf'):
+  for x in ('toplev.py', 'ocperf', 'genretlat'):
     C.check_executable('/'.join((args.pmu_tools.split()[-1], x)))
     ptools[x] = env + args.pmu_tools + '/' + x
   if args.verbose > 5: ptools['toplev.py'] = 'OCVERBOSE=1 %s' % ptools['toplev.py']
@@ -352,11 +352,11 @@ def get_perf_toplev():
   elif do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
-  return (perf, ptools['toplev.py'], ptools['ocperf'])
+  return (perf, ptools['toplev.py'], ptools['ocperf'], ptools['genretlat'])
 
 def profile(mask, toplev_args=['mvl6', None]):
   out, profile_help = uniq_name(), {}
-  perf, toplev, ocperf = get_perf_toplev()
+  perf, toplev, ocperf, genretlat = get_perf_toplev()
   base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
   logs = {'stat': None, 'code': base + '-code.log', 'tma': None}
   def profile_exe(cmd, msg, step, mode='redirect', tune='', fail=0):
@@ -503,12 +503,17 @@ def profile(mask, toplev_args=['mvl6', None]):
   if do['plot']: toplev += ' --graph -I%d --no-multiplex' % do['interval']
   grep_bk= "egrep '<==|MUX|Info(\.Bot|.*Time)|warning.*zero' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
   tl_skip= "not (found|referenced|supported)|Unknown sample event|^unreferenced "
-  grep_NZ= "egrep -iv '^(all|)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|%s|##placeholder##' " % tl_skip
+  grep_NZ= "egrep -iv '^(all|core |)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|%s|##placeholder##' " % tl_skip
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', ' < [\[\+]|<$')
   def toplev_V(v, tag='', nodes=do['nodes'],
                tlargs = toplev_args[1] if toplev_args[1] else args.toplev_args):
     o = '%s.toplev%s%s.log' % (out, v.split()[0]+tag, '-nomux' if 'no-multiplex' in tlargs else '')
+    if pmu.redwoodcove_on():
+      retlat = '%s/%s-retlat.json' % (C.dirname(), out)
+      tlargs += ' --ret-latency %s' % retlat
+      if profiling() and not isfile(retlat):
+        exe('%s -q -o %s -- %s' % (genretlat, retlat, r), 'calibrating retire latencies for toplev')
     c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, C.toplev_log2csv(o), tlargs, r)
     if ' --global' in c:
       # https://github.com/andikleen/pmu-tools/issues/453
@@ -579,6 +584,14 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd, log = toplev_V('-vl2', tag='-'+group, nodes=tma.get('fixed'), tlargs=args.toplev_args.replace(MG, ',+'.join((MG, group))))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
+
+  if en(16):
+    if profiling():
+      if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
+      if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
+    logs['bott'] = perf_stat('-r1', 'bottlenecks-view', 16, tma.get('perf-groups'),
+      perfmetrics=None, basic_events=False, last_events='', grep="| egrep 'seconds [st]|inst_retired_any '", warn=False)
+    if do['help'] >= 0: stats.perf_log2stat(logs['bott'], 0)
 
   if en(14) and (pmu.meteorlake() or do['help']<0):
     flags, raw, events = '-W -c 20011', 'raw' in do['model'], pmu.get_events(do['model'])
@@ -781,14 +794,6 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd, logs['tma'] = toplev_V('-%s --no-multiplex' % toplev_args[0], '-nomux', ','.join((do['nodes'], do['extra-metrics'])))
     profile_exe(cmd + " | tee %s | %s" % (logs['tma'], grep_nz), 'topdown-%s no multiplexing' % toplev_args[0], 7)
 
-  if en(16):
-    if profiling():
-      if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
-      if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
-    logs['bott'] = perf_stat('-r1', 'bottlenecks-view', 16, tma.get('perf-groups'),
-              perfmetrics=None, basic_events=False, last_events='', grep="| egrep 'seconds [st]|inst_retired_any '", warn=False)
-    if do['help'] >= 0: stats.perf_log2stat(logs['bott'], 0)
-
   if en(17):
     csv_file = perf_stat('-I%d' % do['interval'], 'over-time counting at %dms interval' % do['interval'], 17, csv=True)
     if args.events:
@@ -835,7 +840,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   #profile-end
 
 def do_logs(cmd, ext=[], tag=''):
-  log_files = ['', 'csv', 'log', 'stat', 'xlsx', 'svg'] + ext
+  log_files = ['', 'csv', 'json', 'log', 'stat', 'svg', 'xlsx'] + ext
   if cmd == 'tar':
     r = '.'.join((tag, pmu.cpu('CPU'), 'results.tar.gz')) if len(tag) else C.error('do_logs(tar): expecting tag')
     if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
@@ -929,6 +934,9 @@ def main():
   elif args.mode == 'both' and args.verbose >= 0 and args.profile_mask & 0x100 and not (args.profile_mask & 0x2):
     C.warn("Better enable 'per-app counting' profile-step with LBR; try '-pm %x'" % (args.profile_mask | 0x2))
   record_steps = ('record', 'lbr', 'pebs', 'ldlat', 'pt')
+  if pmu.hybrid() and args.profile_mask & 0x10000:
+    C.warn('bottlenecks view not supported on Hybrid. disabling..')
+    args.profile_mask &= ~0x10000
   if args.sys_wide:
     if profiling(): C.info('system-wide profiling')
     do['run'] = 'sleep %d'%args.sys_wide

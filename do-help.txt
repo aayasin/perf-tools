@@ -64,3 +64,5 @@ optional arguments:
                         args to gen-kernel.py (default: None)
   -ki APP_ITERATIONS, --app-iterations APP_ITERATIONS
                         num-iterations of kernel (default: 1e9)
+
+environment variables: FORCECPU - force a specific CPU all over e.g. SPR, spr.

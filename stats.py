@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.92
+__version__= 0.93
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -182,7 +182,7 @@ def parse_perf(l):
   elif '#' in l:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
-    if name.count('_') >= 1 and name.islower() and not re.match('^(perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
+    if name.count('_') >= 1 and name.islower() and not re.match('^(cpu_core/|perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
       base_event = name.split(':')[0]
       Name = name.replace(base_event, pmu.toplev2intel_name(base_event))
       assert not ':C1' in Name # Name = Name.replace(':C1', ':c1')
@@ -224,9 +224,10 @@ def read_toplev(filename, metric=None):
   if not os.path.exists(filename): return d
   for l in C.file2lines(filename):
     try:
-      if not re.match(r"^(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
+      if not re.match(r"^(|core )(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
       items = l.strip().split()
       if debug > 3: print('debug:', len(items), items, l)
+      if items[0] == 'core': items.pop(0)
       if 'Info.Bot' in items[0]:
         d[items[1]] = float(items[3])
       elif '<==' in l:

@@ -232,7 +232,7 @@ def compare_stats(app1, app2):
               break
       if not i2: continue
       ipc2 = get_value(stats2, 'Loop#%s IPC-mode' % i2)
-      if ipc1 > ipc2 and (ipc2 or args.show_none):
+      if ipc2 and ipc1 > ipc2 or args.show_all:
         key = 'Loop:%s #%s #%s IPC-mode' % (id, i1, i2)
         if not C.any_in(args.skip, key):
           regress_ipcs.append((key, ipc1, ipc2, calc(ipc1, ipc2, op='diff'), calc(ipc1, ipc2)))

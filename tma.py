@@ -24,7 +24,9 @@ def fixed_metrics(intel_names=False, force_glc=False):
       events += prepend(['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound'])
       flags = ' --td-level=2'
     events = '{%s}' % events
-    if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
+    if pmu.hybrid():
+      for x, y in ((prefix, '/,cpu_core/topdown-'), ('}', '/}'), ('{slots/', '{slots'), ('ref-cycles/,', 'ref-cycles,')):
+        events = events.replace(x, y)
   return events, flags
 
 metrics = {

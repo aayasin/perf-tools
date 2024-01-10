@@ -42,6 +42,8 @@ def v4p(): return os.path.exists(sys_devices_cpu() + '/format/frontend') # PEBS_
 def v5p(): return perfmetrics()
 # Golden Cove onward PMUs have Arch LBR
 def goldencove_on():  return cpu_has_feature('arch_lbr')
+# Redwood Cove onward PMUs have CPUID.0x23
+def redwoodcove_on(): return cpu_has_feature('CPUID.23H')
 
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
@@ -143,6 +145,8 @@ def toplev2intel_name(e):
 # CPU, cpu_ prefix
 #
 def cpu_has_feature(feature):
+  if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
+    return not C.exe_cmd("egrep -q '\s+0x00000023 0x00: eax=0x000000.[^0] ' setup-cpuid.log", fail=-1)
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags
 

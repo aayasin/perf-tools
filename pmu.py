@@ -23,14 +23,16 @@ else:
 # PMU, no prefix
 #
 def sys_devices_cpu(): return '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
-def name():       return C.file2str(sys_devices_cpu() + '/caps/pmu_name') or 'Unknown PMU'
+def name(real=False):
+  forcecpu = C.env2str('FORCECPU')
+  return C.file2str(sys_devices_cpu() + '/caps/pmu_name') or 'Unknown PMU' if real or not forcecpu else forcecpu.lower()
 
 # per CPU PMUs
-def skylake():    return name() == 'skylake'
-def icelake():    return name() == 'icelake'
-def alderlake():  return name() == 'alderlake_hybrid'
-def sapphire():   return name() == 'sapphire_rapids'
-def meteorlake(): return name() == 'meteorlake_hybrid'
+def skylake():    return name() in ('skylake', 'skl')
+def icelake():    return name() in ('icelake', 'icx')
+def alderlake():  return name() in ('alderlake_hybrid', 'adl')
+def sapphire():   return name() in ('sapphire_rapids', 'spr', 'spr-hbm')
+def meteorlake(): return name() == ('meteorlake_hybrid', 'mtl')
 # aggregations
 def goldencove():   return alderlake() or sapphire()
 def redwoodcove():  return meteorlake()

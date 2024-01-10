@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2023, Intel Corporation
-# Author: Ahmad Yasin, Sinduri Gundu
+# Copyright (c) 2020-2024, Intel Corporation
+# Authors: Ahmad Yasin, Sinduri Gundu
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
 # GNU General Public License, version 2, as published by the Free Software Foundation.
 #   This program is distributed in the hope it will be useful, but WITHOUT ANY WARRANTY; without even the implied
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-import os
-import sys
-import argparse
-import subprocess
-import re
-import textwrap
+import argparse, os, subprocess, sys
 
 assert sys.version_info.major >=3, "Python version 3.0 or higher is required."
 
 cwd = os.getcwd()
 sys.path.append(cwd[:cwd.rfind('kernels')]) #Add directory containing pmu.py to the path
-from pmu import goldencove, server, cpu_pipeline_width
+from pmu import goldencove_on, server, cpu_pipeline_width
 from common import exe_cmd
 
 parser = argparse.ArgumentParser(
@@ -104,7 +99,7 @@ for kernel in kernels:
 build_kernel('callchain', flags='-O0 -fno-inline')
 build_kernel('false-sharing', flags='-O0 -pthread')
 build_kernel('cond_jmp', flags='-O0')
-if goldencove():
+if goldencove_on():
     build_kernel('tpause', flags='-march=native')# requires newer GCC and binutils
 build_kernel('tpause', output='rdtsc', flags='-march=native -DRDTSC_ONLY')
 

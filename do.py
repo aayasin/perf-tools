@@ -38,7 +38,7 @@ globs = {
   'time':               '/usr/bin/time',
   'tunable2pkg':        {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python3-pip'},
   'uname-a':            C.exe_one_line('uname -a')
-  }
+}
 if globs['uname-a'].startswith('Darwin'):
   C.error("Are you on MacOS? it is not supported; 'uname -a =' %s" % globs['uname-a'])
 
@@ -512,7 +512,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       retlat = '%s/%s-retlat.json' % (C.dirname(), out)
       tlargs += ' --ret-latency %s' % retlat
       if profiling() and not isfile(retlat):
-        exe('%s -q -o %s -- %s' % (genretlat, retlat, r), 'calibrating retire latencies for toplev')
+        exe('%s -q -o %s -- %s' % (genretlat, retlat, r), 'calibrating retire latencies')
     c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, C.toplev_log2csv(o), tlargs, r)
     if ' --global' in c:
       # https://github.com/andikleen/pmu-tools/issues/453

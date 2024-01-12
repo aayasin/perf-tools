@@ -171,7 +171,7 @@ def parse_perf(l):
   def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if multirun else None
   items = l.strip().split()
   name, val, var, name2, val2, name3, val3 = None, -1, None, None, -1, None, -1
-  if not re.match(r'^[1-9 ]', l): pass
+  if not re.match(r'^[1-9 ]', l) or '<not supported>' in l: pass
   elif 'Performance counter stats for' in l:
     name = 'App'
     val = l.split("'")[1]

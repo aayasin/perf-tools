@@ -977,7 +977,8 @@ def main():
       args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+['xed', 'tee', 'loop-ideal-ipc'])])))
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    find_perf()
-    elif c == 'git-log-oneline': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | egrep -v 'Merge branch \'master\''")
+    elif c == 'git-log-oneline': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | egrep -v "
+      "'Merge branch \'master\'|forbid perf tool'")
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
     elif c == 'eventlist-update': tools_update(mask=0x4)

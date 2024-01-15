@@ -2,8 +2,9 @@
 CLONE=${CLONE:-2}
 PERFV=${PERFV:-5.15.17}
 LINUXK=${LINUXK:-5}
-LINUXV=${LINUXV:-5.15.111} # upgrade to <= 6.2.16 for JIT support, not 6.4!.
-                          # besides: https://github.com/andikleen/pmu-tools/issues/457
+LINUXV=${LINUXV:-5.15.111}  # upgrade to 6.7 (may need to set NO_LIBTRACE_EVENT=1
+                            # or to <= 6.2.16 for JIT support, not 6.4!.
+                            # besides: https://github.com/andikleen/pmu-tools/issues/457
 OBJDUMP=${OBJDUMP:-0}
 
 perfdir=linux/tools/perf

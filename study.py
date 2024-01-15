@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2023, Intel Corporation
+# Copyright (c) 2020-2024, Intel Corporation
 # Author: Ahmad Yasin
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.84
+__version__= 0.85
 
 import common as C, pmu, stats
 import os, sys, time, re
@@ -61,7 +61,7 @@ Conf = {
   'Pebs': {'all-misp': '-b -e %s/event=0xc5,umask=0,name=BR_MISP_RETIRED/ppp -c 20003' % pmu.pmu(),
     'cond-misp': '-b -e %s/event=0xc5,umask=0x11,name=BR_MISP_RETIRED.COND/ppp -c 20003' % pmu.pmu(),
   },
-  'Toplev': {'imix-loops': ' --frequency --metric-group +Summary --single-thread',
+  'Toplev': {'imix-loops': ' --frequency --metric-group +Summary',
   },
   'Tune': {'dsb-align': [[':perf-record:"\' -g -c 20000003\'"']],
     'openmp': [[':perf-stat-ipc:"\'stat -e instructions,cycles,r0106\'"']],

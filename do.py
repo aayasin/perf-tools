@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.91
+__version__ = 2.92
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -76,7 +76,7 @@ do = {'run':        C.RUN_DEF,
   'model':          'MTL',
   'msr':            0,
   'msrs':           pmu.cpu_msrs(),
-  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,-CPU_Utilization",
+  'nodes':          "+CoreIPC,+Instructions,+CORE_CLKS,+Time,-CPUs_Utilized,-CPU_Utilization",
   'numactl':        1,
   'objdump':        'binutils-gdb/binutils/objdump' if isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
@@ -563,7 +563,7 @@ def profile(mask, toplev_args=['mvl6', None]):
 
   if en(12):
     cmd, logs['info'] = toplev_V('-mvl2 --no-sort %s' % ('' if args.sys_wide else ' --no-uncore'),
-                        nodes='+IPC,'+tma.get('bottlenecks-only').replace('+', '-'))
+                        nodes='+IPC,-CPUs_Utilized,'+tma.get('bottlenecks-only').replace('+', '-'))
     profile_exe(cmd + ' | tee %s | %s' % (logs['info'], grep_nz), 'Info metrics', 12)
 
   if en(13):

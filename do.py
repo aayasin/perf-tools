@@ -966,10 +966,18 @@ def main():
   if args.verbose > 5: C.printc(str(args))
   if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1
-  if 'suspend-smt' in args.command:
-    if pmu.cpu('smt-on'): args.command = ['disable-smt'] + args.command + ['enable-smt']
-    args.command.remove('suspend-smt')
-
+  # suspend commands
+  com2cond = { 'atom': True, 'fix-freq': True, 'hugepages': True, 'prefetches': True, 'smt': pmu.cpu('smt-on') }
+  while True:
+    c = next((c for c in args.command if c.startswith('suspend')), None)
+    if not c: break
+    com = c.split('suspend-')[1].split()[0]
+    if com in com2cond:
+      if com2cond[com]: args.command = ['disable-%s' % com] + args.command + ['enable-%s' % com]
+      args.command.remove('suspend-%s' % com)
+    else:
+      C.error("Unknown command: '%s' !" % c)
+      return -1
   for c in args.command:
     param = c.split(':')[1:] if ':' in c else None
     if   c == 'forgive-me':   pass
@@ -985,19 +993,20 @@ def main():
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
     elif c == 'eventlist-update': tools_update(mask=0x4)
-    # TODO: generalize disable/enable/suspend of things that follow
-    elif c == 'disable-smt':  smt()
-    elif c == 'enable-smt':   smt('on')
-    elif c == 'suspend-smt':  pass # for do.py -h
-    elif c == 'disable-atom': atom()
-    elif c == 'enable-atom':  atom('online')
     elif c == 'disable-aslr': exe('echo 0 | sudo tee /proc/sys/kernel/randomize_va_space')
-    elif c == 'disable-hugepages': exe('echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
-    elif c == 'enable-hugepages':  exe('echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled')
-    elif c == 'disable-prefetches': exe('sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % msr_set(0x1a4, 0xf))
-    elif c == 'enable-prefetches':  exe('sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % msr_clear(0x1a4, 0xf))
-    elif c == 'enable-fix-freq':    fix_frequency()
-    elif c == 'disable-fix-freq':   fix_frequency('undo')
+    elif c.startswith('disable') or c.startswith('enable'):
+      en = c.startswith('enable')
+      com2func = {'atom':        (atom, 'online' if en else None),
+                  'fix-freq':    (fix_frequency, None if en else 'undo'),
+                  'hugepages':   (exe, 'echo %s | sudo tee /sys/kernel/mm/transparent_hugepage/enabled' % ('always' if en else 'never')),
+                  'prefetches':  (exe, 'sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % (msr_clear(0x1a4, 0xf) if en else msr_set(0x1a4, 0xf))),
+                  'smt':         (smt, 'on' if en else None)}
+      key = c.replace('enable-' if en else 'disable-', '')
+      if not key in com2func:
+        C.error("Unknown command: '%s' !" % c)
+        return -1
+      func, arg = com2func[key][0], com2func[key][1]
+      func() if arg is None else func(arg)
     elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
     elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
                                     ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))

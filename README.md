@@ -9,7 +9,7 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
 
 ## Overview
 * **do.py** -- The main driver with handy shortcuts for setting up and doing profiling, over [Linux perf](https://perf.wiki.kernel.org)
-* **study.py** -- A driver that wraps do.py to study multiple flavors of an application (with parallel post-processing)
+* **study.py** -- A driver to study and compare multiple flavors of an application (it wraps do.py and employs parallel post-processing)
 * **kernels/** -- an evolving collection of x86 kernels
   * **gen-kernel.py** -- generator of X86 kernels
   * **jumpy.py** -- module for different jumping constructs
@@ -28,7 +28,9 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools
   * **toplev** -- profiler featuring TMA method on Intel processors
   * **ocperf** -- perf wrapper that converts Intel event names to perf-events syntax
+  * **genretlat** -- a profiler to collect Retire Latencies on recent Intel processors
 * **workloads/** -- an evolving collection of "micro-workloads"
+  * BC.sh -- wrapper of the Linux bc utility
   * **mmm/** -- the matrix-matrix mutiply (mmm) HPC kernel - multiple optimizations as demonstrated in [Tuning Performance via Metrics with Expectations](https://ieeexplore.ieee.org/document/8714063)
 ### Checkout with: 
 `git clone --recurse-submodules https://github.com/aayasin/perf-tools`

@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.92
+__version__ = 2.93
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -967,7 +967,7 @@ def main():
   if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1
   # suspend commands
-  com2cond = { 'atom': True, 'fix-freq': True, 'hugepages': True, 'prefetches': True, 'smt': pmu.cpu('smt-on') }
+  com2cond = { 'aslr': True, 'atom': True, 'fix-freq': True, 'hugepages': True, 'prefetches': True, 'smt': pmu.cpu('smt-on') }
   while True:
     c = next((c for c in args.command if c.startswith('suspend')), None)
     if not c: break
@@ -993,10 +993,10 @@ def main():
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
     elif c == 'eventlist-update': tools_update(mask=0x4)
-    elif c == 'disable-aslr': exe('echo 0 | sudo tee /proc/sys/kernel/randomize_va_space')
     elif c.startswith('disable') or c.startswith('enable'):
       en = c.startswith('enable')
-      com2func = {'atom':        (atom, 'online' if en else None),
+      com2func = {'aslr':        (set_sysfile, ('/proc/sys/kernel/randomize_va_space', 1 if en else 0)),
+                  'atom':        (atom, 'online' if en else None),
                   'fix-freq':    (fix_frequency, None if en else 'undo'),
                   'hugepages':   (exe, 'echo %s | sudo tee /sys/kernel/mm/transparent_hugepage/enabled' % ('always' if en else 'never')),
                   'prefetches':  (exe, 'sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % (msr_clear(0x1a4, 0xf) if en else msr_set(0x1a4, 0xf))),
@@ -1006,7 +1006,7 @@ def main():
         C.error("Unknown command: '%s' !" % c)
         return -1
       func, arg = com2func[key][0], com2func[key][1]
-      func() if arg is None else func(arg)
+      func() if arg is None else func(*arg) if type(arg) == tuple else func(arg)
     elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
     elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
                                     ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))

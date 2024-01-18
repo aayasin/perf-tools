@@ -303,7 +303,8 @@ def main():
 
   x = 'tune'
   a = getattr(args, x) or []
-  extra = ' :sample:3 :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode] if 'misp' in args.mode else ''
+  extra = ' :sample:3' if C.any_in(['dsb', 'misp'], args.mode) else ''
+  if 'misp' in args.mode: extra += ' :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode]
   if pmu.skylake(): extra += ' :perf-stat-add:-1'
   elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
   a.insert(0, [':batch:1 :help:0 :loops:9 :msr:1 :dmidecode:1%s ' % extra])

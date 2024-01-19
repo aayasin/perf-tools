@@ -911,8 +911,8 @@ def main():
         exec(t)
   pmu.pmutools = args.pmu_tools
   if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
-  perfv = exe_1line(args.perf + ' --version', heavy=False)
-  if C.any_in([x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')], perfv): C.error('Unsupported perf tool: ' + perfv)
+  perfv = exe_1line(args.perf + ' --version', heavy=False).replace('perf version ', '')
+  if any(perfv == x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')): C.error('Unsupported perf tool: ' + perfv)
   do['perf-ldlat'] = do['perf-ldlat'].replace(globs['ldlat-def'], str(do['ldlat']))
   if do['perf-stat-add'] > 0:
     x = ',branches,branch-misses'

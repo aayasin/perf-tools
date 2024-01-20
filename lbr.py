@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.03 # see version line of do.py
+__version__= x86.__version__ + 2.04 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -184,7 +184,8 @@ def loop_stats(line, loop_ipc, tc_state):
     else:
       mark(x86.INDIRECT, 'indirect')
       mark(x86.IMUL, 'scalar-int')
-      mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % x86.FP_SUFFIX, 'scalar-fp')
+      if get_inst(line).startswith('vp'): pass
+      else: mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % x86.FP_SUFFIX, 'scalar-fp')
       for i in range(vec_size):
         if mark(r"[^aku]p%s\s+.*%s" % (x86.FP_SUFFIX, vec_reg(i)), vec_len(i, 'fp')): continue
         mark(INT_VEC(i), vec_len(i))
@@ -912,8 +913,9 @@ def print_common(total):
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
-  if edge_en and total: print_global_stats()
-  print(' instructions.\n#'.join(['# Notes: CMP = CMP or TEST', ' RMW = Read-Modify-Write', 'Global-stats-end'])+'\n')
+  if edge_en and total:
+    print_global_stats()
+    print(' instructions.\n#'.join(['# Notes: CMP = CMP or TEST', ' RMW = Read-Modify-Write', 'Global-stats-end'])+'\n')
   C.warn_summary('info')
   C.warn_summary()
 

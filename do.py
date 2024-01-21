@@ -335,6 +335,8 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   if do['dmidecode']: exe("sudo dmidecode | tee setup-memory.log | egrep -A15 '^Memory Device' | "
     "egrep '(Size|Type|Speed|Bank Locator):' | sort | uniq -c | sort -nr | %s >> %s" % (label('.', 'dmidecode'), out))
 
+def perf_version(): return exe_1line(args.perf + ' --version', heavy=False).replace('perf version ', '')
+def perf_version_float(): v = perf_version(); return float('.'.join(v.split('.')[0:2])) if v.isdigit() else 10
 def get_perf_toplev():
   perf, env, ptools = args.perf, '', {}
   if perf != 'perf':
@@ -396,6 +398,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
   def perf_F(ilen=False):
     ilen = ilen or do['lbr-jcc-erratum'] or do['lbr-indirects']
+    if ilen and perf_version_float() < 5.18: error('perf is too old: %s (no ilen support)' % perf_version())
     return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
                                                         ',+srcline' if do['loop-srcline'] else '',
                                                         ' 2>>' + err if do['loop-srcline'] else '')
@@ -911,8 +914,8 @@ def main():
         exec(t)
   pmu.pmutools = args.pmu_tools
   if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
-  perfv = exe_1line(args.perf + ' --version', heavy=False).replace('perf version ', '')
-  if any(perfv == x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')): C.error('Unsupported perf tool: ' + perfv)
+  if any(perf_version() == x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')):
+    C.error('Unsupported perf tool: ' + perf_version())
   do['perf-ldlat'] = do['perf-ldlat'].replace(globs['ldlat-def'], str(do['ldlat']))
   if do['perf-stat-add'] > 0:
     x = ',branches,branch-misses'
@@ -978,7 +981,7 @@ def main():
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    find_perf()
     elif c == 'git-log-oneline': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | egrep -v "
-      "'Merge branch \'master\'|forbid perf tool'")
+      "'Merge branch \'master\'|forbid perf tool|\sa bug fix'")
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
     elif c == 'eventlist-update': tools_update(mask=0x4)

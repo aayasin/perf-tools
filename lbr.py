@@ -925,7 +925,7 @@ def print_all(nloops=10, loop_ipc=0):
   if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5:
     if verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
     else: C.error('Too many LBR bad/bogus samples in profile')
-  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x, Threshold=.03)
+  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x, Threshold=0 if x == 'dsb-heatmap' else .03)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:
     if loop_ipc in loops:

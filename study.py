@@ -212,9 +212,7 @@ def compare_stats(app1, app2):
         return filename
     return None
   def get_value_group(d, k):
-    if not k in d: return None, None
-    if type(d[k]) == tuple: return d[k][0], d[k][1]
-    return d[k], '-'
+    return (d[k][0], d[k][1]) if k in d else (None, None)
   # print table of loops with regressed IPC between configs
   def print_regressed_ipcs():
     loops_num = len([key for key in stats1 if re.search("Loop#[0-9]+ ip", key)])
@@ -258,10 +256,11 @@ def compare_stats(app1, app2):
     stats.sDB[app2_str].update(stats.read_info(info2, read_loops=not args.skip_loops, loop_id=args.loop_id))
     lbr_all_insts_key = stat_name('ALL', ratio_of=('ALL', ))
     lbr_all_insts1, lbr_all_insts2 = stats.get(lbr_all_insts_key, app1), stats.get(lbr_all_insts_key, app2)
+    msg = "LBR run & stats aren't complete, check "
     if lbr_all_insts1: lbr_factor1 = float(stats.get('instructions', app1)) / lbr_all_insts1
-    else: C.warn("LBR run & stats aren't complete, check %s" % info1)
+    else: C.warn(msg + info1)
     if lbr_all_insts2: lbr_factor2 = float(stats.get('instructions', app2)) / lbr_all_insts2
-    else: C.warn("LBR run & stats aren't complete, check %s" % info2)
+    else: C.warn(msg + info2)
   stats1, stats2 = stats.sDB[app1_str], stats.sDB[app2_str]
   header = format_line('Stat', 'Group', app1, app2, 'Diff', 'Ratio')
   sep = '-' * len(header)

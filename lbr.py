@@ -236,6 +236,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
   if ip in loops:
     loop = loops[ip]
     loop['hotness'] += 1
+    if srcline and not 'srcline' in loop: loop['srcline'] = srcline
     if is_taken(lines[-1]):
       iter_update()
       if ip == loop_ipc:
@@ -648,6 +649,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
       glob['all'] += 1
       if not labels and size > 0:
         detect_loop(ip, lines, loop_ipc, takens, srcline)
+        if ip in loops and 'srcline' in loops[ip] and loops[ip]['srcline'] == srcline:
+          srcline = None  # srcline <-> loop
       if skip_bad: tc_state = loop_stats(line, loop_ipc, tc_state)
       if edge_en:
         if len(takens) and is_taken(line) and verbose & 0x2: #FUNCR

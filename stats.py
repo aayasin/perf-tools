@@ -42,14 +42,14 @@ def get_stat_int(s, c, stat_file=None, val=-1):
   rollup(c, stat_file)
   val = None
   try:
-    val = sDB[c][s][0] if type(sDB[c][s]) == tuple else sDB[c][s]
+    val = sDB[c][s][0]
   except KeyError:
     C.warn('KeyError for stat: %s, in config: %s' % (s, c))
   if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, stat_file, str(val)))
   return val
 
 def rollup_all(stat=None):
-  sDB['ALL'], csv_file, reload = {}, 'rollup.csv', None
+  sDB['ALL'], csv_file, reload = {}, 'rollup.csv', None 
   for a in sys.argv[1:]:
     if not reload:
       reload = re.findall("-janysave_type-er20c4ppp-c([0-9]+).perf.data.info.log", a)
@@ -249,17 +249,17 @@ def read_toplev(filename, metric=None):
       if l.startswith('Info'):
         d[items[1]] = (convert(items[3]), items[0])  # (value, group)
       elif '<==' in l:
-        d['Critical-Group'] = Key2group[items[0]]
-        d['Critical-Node'] = items[1]
+        d['Critical-Group'] = (Key2group[items[0]], None)
+        d['Critical-Node'] = (items[1], None)
       elif l.startswith('warning'):
-        d['zero-counts'] = l.split(':')[2].strip()
+        d['zero-counts'] = (l.split(':')[2].strip(), None)
     except ValueError:
       C.warn("cannot parse: '%s'" % l)
     except AttributeError:
       C.warn("empty file: '%s'" % filename)
   if debug > 2: print(d)
   if metric:
-    r = (d[metric][0] if type(d[metric]) == tuple else d[metric]) if metric in d else None
+    r = d[metric][0] if metric in d else None
     if debug > 0: print('stats: read_toplev(filename=%s, metric=%s) = %s' % (filename, metric, str(r)))
     return r
   return d

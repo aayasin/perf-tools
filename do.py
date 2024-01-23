@@ -647,7 +647,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     def log_br_count(x, s): return log_count("%s branches" % x, "%s.%s.log" % (data, s))
     def tail(f=''): return "tail %s | grep -v total" % f
     def check_err(err):
-      if not os.path.getsize(err) == 1:
+      if os.path.getsize(err) > 0:
         C.error("perf script failed to extract srcline info! Check errors at '%s'. "
                 "Try to use a newer or a different compiler" % err)
     def report_info(info, err, hists=['IPC', 'IpTB']):
@@ -711,7 +711,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         if args.verbose > 2: do['lbr-verbose'] |= 0x800
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=0x%x" % (do['lbr-verbose'] | C.env2int('LBR_VERBOSE', base=16))
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
-        exe('echo > %s' % err)
+        open(err, 'w').close()
         misp, cmd, msg = '', perf_F(), '@info'
         if do['imix']:
           print_cmd(' '.join(('4debug', perf, 'script', perf_ic(data, perf_script.comm), cmd, '| less')), False)

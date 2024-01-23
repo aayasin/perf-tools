@@ -183,7 +183,7 @@ def parse_perf(l):
   items = l.strip().split()
   name = name2 = name3 = group = group2 = group3 = var = None
   val = val2 = val3 = -1
-  def get_group(n): return 'Metric' if is_metric(name) else 'Event'
+  def get_group(n): return 'Metric' if is_metric(n) else 'Event'
   if not re.match(r'^[1-9 ]', l) or '<not supported>' in l: pass
   elif 'Performance counter stats for' in l:
     name = 'App'

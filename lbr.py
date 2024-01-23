@@ -646,7 +646,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           inc(hsts[IPTB], insts); size += insts; insts = 0
           if 'IPC' in line: inc(hsts['IPC'], line_timing(line)[1])
       glob['all'] += 1
-      if not labels and size > 0: detect_loop(ip, lines, loop_ipc, takens, srcline)
+      if not labels and size > 0:
+        detect_loop(ip, lines, loop_ipc, takens, srcline)
+        srcline = None
       if skip_bad: tc_state = loop_stats(line, loop_ipc, tc_state)
       if edge_en:
         if len(takens) and is_taken(line) and verbose & 0x2: #FUNCR

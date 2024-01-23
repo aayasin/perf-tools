@@ -622,7 +622,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     return perf_data, n
   
   if en(8) and do['sample'] > 1:
-    assert C.any_in((pmu.lbr_event()[:-1], 'instructions:ppp') ,do['perf-lbr']) or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
+    assert C.any_in((pmu.lbr_event()[:-1], 'instructions:ppp', 'cycles:p '), do['perf-lbr']) or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
     data, nsamples = perf_record('lbr', 8)
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = "sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
@@ -989,7 +989,7 @@ def main():
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    find_perf()
     elif c == 'git-log-oneline': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | egrep -v "
-      "'Merge branch \'master\'|forbid perf tool|\sa (bug| ) fix'")
+      "'Merge branch .master.|forbid perf tool|\sa (bug|) fix'")
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
     elif c == 'eventlist-update': tools_update(mask=0x4)

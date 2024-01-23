@@ -513,7 +513,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
   # edge_en permits to collect per-instruction stats (beyond per-taken-based) if config is good for edge-profile
-  edge_en = C.any_in((LBR_Event, 'instructions:ppp'), event) and not ip_filter and not loop_ipc
+  edge_en = any(event == e for e in (LBR_Event, 'instructions:ppp', 'cycles:p')) and not ip_filter and not loop_ipc
   if stat['total'] == 0:
     if edge_en: edge_en_init(indirect_en)
     if ret_latency: header_ip_str.position = 8
@@ -916,7 +916,7 @@ def print_common(total):
   if edge_en and total:
     print_global_stats()
     print(' instructions.\n#'.join(['# Notes: CMP = CMP or TEST', ' RMW = Read-Modify-Write', 'Global-stats-end'])+'\n')
-  C.warn_summary('info')
+  C.warn_summary('info', 50)
   C.warn_summary()
 
 def print_all(nloops=10, loop_ipc=0):

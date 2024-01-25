@@ -146,9 +146,12 @@ def toplev2intel_name(e):
 #
 # CPU, cpu_ prefix
 #
+perftools = os.path.dirname(os.path.realpath(__file__))
 def cpu_has_feature(feature):
   if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
-    return not C.exe_cmd("egrep -q '\s+0x00000023 0x00: eax=0x000000.[^0] ' setup-cpuid.log", fail=-1)
+    cpuid_f = '%s/setup-cpuid.log' % perftools
+    if not os.path.exists(cpuid_f): C.exe_cmd('cd %s && ./do.py log' % perftools, debug=1)
+    return not C.exe_cmd("egrep -q '\s+0x00000023 0x00: eax=0x000000.[^0] ' " + cpuid_f, fail=-1)
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags
 
@@ -165,7 +168,7 @@ def force_cpu(cpu):
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
   return event_list
 
-pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
+pmutools = perftools + '/pmu-tools'
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:

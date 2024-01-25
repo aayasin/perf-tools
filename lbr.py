@@ -513,7 +513,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
   # edge_en permits to collect per-instruction stats (beyond per-taken-based) if config is good for edge-profile
-  edge_en = any(event == e for e in (LBR_Event, 'instructions:ppp', 'cycles:p')) and not ip_filter and not loop_ipc
+  edge_en = event in pmu.lbr_unfiltered_events() and not ip_filter and not loop_ipc
   if stat['total'] == 0:
     if edge_en: edge_en_init(indirect_en)
     if ret_latency: header_ip_str.position = 8

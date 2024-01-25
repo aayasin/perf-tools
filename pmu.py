@@ -70,6 +70,7 @@ def event_name(x):
 def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
 def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
+def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p')
 
 def ldlat_event(lat):
   return '"{%s/mem-loads-aux,period=%d/,%s/mem-loads,ldlat=%s/pp}" -d -W' % (pmu(),

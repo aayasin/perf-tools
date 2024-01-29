@@ -38,7 +38,7 @@ install: /usr/bin/python openmp tramp3d-v4
 install1:
 	$(MGR) install $(PKG)
 link-python:
-	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | egrep -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
+	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | grep -E -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
 diff:
 	git diff | grep -v '^\-' | less
 intel:
@@ -76,7 +76,7 @@ test-metric:
 FSI = 400000000
 test-false-sharing: kernels/false-sharing
 	$(DO) profile --tune :help:0 -a "$< $(FSI)" -pm 40
-	egrep -q '^BE.*False_Sharing.*<==' $<-$(FSI)-out.txt
+	grep -E -q '^BE.*False_Sharing.*<==' $<-$(FSI)-out.txt
 
 clean-all: clean
 	rm tramp3d-v4{,.cpp} CLTRAMP3D

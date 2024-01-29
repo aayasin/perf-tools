@@ -214,8 +214,8 @@ def csv2dict(f):
 
 # (colored) grep with 0 exit status
 def grep(what, file='', flags='', color=False):
-  cmd = "egrep %s '%s' %s" % (flags, what, file)
-  if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('egrep', 'egrep --color')
+  cmd = "grep -E %s '%s' %s" % (flags, what, file)
+  if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('grep', 'grep --color')
   return "(%s || true)" % cmd
 
 # auxiliary: strings, argv, python-stuff
@@ -329,7 +329,7 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   return ap
 
 def commands_list():
-  return ' '.join(chop(exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort" % sys.argv[0], sep=' '), "),'").split() +\
+  return ' '.join(chop(exe_output("grep -E 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort" % sys.argv[0], sep=' '), "),'").split() +\
          [("%s-" % c) + x[:-1].replace("'", '') for x in exe_output(grep('com2cond =', sys.argv[0]), sep='').split()
          if x.endswith(':') for c in ['enable', 'disable', 'suspend']])
 

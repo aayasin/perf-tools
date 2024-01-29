@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.04 # see version line of do.py
+__version__= x86.__version__ + 2.05 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -352,7 +352,7 @@ Insts_Fusions = [x + '-OP fusible' for x in ['MOV', 'LD']]
 Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}
-hsts = {}
+hsts, hsts_threshold = {}, {}
 footprint = set()
 pages = set()
 indirects = set()
@@ -395,6 +395,7 @@ def count_of(t, lines, x, hist):
 
 def edge_en_init(indirect_en):
   for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
+  hsts_threshold[NOLFC] = 0.01
   if indirect_en:
     for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
@@ -402,7 +403,7 @@ def edge_en_init(indirect_en):
       indirects.add(int(x, 16))
       hsts['indirect_%s_targets' % x] = {}
       hsts['indirect_%s_paths' % x] = {}
-  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'] = {}
+  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'], hsts_threshold['dsb-heatmap']  = {}, 0
 
 def edge_stats(line, lines, xip, size):
   if is_label(line): return
@@ -925,7 +926,7 @@ def print_all(nloops=10, loop_ipc=0):
   if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5:
     if verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
     else: C.error('Too many LBR bad/bogus samples in profile')
-  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x, Threshold=0 if x == 'dsb-heatmap' else .03)
+  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x, Threshold=hsts_threshold[x] if x in hsts_threshold else .03)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:
     if loop_ipc in loops:

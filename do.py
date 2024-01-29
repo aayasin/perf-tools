@@ -753,7 +753,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(9) and do['sample'] > 2:
     data = perf_record('pebs', 9, pmu.event_name(do['perf-pebs']))[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
-    if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs, Insts", data)
+    if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs, Insts (PEBS)", data)
     else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
@@ -989,7 +989,7 @@ def main():
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    find_perf()
     elif c == 'git-log-oneline': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | egrep -v "
-      "'Merge branch .master.|forbid perf tool|\sa (bug|) fix'")
+      "'Merge branch .master.|forbid perf tool|\sa (bug|) fix|[ /]\-$'")
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
     elif c == 'eventlist-update': tools_update(mask=0x4)

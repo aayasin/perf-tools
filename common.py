@@ -70,7 +70,7 @@ def error(msg):
   printc('ERROR: %s !'%msg, color.RED)
   logs = [log[1] for log in re.findall(r"(>|tee) (\S+\.log)", msg) if log[1][0].isalpha()]
   if len(logs): exe_cmd('tail ' + ' '.join(set(logs)), debug=True)
-  if dump_stack_on_error: print(let_python_fail)
+  if dump_stack_on_error: assert 0
   sys.exit(' !')
 
 def exit(msg=None):
@@ -113,7 +113,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=1
   ret = 0
   if run:
     if log and log_stdio:
-      if not '2>&1' in x: x = x + ' 2>&1'
+      if '2>&1' not in x: x = x + ' 2>&1'
       x = x + ' | tee -a ' + log_stdio
       ret = subprocess.call(['/bin/bash', '-c', 'set -o pipefail; ' + x])
     else:
@@ -329,7 +329,7 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   return ap
 
 def commands_list():
-  return ' '.join(chop(exe_output("grep -E 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort" % sys.argv[0], sep=' '), "),'").split() +\
+  return ' '.join(chop(exe_output("grep -E 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort" % sys.argv[0], sep=' '), "),'").split() +
          [("%s-" % c) + x[:-1].replace("'", '') for x in exe_output(grep('com2cond =', sys.argv[0]), sep='').split()
          if x.endswith(':') for c in ['enable', 'disable', 'suspend']])
 

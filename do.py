@@ -137,7 +137,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=1,
     if profiling:
       if args.mode == 'process':
         x, run, debug = '# ' + x, False, args.verbose > 2
-        if not 'perf record ' in x: msg = None
+        if 'perf record ' not in x: msg = None
     elif args.mode == 'profile':
         x, run, debug = '# ' + x, False, args.verbose > 2
     elif '--xed' in x and not isfile(C.Globals['xed']): C.error('!\n'.join(('xed was not installed',
@@ -145,7 +145,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=1,
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], pmu.name()):
       C.warn('CPU model is unrecognized; consider Linux kernel update (https://intelpedia.intel.com/IntelNext#Intel_Next_OS)', suppress_after=1)
-    if globs['cmds_file'] and (not 'loop_stats' in x or args.verbose > 3) and (not x.startswith('#') or args.verbose > 2 or do['batch']):
+    if globs['cmds_file'] and ('loop_stats' not in x or args.verbose > 3) and (not x.startswith('#') or args.verbose > 2 or do['batch']):
       globs['cmds_file'].write(x + '\n')
       globs['cmds_file'].flush()
   return C.exe_cmd(x, msg, redir_out, debug, run, log, fail, background)
@@ -466,7 +466,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     factor = do['calibrate']
     if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs_utilized', 1)))
     if factor:
-      if not '000' in C.flag_value(do[x], '-c'): error("cannot calibrate '%s' with '%s'" % (x, do[x]))
+      if '000' not in C.flag_value(do[x], '-c'): error("cannot calibrate '%s' with '%s'" % (x, do[x]))
       else:
         do[x] = do[x].replace('000', '0' * (3 + factor), 1)
         C.info('\tcalibrated: %s' % do[x])
@@ -612,7 +612,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd = "bash -c '%s %s %s'" % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
     profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
     warn_file(perf_data)
-    if not tag in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
+    if tag not in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
     n = samples_count(perf_data)
     def warn(x='little'): C.warn("Too %s samples collected (%s in %s); rerun with '--tune :calibrate:%d'" % (x, n,
       perf_data, do['calibrate'] + (-1 if x == 'little' else 1)))
@@ -803,7 +803,7 @@ def profile(mask, toplev_args=['mvl6', None]):
 
   if en(19):
     data = perf_record('pt', 19)[0]
-    tag, info = 'pt', '%s.info.log' % data
+    _, info = 'pt', '%s.info.log' % data
     exe(perf + " script --no-itrace -F event,comm -i %s | %s | tee %s.modules.log | ./ptage | tail" % (data, sort2u, data))
     perf_script("--itrace=Le -F +brstackinsn --xed | tee >(grep -E 'ppp|#' > %s.pt-takens.log) | %s %s > %s" %
       (data, C.realpath('lbr_stats'), do['lbr-stats-tk'], info), "@pt info", data)
@@ -896,7 +896,7 @@ def main():
   #args sanity checks
   if args.gen_args or 'build' in args.command:
     if not user_app(): C.error('must specify --app-name with any of: --gen-args, build')
-    if not 'build' in args.command: C.error('must use build command with --gen-args')
+    if 'build' not in args.command: C.error('must use build command with --gen-args')
   if args.output and ' ' in args.output: C.error('--output must not have spaces')
   assert args.sys_wide >= 0, 'negative duration provided!'
   if args.verbose > 4: args.toplev_args += ' -g'
@@ -1002,11 +1002,11 @@ def main():
                   'prefetches':  (exe, 'sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % (msr_clear(0x1a4, 0xf) if en else msr_set(0x1a4, 0xf))),
                   'smt':         (smt, 'on' if en else None)}
       key = c.replace('enable-' if en else 'disable-', '')
-      if not key in com2func:
+      if key not in com2func:
         C.error("Unknown command: '%s' !" % c)
         return -1
       func, arg = com2func[key][0], com2func[key][1]
-      func() if arg is None else func(*arg) if type(arg) == tuple else func(arg)
+      func() if arg is None else func(*arg) if type(arg) is tuple else func(arg)
     elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
     elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
                                     ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))

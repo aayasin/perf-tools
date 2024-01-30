@@ -283,7 +283,7 @@ def read_perf_toplev(filename):
 
 def patch_metrics(d):
   SLOTS = 'TOPDOWN.SLOTS'
-  if not SLOTS in d: return
+  if not SLOTS in d: return {}
   slots = d[SLOTS]
   del d[SLOTS]
   d[SLOTS + ':perf_metrics'] = slots

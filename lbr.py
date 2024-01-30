@@ -142,9 +142,9 @@ def line_inst(line):
 
 def tripcount(ip, loop_ipc, state):
   if state == 'new' and loop_ipc in loops:
-    if not 'tripcount' in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
+    if 'tripcount' not in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
     state = 'valid'
-  elif type(state) == int:
+  elif type(state) is int:
     if ip == loop_ipc: state += 1
     elif not is_in_loop(ip, loop_ipc):
       inc(loops[loop_ipc]['tripcount'], str(state))
@@ -157,7 +157,7 @@ def tripcount(ip, loop_ipc, state):
 def loop_stats(line, loop_ipc, tc_state):
   def mark(regex, tag):
     if re.findall(regex, line):
-      if not loop_stats.atts or not tag in loop_stats.atts:
+      if not loop_stats.atts or tag not in loop_stats.atts:
         loop_stats.atts = ';'.join((loop_stats.atts, tag)) if loop_stats.atts else tag
       return 1
     return 0
@@ -213,7 +213,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
   def iter_update():
     #inc(loop['BK'], hex(line_ip(lines[-1])))
     if ip != loop_ipc: return
-    if not 'IPC' in loop: loop['IPC'] = {}
+    if 'IPC' not in loop: loop['IPC'] = {}
     if not has_timing(lines[-1]): return
     cycles, takens = 0, []
     begin, at = find_block_ip()
@@ -240,7 +240,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       iter_update()
       if ip == loop_ipc:
         for x in paths_range():
-          if not 'paths-%d'%x in loop: loop['paths-%d'%x] = {}
+          if 'paths-%d'%x not in loop: loop['paths-%d'%x] = {}
           inc(loop['paths-%d'%x], ';'.join([hex_ip(a) for a in lbr_takens[-x:]]))
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
@@ -257,14 +257,14 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           if x86.is_ld_op_fusion(lines[x], lines[x + 1]): ld_op_mf += 1
           elif x86.is_mov_op_fusion(lines[x], lines[x + 1]): mov_op_mf += 1
         # erratum feature disabled if erratum is None, otherwise erratum counts feature cases
-        if not erratum is None and is_jcc_erratum(lines[x+1], lines[x]): erratum += 1
+        if erratum is not None and is_jcc_erratum(lines[x+1], lines[x]): erratum += 1
         t = line_inst(lines[x])
         if t and t in types: cnt[t] += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
           loop['size'], loop['Conds'], loop['op-jcc-mf'], loop['mov-op-mf'], loop['ld-op-mf'] = \
             size, len(conds), op_jcc_mf, mov_op_mf, ld_op_mf
-          if not erratum is None: loop['jcc-erratum'] = erratum
+          if erratum is not None: loop['jcc-erratum'] = erratum
           for i in types: loop[i] = cnt[i]
           hexa = lambda x: hex(x)[2:]
           loop['imix-ID'] = hexa(loop['load']) + hexa(loop['store']) + hexa(loop['Conds']) + hexa(loop['lea'])
@@ -314,7 +314,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       loop_cands += [ip]
     elif is_callret(lines[-1]): pass # requires --xed
     elif (xip - ip) >= MOLD: warn(0x200, "too large distance in:\t%s" % lines[-1].split('#')[0].strip())
-    elif not ip in bwd_br_tgts and (use_cands or has_ip(len(lines)-2)):
+    elif ip not in bwd_br_tgts and (use_cands or has_ip(len(lines)-2)):
       bwd_br_tgts += [ip]
 
 edge_en = 0
@@ -326,12 +326,12 @@ for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
 
 def inst2pred(i):
-  i2p = {'st-stack':  'mov\S*\s+[^\(\),]+, [0-9a-fx\-]*\(%.sp',
-    'st-reg-stack':   'mov\S*\s+%[^\(\),]+, [0-9a-fx\-]*\(%.sp',
+  i2p = {'st-stack':  r'mov\S*\s+[^\(\),]+, [0-9a-fx\-]*\(%.sp',
+    'st-reg-stack':   r'mov\S*\s+%[^\(\),]+, [0-9a-fx\-]*\(%.sp',
     'add-sub':        '(add|sub).*',
     'inc-dec':        '(inc|dec).*',
     '_cisc-cmp':      x86.CISC_CMP,
-    '_risc-cmp':      '(cmp[^x]|test)[^\(]*',
+    '_risc-cmp':      r'(cmp[^x]|test)[^\(]*',
   }
   if i is None:
     del i2p['st-stack']
@@ -552,7 +552,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
       if header:
         ev = header.group(3)[:-1]
         # first sample here (of a given event)
-        if not ev in lbr_events:
+        if ev not in lbr_events:
           if not len(lbr_events) and '[' in header.group(1):
             for k in header_field.keys(): header_field[k] += 1
           lbr_events += [ev]
@@ -588,7 +588,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           update_size_stats()
           if debug and debug == timestamp:
             exit((line.strip(), len(lines)), lines, 'a bogus sample ended')
-        elif len_m1 and type(tc_state) == int and is_in_loop(line_ip(lines[-1]), loop_ipc):
+        elif len_m1 and type(tc_state) is int and is_in_loop(line_ip(lines[-1]), loop_ipc):
           if tc_state == 31 or (verbose & 0x80):
             inc(loops[loop_ipc]['tripcount'], '%d+' % (tc_state + 1))
             if loop_stats.id: loop_stats(None, 0, 0)
@@ -794,7 +794,7 @@ def tripcount_mean(loop, loop_ipc):
   l = C.str2list(prev_line)
   if hex_ipc in l[1]: return None  # no inst before loop
   if not re.search(x86.JMP_RET, prev_line): before += int(l[0])  # JCC before loop is not considered a special case
-  jmp_line = C.exe_one_line(C.grep('%s' % 'jmp*\s' + hex_ip(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
+  jmp_line = C.exe_one_line(C.grep('%s' % r'jmp*\s' + hex_ip(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
   if not jmp_line == '': before += int(C.str2list(jmp_line)[0])
   next_line = C.str2list(C.exe_one_line(C.grep('0%x' % loop['back'], hitcounts, '-A1')))
   index = 6 if 'ilen:' in next_line else 4
@@ -806,7 +806,7 @@ def tripcount_mean(loop, loop_ipc):
 
 def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   loop = loops[loop_ipc]
-  if not name in loop: return None
+  if name not in loop: return None
   d = print_hist((loop[name], name, loop, loop_ipc, sortfunc, weighted))
   if not type(d) is dict: return d
   tot = d['total']
@@ -848,7 +848,7 @@ def print_hist(hist_t, Threshold=0.01):
       else: left += hist[k]
     if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
   if do_tripcount_mean: d['num-buckets'] = '-'
-  d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) == str else k) for k in hist.keys()) if weighted else tot
+  d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) is str else k) for k in hist.keys()) if weighted else tot
   return d
 
 def print_hist_sum(name, h):
@@ -980,7 +980,7 @@ def find_print_loop(ip, sloops):
 def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   if not isinstance(ip, int): ip = int(ip, 16) #should use (int, long) but fails on python3
   def printl(s, end=''): return print(s, file=print_to, end=end)
-  if not ip in loops:
+  if ip not in loops:
     printl('No loop was detected at %s!' % hex_ip(ip), '\n')
     return
   loop = loops[ip].copy()

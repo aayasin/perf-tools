@@ -68,7 +68,7 @@ def rollup_all(stat=None):
   print(C.dict2str(sDB['ALL']))
 
 def convert(v, adjust_percent=True):
-  if not type(v) == str: return v
+  if not type(v) is str: return v
   v = v.strip()
   if v.isdigit(): return int(v)  # e.g. 13
   if v.replace('.', '', 1).isdigit(): return float(v)  # e.g. 1.13
@@ -85,7 +85,7 @@ def read_loops_info(info, loop_id='imix-ID'):
   loops = C.exe_output(C.grep('Loop#', info), sep='\n')
   if loops != '':  # loops stats found
     for loop in loops.split('\n'):
-      if loop_id == 'srcline' and not 'srcline:' in loop:
+      if loop_id == 'srcline' and 'srcline:' not in loop:
         C.warn('Must run with srcline for loops stats, run with --tune :loop-srcline:1')
         break
       key = loop.split(':')[0].strip()
@@ -137,14 +137,14 @@ def print_DB(c):
 def read_perf(f):
   d = {}
   def calc_metric(e, v=None):
-    if e == None: return ['IpMispredict', 'IpUnknown_Branch', 'L2MPKI_Code', 'UopPI']
-    if not 'instructions' in d: return None
+    if e is None: return ['IpMispredict', 'IpUnknown_Branch', 'L2MPKI_Code', 'UopPI']
+    if 'instructions' not in d: return None
     inst = float(d['instructions'])
     if e == 'branch-misses': d['IpMispredict'] = inst / v
     if e == 'r0160': d['IpUnknown_Branch'] = inst / v
     if e == 'r2424': d['L2MPKI_Code'] = 1000 * val / inst
     if e == 'topdown-retiring': d['UopPI'] = v / inst
-  if f == None: return calc_metric(None) # a hack!
+  if f is None: return calc_metric(None) # a hack!
   if debug > 3: print('reading %s' % f)
   lines = C.file2lines(f)
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
@@ -187,7 +187,7 @@ def parse_perf(l):
     if name.count('_') >= 1 and name.islower() and not re.match('^(cpu_core/|perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
       base_event = name.split(':')[0]
       Name = name.replace(base_event, pmu.toplev2intel_name(base_event))
-      assert not ':C1' in Name # Name = Name.replace(':C1', ':c1')
+      assert ':C1' not in Name # Name = Name.replace(':C1', ':c1')
       if stats['verbose']: print(name, '->', Name)
       name = Name
     val = convert(items[0])
@@ -283,7 +283,7 @@ def read_perf_toplev(filename):
 
 def patch_metrics(d):
   SLOTS = 'TOPDOWN.SLOTS'
-  if not SLOTS in d: return {}
+  if SLOTS not in d: return {}
   slots = d[SLOTS]
   del d[SLOTS]
   d[SLOTS + ':perf_metrics'] = slots
@@ -302,7 +302,7 @@ def patch_metrics(d):
         del d[k]
   for k in fields:
     m = n = 'PERF_METRICS.' + k
-    if not m in d:
+    if m not in d:
       n = m.lower().replace('.', '_')
     d[m] = int(255.0 * d[n] / slots)
     if m != n: del d[n]
@@ -340,7 +340,7 @@ def perf_log2stat(log, smt_on, d={}):
     if debug > 3: print('reading %s' % f)
     for l in C.file2lines(f):
       name, val, etc, name2, val2 = parse_perf(l)[0:5]
-      if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
+      if name: ue[name] = val.replace(' ', '-') if type(val) is str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2
     return ue
   uarch = params(smt_on)

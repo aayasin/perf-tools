@@ -18,7 +18,7 @@ import os, sys, time, re
 from lbr import stat_name
 
 def dump_sample():
-  print("""#!/bin/bash
+  print(r"""#!/bin/bash
 cd workloads/`echo $0 | sed 's/\.\///g' | cut -d- -f1`
 a=`echo $0 | sed 's/\.\///;s/\.sh//' | cut -d- -f2`
 ld=.
@@ -135,7 +135,7 @@ def parse_args():
   def fassert(x, msg): assert x or args.forgive, msg
   assert len(args.config), "at least 2 modes are required"
   fassert(len(args.config) > 1, "at least 2 modes are required (or use --forgive)")
-  assert args.app and not ' ' in args.app
+  assert args.app and ' ' not in args.app
   fassert(args.profile_mask & 0x100, 'args.pm=0x%x' % args.profile_mask)
   assert args.repeat > 2, "stats module requires '--repeat 3' at least"
   if DM in ('dsb-align', ): pass

@@ -909,7 +909,8 @@ def main():
       for t in tlists:
         if t.startswith(':'):
           l = t.split(':')
-          t = "do['%s']=%s"%(l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
+          if l[1] not in do.keys(): error("Unsupported tunable: '%s'" % l[1])
+          t = "do['%s']=%s" % (l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)
   pmu.pmutools = args.pmu_tools
@@ -989,7 +990,7 @@ def main():
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    find_perf()
     elif c == 'git-log-oneline': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | grep -E -v "
-      r"'Merge branch .master.|forbid perf tool|\sa (bug|) fix|[ /]\-$'")
+      r"'Merge (branch .master.|pull request #)|forbid perf tool|\sa (bug|) fix|[ /]\-$'")
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
     elif c == 'eventlist-update': tools_update(mask=0x4)

@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.05 # see version line of do.py
+__version__= x86.__version__ + 2.06 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -332,6 +332,7 @@ def inst2pred(i):
     'inc-dec':        '(inc|dec).*',
     '_cisc-cmp':      x86.CISC_CMP,
     '_risc-cmp':      '(cmp[^x]|test)[^\(]*',
+    'nop':            '.*nop.*',
   }
   if i is None:
     del i2p['st-stack']
@@ -345,14 +346,14 @@ def is_imix(t):
   if not t: return IMIX_LIST + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
   return t in IMIX_LIST or t.startswith('vec')
 Insts = inst2pred(None) + ['cmov', 'lea', 'lea-scaled', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
-Insts_global = Insts + is_imix(None) + x86.mem_type() + ['all']
+Insts_leaf_func = ['-'.join([x, 'leaf', y]) for y in ('dircall', 'indcall') for x in ('branchless', 'dirjmponly')] + ['leaf-call']
+Insts_global = Insts + is_imix(None) + x86.mem_type() + Insts_leaf_func + ['all']
 Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first'
               ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
 Insts_Fusions = [x + '-OP fusible' for x in ['MOV', 'LD']]
 Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}
-hsts, hsts_threshold = {}, {}
 footprint = set()
 pages = set()
 indirects = set()
@@ -382,6 +383,7 @@ def inc_stat(stat):
 IPTB  = 'inst-per-taken-br--IpTB'
 IPLFC = 'inst-per-leaf-func-call'
 NOLFC = 'inst-per-leaf-func-name' # name-of-leaf-func-call would plot it away from IPFLC!
+IPLFCB0 = 'inst-per-%s' % Insts_leaf_func[0]; IPLFCB1 = 'inst-per-%s' % Insts_leaf_func[1]
 FUNCI = 'Function-invocations'
 FUNCP = 'Params_of_func'
 FUNCR = 'Regs_by_func'
@@ -393,9 +395,9 @@ def count_of(t, lines, x, hist):
   inc(hsts[hist], r)
   return r
 
+hsts, hsts_threshold = {}, {NOLFC: 0.01, IPLFCB0: 0, IPLFCB1: 0}
 def edge_en_init(indirect_en):
-  for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
-  hsts_threshold[NOLFC] = 0.01
+  for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, IPLFCB0, IPLFCB1, FUNCR, FUNCP): hsts[x] = {}
   if indirect_en:
     for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
@@ -404,6 +406,37 @@ def edge_en_init(indirect_en):
       hsts['indirect_%s_targets' % x] = {}
       hsts['indirect_%s_paths' % x] = {}
   if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'], hsts_threshold['dsb-heatmap']  = {}, 0
+
+def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
+  branches, dirjmps, insts_per_call, x = 0, 0, 0, len(lines) - 1
+  while x > 0:
+    if is_type('ret', lines[x]): break # not a leaf function call
+    if is_type('call', lines[x]):
+      inc(hsts[IPLFC], insts_per_call)
+      glob['leaf-call'] += (insts_per_call + 2)
+      d = 'ind' if '%' in lines[x] else 'dir'
+      if branches == 0:
+        if d == 'dir': inc(hsts[IPLFCB0], insts_per_call)
+        glob['branchless-leaf-%scall' % d] += (insts_per_call + 2)
+      elif branches == dirjmps:
+        if d == 'dir': inc(hsts[IPLFCB1], insts_per_call)
+        glob['dirjmponly-leaf-%scall' % d] += (insts_per_call + 2)
+      callder_idx, ok = x, x < len(lines) - 1
+      name = lines[x + 1].strip()[:-1] if ok and is_label(lines[x + 1]) else 'Missing-func-name-%s' % (
+        '0x'+line_ip_hex(lines[x + 1]) if ok else 'unknown')
+      while callder_idx > 0:
+        if is_label(lines[callder_idx]): break
+        callder_idx -= 1
+      name = ' -> '.join((lines[callder_idx].strip()[:-1] if callder_idx > 0 else '?', name))
+      inc(hsts[NOLFC], name + '-%d' % insts_per_call)
+      if verbose & 0x10:
+        C.info_p('call to leaf-func %s of size %d' % (name, insts_per_call), '\t\n'.join(['\t'] + lines[-(len(lines)-x):] + [line]))
+      break
+    elif is_branch(lines[x]):
+      branches += 1
+      if 'jmp' in lines[x] and '%' not in lines[x]: dirjmps += 1
+    if not is_label(lines[x]): insts_per_call += 1
+    x -= 1
 
 def edge_stats(line, lines, xip, size):
   if is_label(line): return
@@ -472,25 +505,7 @@ def edge_stats(line, lines, xip, size):
           elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
   # check erratum for line (with no consideration of macro-fusion with previous line)
   if is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
-  if verbose & 0x1 and is_type('ret', line):
-    insts_per_call, x = 0, len(lines) - 1
-    while x > 0:
-      if is_type('ret', lines[x]): break # no support for non-leaf function calls
-      if is_type('call', lines[x]):
-        inc(hsts[IPLFC], insts_per_call)
-        callder_idx, ok = x, x < len(lines) - 1
-        name = lines[x + 1].strip()[:-1] if ok and is_label(lines[x + 1]) else 'Missing-func-name-%s' % (
-          '0x'+line_ip_hex(lines[x + 1]) if ok else 'unknown')
-        while callder_idx > 0:
-          if is_label(lines[callder_idx]): break
-          callder_idx -= 1
-        name = ' -> '.join((lines[callder_idx].strip()[:-1] if callder_idx > 0 else '?', name))
-        inc(hsts[NOLFC], name + '-%d' % insts_per_call)
-        if verbose & 0x10:
-          C.info_p('call to leaf-func %s of size %d' % (name, insts_per_call), '\t\n'.join(['\t'] + lines[-(len(lines)-x):] + [line]))
-        break
-      if not is_label(lines[x]): insts_per_call += 1
-      x -= 1
+  if verbose & 0x1 and is_type('ret', line): edge_leaf_func_stats(lines, line)
   if size <= 1: return # a sample with >= 2 instructions after this point
   if not x86.is_jcc_fusion(xline, line):
     x2line = prev_line(-2)
@@ -817,15 +832,16 @@ def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   print('')
   return tot
 
-def print_glob_hist(hist, name, weighted=False, Threshold=0.01):
-  d = print_hist((hist, name, None, None, None, weighted), Threshold)
+def print_glob_hist(hist, name, weighted=False, threshold=.03):
+  if name in hsts_threshold: threshold = hsts_threshold[name]
+  d = print_hist((hist, name, None, None, None, weighted), threshold)
   if not type(d) is dict: return d
   if d['type'] == 'hex': d['mode'] = hex_ip(int(d['mode']))
   del d['type']
   print('%s histogram summary: %s' % (name, hist_fmt(d)))
   return d['total']
 
-def print_hist(hist_t, Threshold=0.01):
+def print_hist(hist_t, threshold=0.05):
   if not len(hist_t[0]): return 0
   hist, name, loop, loop_ipc, sorter, weighted = hist_t[0:]
   tot = sum(hist.values())
@@ -841,13 +857,13 @@ def print_hist(hist_t, Threshold=0.01):
   d['num-buckets'] = len(hist)
   if d['num-buckets'] > 1:
     C.printc('%s histogram%s:' % (name, ' of loop %s' % hex_ip(loop_ipc) if loop_ipc else ''))
-    left, threshold = 0, int(Threshold * tot)
+    left, limit = 0, int(threshold * tot)
     for k in sorted(hist.keys(), key=sorter):
-      if hist[k] >= threshold and hist[k] > 1:
+      if not limit or hist[k] >= limit and hist[k] > 1:
         bucket = ('%70s' % k) if d['type'] == 'str' else '%5s' % (hex_ip(k) if d['type'] == 'hex' else k)
         print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
-    if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
+    if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * threshold))
   if do_tripcount_mean: d['num-buckets'] = '-'
   d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) == str else k) for k in hist.keys()) if weighted else tot
   return d
@@ -926,7 +942,7 @@ def print_all(nloops=10, loop_ipc=0):
   if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5:
     if verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
     else: C.error('Too many LBR bad/bogus samples in profile')
-  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x, Threshold=hsts_threshold[x] if x in hsts_threshold else .03)
+  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:
     if loop_ipc in loops:

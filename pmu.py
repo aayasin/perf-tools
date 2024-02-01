@@ -152,7 +152,7 @@ def cpu_has_feature(feature):
   if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
     cpuid_f = '%s/setup-cpuid.log' % perftools
     if not os.path.exists(cpuid_f): C.exe_cmd('cd %s && ./do.py log' % perftools, debug=1)
-    return not C.exe_cmd("egrep -q '\s+0x00000023 0x00: eax=0x000000.[^0] ' " + cpuid_f, fail=-1)
+    return not C.exe_cmd(r"grep -E -q '\s+0x00000023 0x00: eax=0x000000.[^0] ' " + cpuid_f, fail=-1)
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags
 
@@ -163,7 +163,7 @@ def force_cpu(cpu):
   cpus = C.exe_output(C.grep(r"%s.*,[Cc]ore" % cpu.upper(),
                                   '%s/mapfile.csv' % events_dir, '-E'), sep='\n').split('\n')
   if cpus == '': C.error("no eventlist found for the forced CPU")
-  cpu_id, key = cpus[0].split(',')[0], 'hybridcore' if cpus[0].count('_') == 2 else 'core'
+  cpu_id, _ = cpus[0].split(',')[0], 'hybridcore' if cpus[0].count('_') == 2 else 'core'
   if '[' in cpu_id: cpu_id = cpu_id.split('[')[0] + cpu_id[-2]
   event_list = "%s/%s-%s.json" % (events_dir, cpu_id, 'hybridcore' if cpus[0].count('_') == 2 else 'core')
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))

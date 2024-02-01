@@ -42,14 +42,14 @@ def get_stat_int(s, c, stat_file=None, val=-1):
   rollup(c, stat_file)
   val = None
   try:
-    val = sDB[c][s]
+    val = sDB[c][s][0]
   except KeyError:
     C.warn('KeyError for stat: %s, in config: %s' % (s, c))
   if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, stat_file, str(val)))
   return val
 
 def rollup_all(stat=None):
-  sDB['ALL'], csv_file, reload = {}, 'rollup.csv', None
+  sDB['ALL'], csv_file, reload = {}, 'rollup.csv', None 
   for a in sys.argv[1:]:
     if not reload:
       reload = re.findall("-janysave_type-er20c4ppp-c([0-9]+).perf.data.info.log", a)
@@ -68,7 +68,7 @@ def rollup_all(stat=None):
   print(C.dict2str(sDB['ALL']))
 
 def convert(v, adjust_percent=True):
-  if not type(v) == str: return v
+  if not type(v) is str: return v
   v = v.strip()
   if v.isdigit(): return int(v)  # e.g. 13
   if v.replace('.', '', 1).isdigit(): return float(v)  # e.g. 1.13
@@ -85,7 +85,7 @@ def read_loops_info(info, loop_id='imix-ID'):
   loops = C.exe_output(C.grep('Loop#', info), sep='\n')
   if loops != '':  # loops stats found
     for loop in loops.split('\n'):
-      if loop_id == 'srcline' and not 'srcline:' in loop:
+      if loop_id == 'srcline' and 'srcline:' not in loop:
         C.warn('Must run with srcline for loops stats, run with --tune :loop-srcline:1')
         break
       key = loop.split(':')[0].strip()
@@ -94,21 +94,31 @@ def read_loops_info(info, loop_id='imix-ID'):
         attr_list = attr.split(':')
         stat = attr_list[0].strip()
         stat_name = 'ID' if loop_id == stat else stat
-        d['%s %s' % (key, stat_name)] = convert(attr_list[1].strip())
+        d['%s %s' % (key, stat_name)] = (convert(attr_list[1].strip()), 'LBR.Loop')
   return d
 
+def is_metric(s):
+  return s[0].isupper() and not s.isupper() and \
+         not re.search(r"(instructions|pairs|branches|insts-class|insts-subclass)$", s.lower())
 def read_info(info, read_loops=False, loop_id='imix-ID'):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
   for l in C.file2lines(info):
     if 'IPC histogram of' in l: break  # stops upon detailed loops stats
-    s, v = (None, ) * 2
+    s = v = None
+    g = 'LBR.'
     if 'WARNING' in l: pass
     elif re.findall('([cC]ount|estimate) of', l):
       l = l.split(':')
       s = l[0].strip()#' '.join(l[0].split()) # re.sub('  +', ' ', l[0])
       v = convert(l[1])
-    if v: d[s] = convert(v)
+    if v:
+      if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
+        g += 'Glob'
+      elif is_metric(s): g += 'Metric'
+      elif s.startswith('proxy count'): g += 'Proxy'
+      else: g += 'Event'
+      d[s] = (v, g)
   if read_loops: d.update(read_loops_info(info, loop_id))
   return d
 
@@ -139,12 +149,13 @@ def read_perf(f):
   def calc_metric(e, v=None):
     if e == None: return ['IpMispredict', 'IpUnknown_Branch', 'L2MPKI_Code', 'UopPI']
     if not 'instructions' in d: return None
-    inst = float(d['instructions'])
-    if e == 'branch-misses': d['IpMispredict'] = inst / v
-    if e == 'r0160': d['IpUnknown_Branch'] = inst / v
-    if e == 'r2424': d['L2MPKI_Code'] = 1000 * val / inst
-    if e == 'topdown-retiring': d['UopPI'] = v / inst
-  if f == None: return calc_metric(None) # a hack!
+    inst = convert(d['instructions'][0])
+    group = 'Metric'
+    if e == 'branch-misses': d['IpMispredict'] = (inst / v, group)
+    if e == 'r0160': d['IpUnknown_Branch'] = (inst / v, group)
+    if e == 'r2424': d['L2MPKI_Code'] = (1000 * val / inst, group)
+    if e == 'topdown-retiring': d['UopPI'] = (v / inst, group)
+  if f is None: return calc_metric(None) # a hack!
   if debug > 3: print('reading %s' % f)
   lines = C.file2lines(f)
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
@@ -152,13 +163,13 @@ def read_perf(f):
     if debug > 5: print('debug:', l)
     if 'atom' in l: continue
     try:
-      name, val, var, name2, val2, name3, val3 = parse_perf(l)
+      name, group, val, var, name2, group2, val2, name3, group3, val3 = parse_perf(l)
       if name:
-        d[name] = val
-        d[name+':var'] = var
+        d[name] = (val, group)
+        d[name + ':var'] = (var, group)
         calc_metric(name, val)
-      if name2: d[name2] = val2
-      if name3: d[name3] = val3
+      if name2: d[name2] = (val2, group2)
+      if name3: d[name3] = (val3, group3)
     except ValueError or IndexError:
       C.warn("cannot parse: '%s' in %s" % (l, f))
   if debug > 2: print(d)
@@ -170,7 +181,9 @@ def parse_perf(l):
   multirun = '+-' in l
   def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if multirun else None
   items = l.strip().split()
-  name, val, var, name2, val2, name3, val3 = None, -1, None, None, -1, None, -1
+  name = name2 = name3 = group = group2 = group3 = var = None
+  val = val2 = val3 = -1
+  def get_group(n): return 'Metric' if is_metric(n) else 'Event'
   if not re.match(r'^[1-9 ]', l) or '<not supported>' in l: pass
   elif 'Performance counter stats for' in l:
     name = 'App'
@@ -187,9 +200,10 @@ def parse_perf(l):
     if name.count('_') >= 1 and name.islower() and not re.match('^(cpu_core/|perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
       base_event = name.split(':')[0]
       Name = name.replace(base_event, pmu.toplev2intel_name(base_event))
-      assert not ':C1' in Name # Name = Name.replace(':C1', ':c1')
+      assert ':C1' not in Name # Name = Name.replace(':C1', ':c1')
       if stats['verbose']: print(name, '->', Name)
       name = Name
+    group = get_group(name)
     val = convert(items[0])
     var = get_var()
     metric_idx = name_idx + 3
@@ -207,8 +221,10 @@ def parse_perf(l):
       elif name2 in Renames: name2 = Renames[name2]
       val2 = convert(val2, adjust_percent=False)
       name2 = name2.replace('-', '_')
-  if debug > 6: print('debug:', name, val, var, name2, val2, name3, val3)
-  return name, val, var, name2, val2, name3, val3
+  if name2: group2 = get_group(name2)
+  if name3: group3 = get_group(name3)
+  if debug > 6: print('debug:', name, group, val, var, name2, group2, val2, name3, group3, val3)
+  return name, group, val, var, name2, group2, val2, name3, group3, val3
 
 # Should move this to a new analysis module
 Key2group = {
@@ -230,22 +246,20 @@ def read_toplev(filename, metric=None):
       items = l.strip().split()
       if debug > 5: print('debug:', len(items), items, l)
       if items[0] == 'core': items.pop(0)
-      if 'Info.Bot' in items[0]:
-        d[items[1]] = float(items[3])
+      if l.startswith('Info'):
+        d[items[1]] = (convert(items[3]), items[0])  # (value, group)
       elif '<==' in l:
-        d['Critical-Group'] = Key2group[ items[0] ]
-        d['Critical-Node'] = items[1]
+        d['Critical-Group'] = (Key2group[items[0]], None)
+        d['Critical-Node'] = (items[1], None)
       elif l.startswith('warning'):
-        d['zero-counts'] = l.split(':')[2].strip()
-      elif l.startswith('Info'):
-        d[items[1]] = convert(items[3])
+        d['zero-counts'] = (l.split(':')[2].strip(), None)
     except ValueError:
       C.warn("cannot parse: '%s'" % l)
     except AttributeError:
       C.warn("empty file: '%s'" % filename)
   if debug > 2: print(d)
   if metric:
-    r = d[metric] if metric in d else None
+    r = d[metric][0] if metric in d else None
     if debug > 0: print('stats: read_toplev(filename=%s, metric=%s) = %s' % (filename, metric, str(r)))
     return r
   return d
@@ -283,7 +297,7 @@ def read_perf_toplev(filename):
 
 def patch_metrics(d):
   SLOTS = 'TOPDOWN.SLOTS'
-  if not SLOTS in d: return
+  if SLOTS not in d: return {}
   slots = d[SLOTS]
   del d[SLOTS]
   d[SLOTS + ':perf_metrics'] = slots
@@ -302,7 +316,7 @@ def patch_metrics(d):
         del d[k]
   for k in fields:
     m = n = 'PERF_METRICS.' + k
-    if not m in d:
+    if m not in d:
       n = m.lower().replace('.', '_')
     d[m] = int(255.0 * d[n] / slots)
     if m != n: del d[n]
@@ -339,7 +353,7 @@ def perf_log2stat(log, smt_on, d={}):
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
     if debug > 3: print('reading %s' % f)
     for l in C.file2lines(f):
-      name, val, etc, name2, val2 = parse_perf(l)[0:5]
+      name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2
     return ue

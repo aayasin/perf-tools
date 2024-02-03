@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.06 # see version line of do.py
+__version__= x86.__version__ + 2.07 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -309,6 +309,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
       if srcline: loops[ip]['srcline'] = srcline.replace(':', ';')
+      if get_ilen(lines[-1]): loops[ip]['sizeIB'] = int(xip) - ip + get_ilen(lines[-1]) # size In Bytes
       return
     elif use_cands and len(lines) > 2 and ip in bwd_br_tgts and has_ip(len(lines)-2):
       bwd_br_tgts.remove(ip)

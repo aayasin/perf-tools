@@ -15,7 +15,7 @@ __author__ = 'ayasin'
 from lbr import *
 import common as C
 
-c = {x: 0 for x in ('loop_head', 'loop_16B_unaligned', 'loop_seq', 'loop_jmp2mid', 'loop_jmp2head',
+c = {x: 0 for x in ('loop_head', 'loop_16B_unaligned', 'loop_32B_unaligned', 'loop_seq', 'loop_jmp2mid', 'loop_jmp2head',
                     'sequential', 'after_uncond_jmp', 'total')}
 
 # usage: perf script -F +brstackinsn [--xed] | ./lbr_stats [ip-of-sample=ALL] [ip-of-loop=0] [num-loops=10] [enable-loop-stats=0] [event=LBR_Event]
@@ -43,6 +43,7 @@ while True:
   if is_loop_by_ip(ip):
     c['loop_head'] += 1
     if ip & 0xF: c['loop_16B_unaligned'] += 1
+    elif ip & 0x1F: c['loop_32B_unaligned'] += 1
     if not is_taken(sample[-2]): c['loop_seq'] += 1
     elif is_taken(sample[-2]) and is_jmp_next(get_taken(sample, -1)): c['loop_jmp2head'] += 1
     br = get_taken(sample, -2)
@@ -61,7 +62,7 @@ if 1:
   def loop_r(x): return C.ratio('loop_' + x, c, 'loop_head')
   if 'DSB_MISS' in ev: print('%s stats:' % ev, c,
     '\n  Global:', ', '.join([C.ratio('sequential', c), C.ratio('loop_head', c), C.ratio('after_uncond_jmp', c)]),
-    '\n  Loops:', ', '.join([loop_r('seq'), loop_r('jmp2mid'), loop_r('jmp2head'), loop_r('16B_unaligned')]) )
+    '\n  Loops:', ', '.join([loop_r('seq'), loop_r('jmp2mid'), loop_r('jmp2head'), loop_r('16B_unaligned'), loop_r('32B_unaligned')]) )
   if filter:
     print_loop(loop)
     print(stat)

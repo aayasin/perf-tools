@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.93
+__version__ = 2.94
 
 import argparse, os.path, sys
 import common as C, pmu, stats, tma
@@ -99,7 +99,7 @@ do = {'run':        C.RUN_DEF,
   'plot':           0,
   'python':         sys.executable,
   'python-pkgs':    ['numpy', 'pandas', 'xlsxwriter'],
-  'reprocess':      2,
+  'reprocess':      2, # for LBR profile-step: -1: append, 0: lazy, 1: reuse header, 2: process anew
   'sample':         2,
   'size':           0,
   'super':          0,
@@ -627,7 +627,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = r"sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def print_info(x):
-      if args.mode != 'profile': exe_v0('printf "%s" >%s %s' % (x, '' if print_info.first else '>', info))
+      if args.mode != 'profile': exe_v0('printf "%s" >%s %s' % (x, '' if print_info.first and do['reprocess'] >= 0 else '>', info))
       print_info.first = False
     print_info.first = True
     def static_stats():
@@ -672,7 +672,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       C.fappend('\n%s:\n' % header + '\t'.join(('significance', '%7s' % 'ratio', 'instruction addr & ASM')), misp_file)
       for b in C.hist2slist(mispreds): C.fappend('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0])), misp_file) if b[1] > 1 else None
     lbr_hdr = '# LBR-based Statistics:'
-    if not isfile(info) or do['reprocess'] > 1:
+    if not isfile(info) or do['reprocess'] > 1 or do['reprocess'] < 0:
       if do['size']: static_stats()
       print_info('# processing %s%s\n' % (data, C.flag2str(" filtered on ", comm)))
       if do['lbr-branch-stats']: exe(perf + r" report %s | grep -A13 'Branch Statistics:' | tee -a %s | grep -E -v ':\s+0\.0%%|CROSS'" %

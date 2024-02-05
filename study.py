@@ -206,11 +206,7 @@ def compare_stats(app1, app2):
     print(sep)
     for k, g, v1, v2, d, r in l: print(format_line(k, g, v1, v2, d, r))
     print('\n')
-  def get_info_file(app):
-    for filename in os.listdir(os.getcwd()):
-      if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+).perf.data.info.log" % app, filename):
-        return filename
-    return None
+  def get_info_file(app): return stats.get_file(app, 'info')
   def get_value_group(d, k):
     return (d[k][0], d[k][1]) if k in d else (None, None)
   # print table of loops with regressed IPC between configs
@@ -249,7 +245,7 @@ def compare_stats(app1, app2):
 
   # compare_stats() starts here
   C.printc('\tconfigs side-by-side', C.color.BOLD)
-  info1, info2 = get_info_file(app1_str), get_info_file(app2_str)
+  info1, info2 = get_info_file(app1), get_info_file(app2)
   # adding info files stats
   if info1 and info2:
     stats.sDB[app1_str].update(stats.read_info(info1, read_loops=not args.skip_loops, loop_id=args.loop_id))

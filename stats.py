@@ -12,12 +12,18 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.93
+__version__= 0.94
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
 from lbr import print_stat
 from kernels import x86
+
+def get_file(app, ext):
+  for filename in os.listdir(os.getcwd()):
+    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+).perf.data.%s.log" % (C.command_basename(app), ext), filename):
+      return filename
+  return None
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]
@@ -79,7 +85,7 @@ def convert(v, adjust_percent=True):
     return v / 100 if adjust_percent else v
   return str(v)
 
-def read_loops_info(info, loop_id='imix-ID'):
+def read_loops_info(info, loop_id='imix-ID', as_loops=False):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
   loops = C.exe_output(C.grep('Loop#', info), sep='\n')
@@ -90,11 +96,13 @@ def read_loops_info(info, loop_id='imix-ID'):
         break
       key = loop.split(':')[0].strip()
       loop_attrs = re.split(r',(?![^\[]*\])', loop[loop.index('[') + 1:-1])
+      if as_loops: d[key] = {}
       for attr in loop_attrs:
         attr_list = attr.split(':')
-        stat = attr_list[0].strip()
+        stat, val = attr_list[0].strip(), convert(attr_list[1].strip())
         stat_name = 'ID' if loop_id == stat else stat
-        d['%s %s' % (key, stat_name)] = (convert(attr_list[1].strip()), 'LBR.Loop')
+        if as_loops: d[key][stat_name] = val
+        else: d['%s %s' % (key, stat_name)] = (val, 'LBR.Loop')
   return d
 
 def is_metric(s):

@@ -1,8 +1,8 @@
 usage: do.py command [command ..] [options]
 
 positional arguments:
-  command               setup-perf log profile tar, all (for these 4)
-                        supported options: all build build-perf clean
+  command               setup-perf log profile analyze tar, all (for these 5)
+                        supported options: all analyze build build-perf clean
                         eventlist-update find-perf git-log-oneline help
                         install-python log profile prof-no-mux reboot setup-
                         all setup-perf sync-date tar tools-update version

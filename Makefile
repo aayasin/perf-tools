@@ -5,7 +5,7 @@ CMD = profile
 CPU = $(shell ./pmu.py CPU)
 DO = ./do.py $(DO_ARGS)
 DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10 $(DO_ARGS)
-DO2 = $(DO) profile -a 'workloads/BC.sh 3' $(DO_ARGS)
+DO2 = $(DO) $(CMD) -a 'workloads/BC.sh 3' $(DO_ARGS)
 FAIL = (echo "failed! $$?"; exit 1)
 MAKE = make --no-print-directory
 METRIC = -m IpCall
@@ -69,7 +69,7 @@ test-bottlenecks: kernels/cpuid
 	$(DO1) -pm 10 --tune :help:0
 	grep Bottleneck cpuid-$(CPUIDI).toplev-vl6.log | sort -n -k4 | tail -1 | grep --color Irregular_Overhead
 test-bc2:
-	$(DO2) -pm 40 | $(SHOW)
+	$(DO2) -pm $(PM) | $(SHOW)
 test-metric:
 	$(DO) profile $(METRIC) --stdout -pm 2
 	$(DO) profile -pm 40 | $(SHOW)
@@ -144,7 +144,7 @@ CPUS = ICX SPR SPR-HBM TGL ADL
 test-forcecpu:
 	@failed=false; \
 	for cpu in $(CPUS); do \
-        	FORCECPU=$$cpu $(DO) $(CMD) -a "./workloads/BC.sh 5 $$cpu" -pm 19112 --tune :loops:0 :help:0 -e FRONTEND_RETIRED.ANY_DSB_MISS 2>&1 || { failed=true; break; }; \
+        	FORCECPU=$$cpu $(DO) $(CMD) -a "./workloads/BC.sh 6 $$cpu" -pm 19112 --tune :loops:0 :help:0 -e FRONTEND_RETIRED.ANY_DSB_MISS 2>&1 || { failed=true; break; }; \
     	done; \
 	$$failed && $(FAIL)
 test-edge-inst:
@@ -157,7 +157,7 @@ pre-push: help
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
 	$(MAKE) test-metric SHOW="grep --color -E '^|Ret.*<=='" # tests perf -M IpCall & colored TMA, then toplev --drilldown
 	$(DO) log                                               # prompt for sudo soon after
-	$(MAKE) test-bc2 SHOW="grep --color -E '^|Mispredict'"	# tests topdown across-tree tagging; Mispredict
+	$(MAKE) test-bc2 PM=40 SHOW="grep --color -E '^|Mispredict'"	# tests topdown across-tree tagging; Mispredict
 	echo skip: $(MAKE) test-false-sharing                              # tests topdown ~overlap in Threshold attribute
 	$(MAKE) test-bottlenecks AP="./kernels/cpuid $(CPUIDI)" # tests Bottlenecks View
 	$(MAKE) test-build SHOW="grep --color -E '^|build|DSB|Ports'" # tests build command, perf -e, toplev --nodes; Ports_*
@@ -165,6 +165,7 @@ pre-push: help
 	$(MAKE) test-default PM=313e                            # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
+	$(MAKE) test-bc2 CMD='profile analyze' PM=100           # tests analyze module
 	$(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL) # tests --delay
 	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
 	$(MAKE) test-default DO_ARGS="--tune :calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \

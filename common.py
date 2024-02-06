@@ -244,7 +244,7 @@ def toplev_log2csv(f): return f.replace('.log', '-perf.csv')
 # chop - clean a list of charecters from a string
 # @s:     input string
 # @stuff: input charecters as string, or a first item in a tuple of strings
-CHOP_STUFF='./~<>=,;{}|"\': '
+CHOP_STUFF='/~<>=,;{}|"\': '
 def chop(source, stuff=CHOP_STUFF):
   r, chars = source, stuff
   items = []

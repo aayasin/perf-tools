@@ -1029,7 +1029,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'imix-ID', 'back', 'entry-block', 'IPC', 'tripcount']
   for x in paths_range(): dell += ['paths-%d'%x]
-  if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
+  #if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
   for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex_ip(loop[x])))
   for x, y in (('inn', 'out'), ('out', 'inn')):

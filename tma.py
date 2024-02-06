@@ -60,3 +60,7 @@ def get(tag):
     return ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model)))
   assert tag in metrics, "Unsupported tma.get(%s)! Supported tags: %s" % (tag, combo_tags + ' '.join(metrics.keys()))
   return metrics[tag]
+
+# TODO: grep it from toplev's ratio file
+def threshold_of(metric):
+  return 20

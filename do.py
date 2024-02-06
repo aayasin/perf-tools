@@ -18,10 +18,10 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 2.94
+__version__ = 3.01
 
 import argparse, os.path, sys
-import common as C, pmu, stats, tma
+import analyze, common as C, pmu, stats, tma
 from datetime import datetime
 from getpass import getuser
 from math import log10
@@ -44,6 +44,8 @@ if globs['uname-a'].startswith('Darwin'):
 
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
+  'az-hot-loop':    .05,
+  'az-Instruction_Fetch_BW': tma.threshold_of('Instruction_Fetch_BW'),
   'batch':          0,
   'calibrate':      0,
   'comm':           None,
@@ -173,6 +175,9 @@ def module_version(mod_name):
   if mod_name == 'lbr':
     import lbr
     mod = lbr
+  elif mod_name == 'analyze':
+    import analyze
+    mod = analyze
   elif mod_name == 'stats':
     import stats
     mod = stats
@@ -189,6 +194,9 @@ def toplev_describe(m, msg=None, mod='^'):
   exe('%s --describe %s%s' % (get_perf_toplev()[1], m, mod), msg, redir_out=None)
 def read_toplev(l, m): return None if do['help'] < 0 else stats.read_toplev(l, m)
 def perf_record_true(): return '%s record true > /dev/null' % get_perf_toplev()[0]
+def analyze_it():
+  exe_v0(msg="Analyzing '%s'" % args.app)
+  analyze.analyze(uniq_name(), args, do)
 
 def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=[]):
   if args.install_perf:
@@ -875,7 +883,7 @@ def parse_args():
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
     defs={'perf': 'perf', 'pmu-tools': '%s %s/pmu-tools' % (do['python'], C.dirname()),
           'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']}, epilog=epilog)
-  ap.add_argument('command', nargs='+', help='setup-perf log profile tar, all (for these 4) '
+  ap.add_argument('command', nargs='+', help='setup-perf log profile analyze tar, all (for these 5) '
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
   ap.add_argument('--install-perf', nargs='?', default=None, const='install', help='perf tool installation options: [install]|patch|build')
@@ -1011,6 +1019,7 @@ def main():
     elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
     elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
                                     ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))
+    elif c == 'analyze':      analyze_it()
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile(args.profile_mask)
     elif c.startswith('get'): get(param)
@@ -1019,13 +1028,14 @@ def main():
     elif c == 'all':
       setup_perf()
       profile(args.profile_mask | 0x1)
+      analyze_it()
       do_logs('tar')
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
     elif c == 'sync-date':    exe('sudo date -s "$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d\' \' -f5-8)Z"', redir_out=None)
     elif c == 'version':      print(os.path.basename(__file__), 'version =', version(), '; '.join([''] +
-      [module_version(x) for x in ('lbr', 'stats')] + [exe_1line(args.perf + ' --version').replace(' version ', '='),
-                                                       'TMA=%s' % pmu.cpu('TMA version')]))
+      [module_version(x) for x in ('analyze', 'lbr', 'stats')] + [exe_1line(
+        args.perf + ' --version').replace(' version ', '='), 'TMA=%s' % pmu.cpu('TMA version')]))
     elif c.startswith('backup'):
       r = '../perf-tools-%s-%s-e%d.tar.gz' % (version(),
           '-'.join([module_version(x) for x in ('lbr', 'stats', 'study')]), len(param))
@@ -1051,3 +1061,5 @@ def get(param):
 if __name__ == "__main__":
   main()
   if globs['cmds_file']: globs['cmds_file'].close()
+
+# strace -o strace.log -s999 my-command

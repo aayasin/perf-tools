@@ -37,7 +37,7 @@ log=.$B-$2-$$.log
 #set -x
 [[ ${NO_LLP} ]] || export LD_LIBRARY_PATH=$ld:$LD_LIBRARY_PATH
 $cmd > $log 2>&1
-grep -F Puzzle, $log 
+grep -F Puzzle, $log # replace this to grep a score (performance result) of your workload
 """)
   C.exit()
 

@@ -10,17 +10,7 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
 ## Overview
 * **do.py** -- The main driver with handy shortcuts for setting up and doing profiling, over [Linux perf](https://perf.wiki.kernel.org)
 * **study.py** -- A driver to study and compare multiple flavors of an application (it wraps do.py and employs parallel post-processing)
-* **kernels/** -- an evolving collection of x86 kernels
-  * **gen-kernel.py** -- generator of X86 kernels
-  * **jumpy.py** -- module for different jumping constructs
-  * **peakXwide.c** -- sample kernels for a X-wide superscalar machine, e.g. 4 for Skylake
-  * **sse2avx.c** -- another auto-generated kernel for SSE <-> AVX ISA transition penalty
-  * **memcpy.c** -- a custom kernel for strings of libc demonstrating how to timestamp a region-of-interest
-  * **callchain.c** -- a custom kernel for chain of function calls as demonstrated in [Establishing a Base of Trust with Performance Counters for Enterprise Workloads](https://www.usenix.org/system/files/conference/atc15/atc15-paper-nowak.pdf)
-  * **pagefault.c** -- a custom kernel for page faults on memory data accesses
-  * **fp-arith-mix.c** -- demonstrates utilization of extra counters in Icelake's PMU
-  * **rfetch3m** -- a random fetcher across 3MB code footprint (auto-generated)
-  * There are more kernels produced by **build.sh** though not uploaded to git
+* **analyze.py** -- A module for analyzing profiling logs
 * **lbr.py** -- A module for processing Last Branch Record (LBR) streams
 * **pmu.py** -- A module for interface to the Performance Monitoring Unit (PMU)
 * **stats.py** --  A module for processing counters and profiling logs
@@ -32,6 +22,17 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
 * **workloads/** -- an evolving collection of "micro-workloads"
   * BC.sh -- wrapper of the Linux bc utility
   * **mmm/** -- the matrix-matrix mutiply (mmm) HPC kernel - multiple optimizations as demonstrated in [Tuning Performance via Metrics with Expectations](https://ieeexplore.ieee.org/document/8714063)
+* **kernels/** -- an evolving collection of x86 kernels
+  * **gen-kernel.py** -- generator of X86 kernels
+  * **jumpy.py** -- module for different jumping constructs
+  * **peakXwide.c** -- sample kernels for a X-wide superscalar machine, e.g. 4 for Skylake
+  * **sse2avx.c** -- another auto-generated kernel for SSE <-> AVX ISA transition penalty
+  * **memcpy.c** -- a custom kernel for strings of libc demonstrating how to timestamp a region-of-interest
+  * **callchain.c** -- a custom kernel for chain of function calls as demonstrated in [Establishing a Base of Trust with Performance Counters for Enterprise Workloads](https://www.usenix.org/system/files/conference/atc15/atc15-paper-nowak.pdf)
+  * **pagefault.c** -- a custom kernel for page faults on memory data accesses
+  * **fp-arith-mix.c** -- demonstrates utilization of extra counters in Icelake's PMU
+  * **rfetch3m** -- a random fetcher across 3MB code footprint (auto-generated)
+  * There are more kernels produced by **build.sh** though not uploaded to git
 ### Checkout with: 
 `git clone --recurse-submodules https://github.com/aayasin/perf-tools`
 

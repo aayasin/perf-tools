@@ -151,7 +151,7 @@ perftools = os.path.dirname(os.path.realpath(__file__))
 def cpu_has_feature(feature):
   if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
     cpuid_f = '%s/setup-cpuid.log' % perftools
-    if not os.path.exists(cpuid_f): C.exe_cmd('cd %s && ./do.py log' % perftools, debug=1)
+    if not os.path.exists(cpuid_f): C.exe_cmd('cd %s && ./do.py log --tune :cpuid:1' % perftools, debug=1)
     return not C.exe_cmd(r"grep -E -q '\s+0x00000023 0x00: eax=0x000000.[^0] ' " + cpuid_f, fail=-1)
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags

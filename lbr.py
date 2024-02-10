@@ -309,7 +309,8 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
       if srcline: loops[ip]['srcline'] = srcline.replace(':', ';')
-      if get_ilen(lines[-1]): loops[ip]['sizeIB'] = int(xip) - ip + get_ilen(lines[-1]) # size In Bytes
+      ilen = get_ilen(lines[-1])
+      if ilen: loops[ip]['sizeIB'] = int(xip) - ip + ilen # size In Bytes
       return
     elif use_cands and len(lines) > 2 and ip in bwd_br_tgts and has_ip(len(lines)-2):
       bwd_br_tgts.remove(ip)

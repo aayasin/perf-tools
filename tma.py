@@ -13,6 +13,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 
 import common as C, pmu
+import os
 
 def fixed_metrics(intel_names=False, force_glc=False):
   events, flags = ','.join(pmu.fixed_events(intel_names)), None
@@ -20,7 +21,8 @@ def fixed_metrics(intel_names=False, force_glc=False):
     prefix = ',topdown-'
     def prepend(l): return prefix.join([''] + l)
     events += prepend(['retiring', 'bad-spec', 'fe-bound', 'be-bound'])
-    if pmu.goldencove_on() or force_glc:
+    events_files = len([f for f in os.listdir('/sys/devices/cpu/events/') if f.startswith('topdown')])
+    if (pmu.goldencove_on() or force_glc) and events_files == 8:
       events += prepend(['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound'])
       flags = ' --td-level=2'
     events = '{%s}' % events
@@ -57,7 +59,12 @@ def get(tag):
     Dedup = C.csv2dict(settings_file('tma-many-counters.csv'))
     return Dedup[model].replace(';', ',')
   if tag == 'perf-groups':
-    return ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model)))
+    groups = ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model)))
+    td_groups = [f for f in os.listdir('/sys/devices/cpu/events/') if f.startswith('topdown')]
+    for e in ['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound']:
+      name = 'topdown-' + e
+      if not name in td_groups: groups = groups.replace(',' + name, '')
+    return groups
   assert tag in metrics, "Unsupported tma.get(%s)! Supported tags: %s" % (tag, combo_tags + ' '.join(metrics.keys()))
   return metrics[tag]
 

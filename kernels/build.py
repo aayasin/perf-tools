@@ -88,6 +88,7 @@ if args.GEN:
     kernels.append("memcpy")
     kernels.append("pagefault")
     kernels.append("tripcount-mean")
+    kernels.append("store_fwd_block")
 
 #kernels.append('cond_jmp')
 print(kernels)

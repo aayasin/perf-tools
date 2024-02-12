@@ -29,7 +29,7 @@ def name(real=False):
 
 # per CPU PMUs
 def skylake():    return name() in ('skylake', 'skl')
-def icelake():    return name() in ('icelake', 'icx', 'tgl')
+def icelake():    return name() in ('icelake', 'icl', 'icx', 'tgl')
 def alderlake():  return name() in ('alderlake_hybrid', 'adl')
 def sapphire():   return name() in ('sapphire_rapids', 'spr', 'spr-hbm')
 def meteorlake(): return name() in ('meteorlake_hybrid', 'mtl')
@@ -153,8 +153,17 @@ def cpu_has_feature(feature):
     cpuid_f = '%s/setup-cpuid.log' % perftools
     if not os.path.exists(cpuid_f): C.exe_cmd('cd %s && ./do.py log --tune :cpuid:1' % perftools, debug=1)
     return not C.exe_cmd(r"grep -E -q '\s+0x00000023 0x00: eax=0x000000.[^0] ' " + cpuid_f, fail=-1)
-  flags = C.exe_output("lscpu | grep Flags:")
-  return feature in flags
+  if cpu_has_feature.flags: return feature in cpu_has_feature.flags
+  def get_flags():
+    forcecpu = C.env2str('FORCECPU')
+    flags = C.exe_output("lscpu | grep Flags:")
+    def hide(x): return flags.replace(x, '-')
+    if forcecpu:
+      if C.any_in(['ICL', 'ICX', 'TGL'], forcecpu): flags = hide('arch_lbr')
+      if C.any_in(['ADL', 'MTL'], forcecpu): flags = hide('avx512')
+    return flags
+  cpu_has_feature.flags = get_flags()
+cpu_has_feature.flags = None
 
 def force_cpu_toplev(forcecpu): return ('sprmax' if forcecpu.upper() == 'SPR-HBM' else forcecpu.lower()) if forcecpu else ''
 def force_cpu(cpu):

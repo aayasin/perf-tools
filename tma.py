@@ -59,7 +59,7 @@ def get(tag):
     Dedup = C.csv2dict(settings_file('tma-many-counters.csv'))
     return Dedup[model].replace(';', ',')
   if tag == 'perf-groups':
-    groups = ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model)))
+    groups = ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model), True))
     td_groups = [f for f in os.listdir('/sys/devices/cpu/events/') if f.startswith('topdown')]
     for e in ['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound']:
       name = 'topdown-' + e

@@ -3,9 +3,9 @@ AP = CLTRAMP3D
 APP = taskset 0x4 ./$(AP)
 CMD = profile
 CPU = $(shell ./pmu.py CPU)
-DO = ./do.py $(DO_ARGS)
-DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10 $(DO_ARGS)
-DO2 = $(DO) $(CMD) -a 'workloads/BC.sh 3' $(DO_ARGS)
+DO = ./do.py # Use e.g. DO="do.py --perf /my/perf" to init things, or DO_SUFF to override things
+DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10
+DO2 = $(DO) $(CMD) -a 'workloads/BC.sh 3'
 FAIL = (echo "failed! $$?"; exit 1)
 MAKE = make --no-print-directory
 METRIC = -m IpCall
@@ -108,9 +108,9 @@ test-build:
 	$(SKIP_EX) || ( set -o pipefail; ./do.py profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
 	    -pm 20006 -r 1 | $(SHOW) ) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
 test-default: ./CLTRAMP3D
-	$(DO1) -pm $(PM)
-TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_ARGS)
-TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp $(DO_ARGS)
+	$(DO1) -pm $(PM) $(DO_SUFF)
+TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
+TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo $(TS_A) > $@
@@ -142,11 +142,11 @@ test-tripcount-mean: lbr.py do.py kernels/x86.py
 	else exit 1}' || $(FAIL)
 CPUS = ICX SPR SPR-HBM TGL ADL
 test-forcecpu:
-	@failed=false; \
+	passed=true; set -x;\
 	for cpu in $(CPUS); do \
-        	FORCECPU=$$cpu $(DO) $(CMD) -a "./workloads/BC.sh 6 $$cpu" -pm 19112 --tune :loops:0 :help:0 -e FRONTEND_RETIRED.ANY_DSB_MISS 2>&1 || { failed=true; break; }; \
-    	done; \
-	$$failed && $(FAIL)
+        FORCECPU=$$cpu $(DO) $(CMD) -a "./workloads/BC.sh 7 $$cpu" -pm 19112 --tune :loops:0 :help:0 \
+        -e FRONTEND_RETIRED.ANY_DSB_MISS $(DO_SUFF) 2>&1 || { failed=false; break; }; done;\
+	$$passed || $(FAIL)
 test-edge-inst:
 	$(DO) $(CMD) -a './pmu-tools/workloads/CLTRAMP3D' --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 
@@ -168,11 +168,11 @@ pre-push: help
 	$(MAKE) test-bc2 CMD='profile analyze' PM=100           # tests analyze module
 	$(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL) # tests --delay
 	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
-	$(MAKE) test-default DO_ARGS="--tune :calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_ARGS)" \
+	$(MAKE) test-default DO_SUFF="--tune :calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_SUFF)" \
 	    CMD='suspend-smt profile tar' PM=3931a &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-*.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command
-	$(MAKE) test-default APP=./$(AP) PM=313e DO_ARGS="--tune :perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
+	$(MAKE) test-default APP=./$(AP) PM=313e DO_SUFF="--tune :perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
 	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
 	mkdir -p test-dir; cd test-dir; ln -sf ../run.sh; ln -sf ../common.py; ln -sf ../CLTRAMP3D && \
 	    make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1\

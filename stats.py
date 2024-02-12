@@ -168,7 +168,6 @@ def read_perf(f):
   lines = C.file2lines(f)
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
   for l in lines:
-    if debug > 5: print('debug:', l)
     if 'atom' in l: continue
     try:
       name, group, val, var, name2, group2, val2, name3, group3, val3 = parse_perf(l)
@@ -186,13 +185,14 @@ def read_perf(f):
 def parse_perf(l):
   Renames = {'insn-per-cycle': 'IPC',
              'GHz': 'Frequency'}
+  if debug > 5: print('debug:', l)
   multirun = '+-' in l
   def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if multirun else None
   items = l.strip().split()
   name = name2 = name3 = group = group2 = group3 = var = None
   val = val2 = val3 = -1
   def get_group(n): return 'Metric' if is_metric(n) else 'Event'
-  if not re.match(r'^[1-9 ]', l) or '<not supported>' in l: pass
+  if not re.match(r'^\s*[0-9P]', l): pass
   elif 'Performance counter stats for' in l:
     name = 'App'
     val = l.split("'")[1]

@@ -29,7 +29,7 @@ def name(real=False):
 
 # per CPU PMUs
 def skylake():    return name() in ('skylake', 'skl')
-def icelake():    return name() in ('icelake', 'icx')
+def icelake():    return name() in ('icelake', 'icx', 'tgl')
 def alderlake():  return name() in ('alderlake_hybrid', 'adl')
 def sapphire():   return name() in ('sapphire_rapids', 'spr', 'spr-hbm')
 def meteorlake(): return name() in ('meteorlake_hybrid', 'mtl')

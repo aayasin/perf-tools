@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2020-2023, Intel Corporation
+# Copyright (c) 2020-2024, Intel Corporation
 # Author: Ahmad Yasin
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
@@ -59,8 +59,8 @@ def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3, type='war
     if level > WARN: return
   suffix = extra if type == 'info' else ('; suppressing' if log_db[type][msg] == suppress_after else '')
   printc('%s: %s%s' % (warning(type), msg, suffix), col)
-def warn_summary(type='warn'):
-  if len(log_db[type]): print('Top %ss: (%d total unique)\n' % (warning(type), len(log_db[type])), hist2str(log_db[type]))
+def warn_summary(type='warn', top=20):
+  if len(log_db[type]): print('Top %ss: (%d total unique)\n' % (warning(type), len(log_db[type])), hist2str(log_db[type], top))
 def info_p(msg, extra):
   return warn(msg, col=color.GREY, type='info', suppress_after=1, extra='; %s' % extra if extra else '.')
 def info(msg):  return info_p(msg, None)
@@ -70,7 +70,7 @@ def error(msg):
   printc('ERROR: %s !'%msg, color.RED)
   logs = [log[1] for log in re.findall(r"(>|tee) (\S+\.log)", msg) if log[1][0].isalpha()]
   if len(logs): exe_cmd('tail ' + ' '.join(set(logs)), debug=True)
-  if dump_stack_on_error: print(let_python_fail)
+  if dump_stack_on_error: assert 0
   sys.exit(' !')
 
 def exit(msg=None):
@@ -113,7 +113,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=1
   ret = 0
   if run:
     if log and log_stdio:
-      if not '2>&1' in x: x = x + ' 2>&1'
+      if '2>&1' not in x: x = x + ' 2>&1'
       x = x + ' | tee -a ' + log_stdio
       ret = subprocess.call(['/bin/bash', '-c', 'set -o pipefail; ' + x])
     else:
@@ -214,8 +214,8 @@ def csv2dict(f):
 
 # (colored) grep with 0 exit status
 def grep(what, file='', flags='', color=False):
-  cmd = "egrep %s '%s' %s" % (flags, what, file)
-  if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('egrep', 'egrep --color')
+  cmd = "grep -E %s '%s' %s" % (flags, what, file)
+  if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('grep', 'grep --color')
   return "(%s || true)" % cmd
 
 # auxiliary: strings, argv, python-stuff
@@ -244,7 +244,7 @@ def toplev_log2csv(f): return f.replace('.log', '-perf.csv')
 # chop - clean a list of charecters from a string
 # @s:     input string
 # @stuff: input charecters as string, or a first item in a tuple of strings
-CHOP_STUFF='./~<>=,;{}|"\': '
+CHOP_STUFF='/~<>=,;{}|"\': '
 def chop(source, stuff=CHOP_STUFF):
   r, chars = source, stuff
   items = []
@@ -285,7 +285,7 @@ def arg(num, default=None):
 def argv2str(start=0):
   res = []
   for a in sys.argv[start:]:
-    res.append("\"%s\"" % a if "'" in a else "'%s'" % a if (' ' in a or a == '') else a)
+    res.append("\"%s\"" % a if "'" in a else "'%s'" % a if (any(x in a for x in "'{") or a == '') else a)
   return ' '.join(res)
 
 def args_parse(d, args):
@@ -329,7 +329,9 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   return ap
 
 def commands_list():
-  return chop(exe_output("egrep 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort"%sys.argv[0], sep=' '), "),'")
+  return ' '.join(chop(exe_output("grep -E 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort" % sys.argv[0], sep=' '), "),'").split() +
+         [("%s-" % c) + x[:-1].replace("'", '') for x in exe_output(grep('com2cond =', sys.argv[0]), sep='').split()
+         if x.endswith(':') for c in ['enable', 'disable', 'suspend']])
 
 def command_basename(comm, iterations=None):
   if comm is None or comm.isdigit(): return 'run%d' % (int(comm) if comm else os.getpid())

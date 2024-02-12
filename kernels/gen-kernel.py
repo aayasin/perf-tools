@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2020-2023, Intel Corporation
+# Copyright (c) 2020-2024, Intel Corporation
 # Author: Ahmad Yasin
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
@@ -52,7 +52,7 @@ if args.label_prefix == '':
 prefetch = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else None
 
 if args.registers > 0:
-  if not '@' in ' '.join(args.instructions): error("expect '@' in --instructions")
+  if '@' not in ' '.join(args.instructions): error("expect '@' in --instructions")
   if args.registers > args.registers_max:    error("invalid value for --registers! must be < %d"%args.registers_max)
 
 for i in args.instructions:
@@ -61,10 +61,10 @@ for i in args.instructions:
 paper = '"Reference: %s"' % references.Papers[args.reference] if args.reference else str(0)
 
 def itemize(insts):
-  if not '#' in ' '.join(insts): return insts
+  if '#' not in ' '.join(insts): return insts
   out=[]
   for i in insts:
-    if '#' in i and not '+' in i:
+    if '#' in i and '+' not in i:
       l = i.split('#')
       if len(l)!=2 or not l[1].isdigit(): error('itemize(): Invalid syntax: %s'%i)
       n=int(l[1])
@@ -136,7 +136,7 @@ for j in range(args.unroll_factor):
           if prefetch['rate']==0 or (j % prefetch['rate'])==0:
             asm('%s%s(%%rip)'%(prefetch['prefetch-inst'], label(J.next(prefetch=True), False)))
           if '#' in inst:
-            assert inst.endswith('+JMP'), "support only 'PF+NOP#\d+JMP' pattern"
+            assert inst.endswith('+JMP'), r"support only 'PF+NOP#\d+JMP' pattern"
             asm(';'.join(itemize(C.chop(inst, ('', 'PF+', '+JMP')).split('+'))))
           inst = 'JMP'
         inst += label(J.next(), False)

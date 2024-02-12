@@ -9,7 +9,19 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
 
 ## Overview
 * **do.py** -- The main driver with handy shortcuts for setting up and doing profiling, over [Linux perf](https://perf.wiki.kernel.org)
-* **study.py** -- A driver that wraps do.py to study multiple flavors of an application (with parallel post-processing)
+* **study.py** -- A driver to study and compare multiple flavors of an application (it wraps do.py and employs parallel post-processing)
+* **analyze.py** -- A module for analyzing profiling logs
+* **lbr.py** -- A module for processing Last Branch Record (LBR) streams
+* **pmu.py** -- A module for interface to the Performance Monitoring Unit (PMU)
+* **stats.py** --  A module for processing counters and profiling logs
+* **tma.py** -- A module with modern encapsulation of the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method
+* **pmu-tools/** -- linked Andi Kleen's perf-based great tools
+  * **toplev** -- profiler featuring TMA method on Intel processors
+  * **ocperf** -- perf wrapper that converts Intel event names to perf-events syntax
+  * **genretlat** -- a profiler to collect Retire Latencies on recent Intel processors
+* **workloads/** -- an evolving collection of "micro-workloads"
+  * BC.sh -- wrapper of the Linux bc utility
+  * **mmm/** -- the matrix-matrix mutiply (mmm) HPC kernel - multiple optimizations as demonstrated in [Tuning Performance via Metrics with Expectations](https://ieeexplore.ieee.org/document/8714063)
 * **kernels/** -- an evolving collection of x86 kernels
   * **gen-kernel.py** -- generator of X86 kernels
   * **jumpy.py** -- module for different jumping constructs
@@ -21,15 +33,6 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
   * **fp-arith-mix.c** -- demonstrates utilization of extra counters in Icelake's PMU
   * **rfetch3m** -- a random fetcher across 3MB code footprint (auto-generated)
   * There are more kernels produced by **build.sh** though not uploaded to git
-* **lbr.py** -- A module for processing Last Branch Record (LBR) streams
-* **pmu.py** -- A module for interface to the Performance Monitoring Unit (PMU)
-* **stats.py** --  A module for processing counters and profiling logs
-* **tma.py** -- A module with modern encapsulation of the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method
-* **pmu-tools/** -- linked Andi Kleen's perf-based great tools
-  * **toplev** -- profiler featuring TMA method on Intel processors
-  * **ocperf** -- perf wrapper that converts Intel event names to perf-events syntax
-* **workloads/** -- an evolving collection of "micro-workloads"
-  * **mmm/** -- the matrix-matrix mutiply (mmm) HPC kernel - multiple optimizations as demonstrated in [Tuning Performance via Metrics with Expectations](https://ieeexplore.ieee.org/document/8714063)
 ### Checkout with: 
 `git clone --recurse-submodules https://github.com/aayasin/perf-tools`
 

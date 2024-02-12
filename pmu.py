@@ -23,14 +23,16 @@ else:
 # PMU, no prefix
 #
 def sys_devices_cpu(): return '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
-def name():       return C.file2str(sys_devices_cpu() + '/caps/pmu_name') or 'Unknown PMU'
+def name(real=False):
+  forcecpu = C.env2str('FORCECPU')
+  return C.file2str(sys_devices_cpu() + '/caps/pmu_name') or 'Unknown PMU' if real or not forcecpu else forcecpu.lower()
 
 # per CPU PMUs
-def skylake():    return name() == 'skylake'
-def icelake():    return name() == 'icelake'
-def alderlake():  return name() == 'alderlake_hybrid'
-def sapphire():   return name() == 'sapphire_rapids'
-def meteorlake(): return name() == 'meteorlake_hybrid'
+def skylake():    return name() in ('skylake', 'skl')
+def icelake():    return name() in ('icelake', 'icx', 'tgl')
+def alderlake():  return name() in ('alderlake_hybrid', 'adl')
+def sapphire():   return name() in ('sapphire_rapids', 'spr', 'spr-hbm')
+def meteorlake(): return name() in ('meteorlake_hybrid', 'mtl')
 # aggregations
 def goldencove():   return alderlake() or sapphire()
 def redwoodcove():  return meteorlake()
@@ -42,6 +44,8 @@ def v4p(): return os.path.exists(sys_devices_cpu() + '/format/frontend') # PEBS_
 def v5p(): return perfmetrics()
 # Golden Cove onward PMUs have Arch LBR
 def goldencove_on():  return cpu_has_feature('arch_lbr')
+# Redwood Cove onward PMUs have CPUID.0x23
+def redwoodcove_on(): return cpu_has_feature('CPUID.23H')
 
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
@@ -66,6 +70,7 @@ def event_name(x):
 def lbr_event():
   return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
 def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
+def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p')
 
 def ldlat_event(lat):
   return '"{%s/mem-loads-aux,period=%d/,%s/mem-loads,ldlat=%s/pp}" -d -W' % (pmu(),
@@ -142,7 +147,12 @@ def toplev2intel_name(e):
 #
 # CPU, cpu_ prefix
 #
+perftools = os.path.dirname(os.path.realpath(__file__))
 def cpu_has_feature(feature):
+  if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
+    cpuid_f = '%s/setup-cpuid.log' % perftools
+    if not os.path.exists(cpuid_f): C.exe_cmd('cd %s && ./do.py log --tune :cpuid:1' % perftools, debug=1)
+    return not C.exe_cmd(r"grep -E -q '\s+0x00000023 0x00: eax=0x000000.[^0] ' " + cpuid_f, fail=-1)
   flags = C.exe_output("lscpu | grep Flags:")
   return feature in flags
 
@@ -153,13 +163,13 @@ def force_cpu(cpu):
   cpus = C.exe_output(C.grep(r"%s.*,[Cc]ore" % cpu.upper(),
                                   '%s/mapfile.csv' % events_dir, '-E'), sep='\n').split('\n')
   if cpus == '': C.error("no eventlist found for the forced CPU")
-  cpu_id, key = cpus[0].split(',')[0], 'hybridcore' if cpus[0].count('_') == 2 else 'core'
+  cpu_id, _ = cpus[0].split(',')[0], 'hybridcore' if cpus[0].count('_') == 2 else 'core'
   if '[' in cpu_id: cpu_id = cpu_id.split('[')[0] + cpu_id[-2]
   event_list = "%s/%s-%s.json" % (events_dir, cpu_id, 'hybridcore' if cpus[0].count('_') == 2 else 'core')
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
   return event_list
 
-pmutools = os.path.dirname(os.path.realpath(__file__)) + '/pmu-tools'
+pmutools = perftools + '/pmu-tools'
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:

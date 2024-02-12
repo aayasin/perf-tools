@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2020-2023, Intel Corporation
+# Copyright (c) 2020-2024, Intel Corporation
 # Author: Ahmad Yasin
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
@@ -24,7 +24,7 @@ FP_SUFFIX = "[sdh]([a-z])?"
 # instruction mnemonics
 BIT_TEST  = 'bt[^crs]'
 CALL_RET  = '(call|ret)'
-CISC_CMP  = '(cmp[^x]|test).*\(' # CMP or TEST with memory (CISC)
+CISC_CMP  = r'(cmp[^x]|test).*\(' # CMP or TEST with memory (CISC)
 CMOV      = r"cmov"
 COMI      = r"v?u?comi",
 COND_BR   = 'j[^m][^ ]*'
@@ -47,7 +47,7 @@ def is_memory(line): return '(' in line and 'lea' not in line and 'nop' not in l
 def is_mem_imm(line): return is_memory(line) and is_imm(line)
 def is_mem_load(line): return is_memory(line) and (is_type(LOAD_ANY, line) or C.any_in(('broadcast', 'insert', 'gather'), line))
 def is_mem_store(line): return is_memory(line) and is_type(STORE, line) and C.any_in(('mov', EXTRACT, 'scatter'), line)
-def is_type(t, l): return re.match(r"\s+\S+\s+%s" % t, l) != None
+def is_type(t, l): return re.match(r"\s+\S+\s+%s" % t, l) is not None
 def is_test_load(line): return is_type(CISC_CMP, line) or is_type(BIT_TEST, line)
 
 def get_mem_inst(line):
@@ -64,7 +64,7 @@ def mem_type(line=None):
   if not line: return ['%s-%s' % (t, a) for t in ('stack', 'global', 'heap') for a in MEM_INSTS_BASIC]
   a = get_mem_inst(line)
   assert a in MEM_INSTS, 'inst=%s for line:\n%s' % (a, line)
-  if not a in MEM_INSTS_BASIC: return None
+  if a not in MEM_INSTS_BASIC: return None
   if re.search('%[re]sp', line): return 'stack-' + a
   if re.search('%[re]ip', line): return 'global-' + a
   return 'heap-' + a

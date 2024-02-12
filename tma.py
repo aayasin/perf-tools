@@ -13,6 +13,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 
 import common as C, pmu
+import os
 
 def fixed_metrics(intel_names=False, force_glc=False):
   events, flags = ','.join(pmu.fixed_events(intel_names)), None
@@ -20,11 +21,14 @@ def fixed_metrics(intel_names=False, force_glc=False):
     prefix = ',topdown-'
     def prepend(l): return prefix.join([''] + l)
     events += prepend(['retiring', 'bad-spec', 'fe-bound', 'be-bound'])
-    if pmu.goldencove_on() or force_glc:
+    events_files = len([f for f in os.listdir('/sys/devices/cpu/events/') if f.startswith('topdown')])
+    if (pmu.goldencove_on() or force_glc) and events_files == 8:
       events += prepend(['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound'])
       flags = ' --td-level=2'
     events = '{%s}' % events
-    if pmu.hybrid(): events = events.replace(prefix, '/,cpu_core/topdown-').replace('}', '/}').replace('{slots/', '{slots')
+    if pmu.hybrid():
+      for x, y in ((prefix, '/,cpu_core/topdown-'), ('}', '/}'), ('{slots/', '{slots'), ('ref-cycles/,', 'ref-cycles,')):
+        events = events.replace(x, y)
   return events, flags
 
 metrics = {
@@ -32,7 +36,7 @@ metrics = {
   'bot-rest':     '+Cache_Memory_Bandwidth,+Cache_Memory_Latency,+Memory_Data_TLBs,+Memory_Synchronization'
                   ',+Compute_Bound_Est,+Irregular_Overhead,+Other_Bottlenecks,+Base_Non_Br' +
                   C.flag2str(',+Core_Bound_Likely', pmu.cpu('smt-on')),
-  'fixed':        '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS',
+  'fixed':        '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS,-CPUs_Utilized',
   'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
                     C.flag2str(',+IpAssist', pmu.v4p()) +
                     C.flag2str(',+Memory_Bound*/3', pmu.goldencove_on()),
@@ -55,6 +59,15 @@ def get(tag):
     Dedup = C.csv2dict(settings_file('tma-many-counters.csv'))
     return Dedup[model].replace(';', ',')
   if tag == 'perf-groups':
-    return ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model)))
+    groups = ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model)))
+    td_groups = [f for f in os.listdir('/sys/devices/cpu/events/') if f.startswith('topdown')]
+    for e in ['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound']:
+      name = 'topdown-' + e
+      if not name in td_groups: groups = groups.replace(',' + name, '')
+    return groups
   assert tag in metrics, "Unsupported tma.get(%s)! Supported tags: %s" % (tag, combo_tags + ' '.join(metrics.keys()))
   return metrics[tag]
+
+# TODO: grep it from toplev's ratio file
+def threshold_of(metric):
+  return 20

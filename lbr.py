@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2020-2023, Intel Corporation
+# Copyright (c) 2020-2024, Intel Corporation
 # Author: Ahmad Yasin
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.03 # see version line of do.py
+__version__= x86.__version__ + 2.07 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -142,9 +142,9 @@ def line_inst(line):
 
 def tripcount(ip, loop_ipc, state):
   if state == 'new' and loop_ipc in loops:
-    if not 'tripcount' in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
+    if 'tripcount' not in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
     state = 'valid'
-  elif type(state) == int:
+  elif type(state) is int:
     if ip == loop_ipc: state += 1
     elif not is_in_loop(ip, loop_ipc):
       inc(loops[loop_ipc]['tripcount'], str(state))
@@ -157,7 +157,7 @@ def tripcount(ip, loop_ipc, state):
 def loop_stats(line, loop_ipc, tc_state):
   def mark(regex, tag):
     if re.findall(regex, line):
-      if not loop_stats.atts or not tag in loop_stats.atts:
+      if not loop_stats.atts or tag not in loop_stats.atts:
         loop_stats.atts = ';'.join((loop_stats.atts, tag)) if loop_stats.atts else tag
       return 1
     return 0
@@ -184,7 +184,8 @@ def loop_stats(line, loop_ipc, tc_state):
     else:
       mark(x86.INDIRECT, 'indirect')
       mark(x86.IMUL, 'scalar-int')
-      mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % x86.FP_SUFFIX, 'scalar-fp')
+      if get_inst(line).startswith('vp'): pass
+      else: mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % x86.FP_SUFFIX, 'scalar-fp')
       for i in range(vec_size):
         if mark(r"[^aku]p%s\s+.*%s" % (x86.FP_SUFFIX, vec_reg(i)), vec_len(i, 'fp')): continue
         mark(INT_VEC(i), vec_len(i))
@@ -212,7 +213,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
   def iter_update():
     #inc(loop['BK'], hex(line_ip(lines[-1])))
     if ip != loop_ipc: return
-    if not 'IPC' in loop: loop['IPC'] = {}
+    if 'IPC' not in loop: loop['IPC'] = {}
     if not has_timing(lines[-1]): return
     cycles, takens = 0, []
     begin, at = find_block_ip()
@@ -235,11 +236,12 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
   if ip in loops:
     loop = loops[ip]
     loop['hotness'] += 1
+    if srcline and not 'srcline' in loop: loop['srcline'] = srcline
     if is_taken(lines[-1]):
       iter_update()
       if ip == loop_ipc:
         for x in paths_range():
-          if not 'paths-%d'%x in loop: loop['paths-%d'%x] = {}
+          if 'paths-%d'%x not in loop: loop['paths-%d'%x] = {}
           inc(loop['paths-%d'%x], ';'.join([hex_ip(a) for a in lbr_takens[-x:]]))
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
@@ -256,14 +258,14 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           if x86.is_ld_op_fusion(lines[x], lines[x + 1]): ld_op_mf += 1
           elif x86.is_mov_op_fusion(lines[x], lines[x + 1]): mov_op_mf += 1
         # erratum feature disabled if erratum is None, otherwise erratum counts feature cases
-        if not erratum is None and is_jcc_erratum(lines[x+1], lines[x]): erratum += 1
+        if erratum is not None and is_jcc_erratum(lines[x+1], lines[x]): erratum += 1
         t = line_inst(lines[x])
         if t and t in types: cnt[t] += 1
         inst_ip = line_ip(lines[x])
         if inst_ip == ip:
           loop['size'], loop['Conds'], loop['op-jcc-mf'], loop['mov-op-mf'], loop['ld-op-mf'] = \
             size, len(conds), op_jcc_mf, mov_op_mf, ld_op_mf
-          if not erratum is None: loop['jcc-erratum'] = erratum
+          if erratum is not None: loop['jcc-erratum'] = erratum
           for i in types: loop[i] = cnt[i]
           hexa = lambda x: hex(x)[2:]
           loop['imix-ID'] = hexa(loop['load']) + hexa(loop['store']) + hexa(loop['Conds']) + hexa(loop['lea'])
@@ -307,13 +309,15 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
       if srcline: loops[ip]['srcline'] = srcline.replace(':', ';')
+      ilen = get_ilen(lines[-1])
+      if ilen: loops[ip]['sizeIB'] = int(xip) - ip + ilen # size In Bytes
       return
     elif use_cands and len(lines) > 2 and ip in bwd_br_tgts and has_ip(len(lines)-2):
       bwd_br_tgts.remove(ip)
       loop_cands += [ip]
     elif is_callret(lines[-1]): pass # requires --xed
     elif (xip - ip) >= MOLD: warn(0x200, "too large distance in:\t%s" % lines[-1].split('#')[0].strip())
-    elif not ip in bwd_br_tgts and (use_cands or has_ip(len(lines)-2)):
+    elif ip not in bwd_br_tgts and (use_cands or has_ip(len(lines)-2)):
       bwd_br_tgts += [ip]
 
 edge_en = 0
@@ -325,12 +329,13 @@ for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
 
 def inst2pred(i):
-  i2p = {'st-stack':  'mov\S*\s+[^\(\),]+, [0-9a-fx\-]*\(%.sp',
-    'st-reg-stack':   'mov\S*\s+%[^\(\),]+, [0-9a-fx\-]*\(%.sp',
+  i2p = {'st-stack':  r'mov\S*\s+[^\(\),]+, [0-9a-fx\-]*\(%.sp',
+    'st-reg-stack':   r'mov\S*\s+%[^\(\),]+, [0-9a-fx\-]*\(%.sp',
     'add-sub':        '(add|sub).*',
     'inc-dec':        '(inc|dec).*',
     '_cisc-cmp':      x86.CISC_CMP,
-    '_risc-cmp':      '(cmp[^x]|test)[^\(]*',
+    '_risc-cmp':      r'(cmp[^x]|test)[^\(]*',
+    'nop':            '.*nop.*',
   }
   if i is None:
     del i2p['st-stack']
@@ -344,14 +349,14 @@ def is_imix(t):
   if not t: return IMIX_LIST + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
   return t in IMIX_LIST or t.startswith('vec')
 Insts = inst2pred(None) + ['cmov', 'lea', 'lea-scaled', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
-Insts_global = Insts + is_imix(None) + x86.mem_type() + ['all']
+Insts_leaf_func = ['-'.join([x, 'leaf', y]) for y in ('dircall', 'indcall') for x in ('branchless', 'dirjmponly')] + ['leaf-call']
+Insts_global = Insts + is_imix(None) + x86.mem_type() + Insts_leaf_func + ['all']
 Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first'
               ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
 Insts_Fusions = [x + '-OP fusible' for x in ['MOV', 'LD']]
 Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}
-hsts = {}
 footprint = set()
 pages = set()
 indirects = set()
@@ -381,6 +386,7 @@ def inc_stat(stat):
 IPTB  = 'inst-per-taken-br--IpTB'
 IPLFC = 'inst-per-leaf-func-call'
 NOLFC = 'inst-per-leaf-func-name' # name-of-leaf-func-call would plot it away from IPFLC!
+IPLFCB0 = 'inst-per-%s' % Insts_leaf_func[0]; IPLFCB1 = 'inst-per-%s' % Insts_leaf_func[1]
 FUNCI = 'Function-invocations'
 FUNCP = 'Params_of_func'
 FUNCR = 'Regs_by_func'
@@ -392,8 +398,9 @@ def count_of(t, lines, x, hist):
   inc(hsts[hist], r)
   return r
 
+hsts, hsts_threshold = {}, {NOLFC: 0.01, IPLFCB0: 0, IPLFCB1: 0}
 def edge_en_init(indirect_en):
-  for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, FUNCR, FUNCP): hsts[x] = {}
+  for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, IPLFCB0, IPLFCB1, FUNCR, FUNCP): hsts[x] = {}
   if indirect_en:
     for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
@@ -401,7 +408,38 @@ def edge_en_init(indirect_en):
       indirects.add(int(x, 16))
       hsts['indirect_%s_targets' % x] = {}
       hsts['indirect_%s_paths' % x] = {}
-  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'] = {}
+  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'], hsts_threshold['dsb-heatmap']  = {}, 0
+
+def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
+  branches, dirjmps, insts_per_call, x = 0, 0, 0, len(lines) - 1
+  while x > 0:
+    if is_type('ret', lines[x]): break # not a leaf function call
+    if is_type('call', lines[x]):
+      inc(hsts[IPLFC], insts_per_call)
+      glob['leaf-call'] += (insts_per_call + 2)
+      d = 'ind' if '%' in lines[x] else 'dir'
+      if branches == 0:
+        if d == 'dir': inc(hsts[IPLFCB0], insts_per_call)
+        glob['branchless-leaf-%scall' % d] += (insts_per_call + 2)
+      elif branches == dirjmps:
+        if d == 'dir': inc(hsts[IPLFCB1], insts_per_call)
+        glob['dirjmponly-leaf-%scall' % d] += (insts_per_call + 2)
+      callder_idx, ok = x, x < len(lines) - 1
+      name = lines[x + 1].strip()[:-1] if ok and is_label(lines[x + 1]) else 'Missing-func-name-%s' % (
+        '0x'+line_ip_hex(lines[x + 1]) if ok else 'unknown')
+      while callder_idx > 0:
+        if is_label(lines[callder_idx]): break
+        callder_idx -= 1
+      name = ' -> '.join((lines[callder_idx].strip()[:-1] if callder_idx > 0 else '?', name))
+      inc(hsts[NOLFC], name + '-%d' % insts_per_call)
+      if verbose & 0x10:
+        C.info_p('call to leaf-func %s of size %d' % (name, insts_per_call), '\t\n'.join(['\t'] + lines[-(len(lines)-x):] + [line]))
+      break
+    elif is_branch(lines[x]):
+      branches += 1
+      if 'jmp' in lines[x] and '%' not in lines[x]: dirjmps += 1
+    if not is_label(lines[x]): insts_per_call += 1
+    x -= 1
 
 def edge_stats(line, lines, xip, size):
   if is_label(line): return
@@ -470,25 +508,7 @@ def edge_stats(line, lines, xip, size):
           elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
   # check erratum for line (with no consideration of macro-fusion with previous line)
   if is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
-  if verbose & 0x1 and is_type('ret', line):
-    insts_per_call, x = 0, len(lines) - 1
-    while x > 0:
-      if is_type('ret', lines[x]): break # no support for non-leaf function calls
-      if is_type('call', lines[x]):
-        inc(hsts[IPLFC], insts_per_call)
-        callder_idx, ok = x, x < len(lines) - 1
-        name = lines[x + 1].strip()[:-1] if ok and is_label(lines[x + 1]) else 'Missing-func-name-%s' % (
-          '0x'+line_ip_hex(lines[x + 1]) if ok else 'unknown')
-        while callder_idx > 0:
-          if is_label(lines[callder_idx]): break
-          callder_idx -= 1
-        name = ' -> '.join((lines[callder_idx].strip()[:-1] if callder_idx > 0 else '?', name))
-        inc(hsts[NOLFC], name + '-%d' % insts_per_call)
-        if verbose & 0x10:
-          C.info_p('call to leaf-func %s of size %d' % (name, insts_per_call), '\t\n'.join(['\t'] + lines[-(len(lines)-x):] + [line]))
-        break
-      if not is_label(lines[x]): insts_per_call += 1
-      x -= 1
+  if verbose & 0x1 and is_type('ret', line): edge_leaf_func_stats(lines, line)
   if size <= 1: return # a sample with >= 2 instructions after this point
   if not x86.is_jcc_fusion(xline, line):
     x2line = prev_line(-2)
@@ -512,7 +532,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   glob['loop_stats_en'] = lp_stats_en
   glob['ip_filter'] = ip_filter
   # edge_en permits to collect per-instruction stats (beyond per-taken-based) if config is good for edge-profile
-  edge_en = C.any_in((LBR_Event, 'instructions:ppp'), event) and not ip_filter and not loop_ipc
+  edge_en = event in pmu.lbr_unfiltered_events() and not ip_filter and not loop_ipc
   if stat['total'] == 0:
     if edge_en: edge_en_init(indirect_en)
     if ret_latency: header_ip_str.position = 8
@@ -551,7 +571,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
       if header:
         ev = header.group(3)[:-1]
         # first sample here (of a given event)
-        if not ev in lbr_events:
+        if ev not in lbr_events:
           if not len(lbr_events) and '[' in header.group(1):
             for k in header_field.keys(): header_field[k] += 1
           lbr_events += [ev]
@@ -587,7 +607,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           update_size_stats()
           if debug and debug == timestamp:
             exit((line.strip(), len(lines)), lines, 'a bogus sample ended')
-        elif len_m1 and type(tc_state) == int and is_in_loop(line_ip(lines[-1]), loop_ipc):
+        elif len_m1 and type(tc_state) is int and is_in_loop(line_ip(lines[-1]), loop_ipc):
           if tc_state == 31 or (verbose & 0x80):
             inc(loops[loop_ipc]['tripcount'], '%d+' % (tc_state + 1))
             if loop_stats.id: loop_stats(None, 0, 0)
@@ -645,7 +665,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           inc(hsts[IPTB], insts); size += insts; insts = 0
           if 'IPC' in line: inc(hsts['IPC'], line_timing(line)[1])
       glob['all'] += 1
-      if not labels and size > 0: detect_loop(ip, lines, loop_ipc, takens, srcline)
+      if not labels and size > 0:
+        detect_loop(ip, lines, loop_ipc, takens, srcline)
+        if ip in loops and 'srcline' in loops[ip] and loops[ip]['srcline'] == srcline:
+          srcline = None  # srcline <-> loop
       if skip_bad: tc_state = loop_stats(line, loop_ipc, tc_state)
       if edge_en:
         if len(takens) and is_taken(line) and verbose & 0x2: #FUNCR
@@ -793,7 +816,7 @@ def tripcount_mean(loop, loop_ipc):
   l = C.str2list(prev_line)
   if hex_ipc in l[1]: return None  # no inst before loop
   if not re.search(x86.JMP_RET, prev_line): before += int(l[0])  # JCC before loop is not considered a special case
-  jmp_line = C.exe_one_line(C.grep('%s' % 'jmp*\s' + hex_ip(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
+  jmp_line = C.exe_one_line(C.grep('%s' % r'jmp*\s' + hex_ip(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
   if not jmp_line == '': before += int(C.str2list(jmp_line)[0])
   next_line = C.str2list(C.exe_one_line(C.grep('0%x' % loop['back'], hitcounts, '-A1')))
   index = 6 if 'ilen:' in next_line else 4
@@ -805,7 +828,7 @@ def tripcount_mean(loop, loop_ipc):
 
 def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   loop = loops[loop_ipc]
-  if not name in loop: return None
+  if name not in loop: return None
   d = print_hist((loop[name], name, loop, loop_ipc, sortfunc, weighted))
   if not type(d) is dict: return d
   tot = d['total']
@@ -815,15 +838,16 @@ def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   print('')
   return tot
 
-def print_glob_hist(hist, name, weighted=False, Threshold=0.01):
-  d = print_hist((hist, name, None, None, None, weighted), Threshold)
+def print_glob_hist(hist, name, weighted=False, threshold=.03):
+  if name in hsts_threshold: threshold = hsts_threshold[name]
+  d = print_hist((hist, name, None, None, None, weighted), threshold)
   if not type(d) is dict: return d
   if d['type'] == 'hex': d['mode'] = hex_ip(int(d['mode']))
   del d['type']
   print('%s histogram summary: %s' % (name, hist_fmt(d)))
   return d['total']
 
-def print_hist(hist_t, Threshold=0.01):
+def print_hist(hist_t, threshold=0.05):
   if not len(hist_t[0]): return 0
   hist, name, loop, loop_ipc, sorter, weighted = hist_t[0:]
   tot = sum(hist.values())
@@ -839,15 +863,15 @@ def print_hist(hist_t, Threshold=0.01):
   d['num-buckets'] = len(hist)
   if d['num-buckets'] > 1:
     C.printc('%s histogram%s:' % (name, ' of loop %s' % hex_ip(loop_ipc) if loop_ipc else ''))
-    left, threshold = 0, int(Threshold * tot)
+    left, limit = 0, int(threshold * tot)
     for k in sorted(hist.keys(), key=sorter):
-      if hist[k] >= threshold and hist[k] > 1:
+      if not limit or hist[k] >= limit and hist[k] > 1:
         bucket = ('%70s' % k) if d['type'] == 'str' else '%5s' % (hex_ip(k) if d['type'] == 'hex' else k)
         print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
       else: left += hist[k]
-    if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * Threshold))
+    if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * threshold))
   if do_tripcount_mean: d['num-buckets'] = '-'
-  d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) == str else k) for k in hist.keys()) if weighted else tot
+  d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) is str else k) for k in hist.keys()) if weighted else tot
   return d
 
 def print_hist_sum(name, h):
@@ -912,9 +936,10 @@ def print_common(total):
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
-  if edge_en and total: print_global_stats()
-  print(' instructions.\n#'.join(['# Notes: CMP = CMP or TEST', ' RMW = Read-Modify-Write', 'Global-stats-end'])+'\n')
-  C.warn_summary('info')
+  if edge_en and total:
+    print_global_stats()
+    print(' instructions.\n#'.join(['# Notes: CMP = CMP or TEST', ' RMW = Read-Modify-Write', 'Global-stats-end'])+'\n')
+  C.warn_summary('info', 50)
   C.warn_summary()
 
 def print_all(nloops=10, loop_ipc=0):
@@ -923,7 +948,7 @@ def print_all(nloops=10, loop_ipc=0):
   if total and (stat['bad'] + stat['bogus']) / float(total) > 0.5:
     if verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
     else: C.error('Too many LBR bad/bogus samples in profile')
-  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x, Threshold=.03)
+  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x)
   sloops = sorted(loops.items(), key=lambda x: loops[x[0]]['hotness'])
   if loop_ipc:
     if loop_ipc in loops:
@@ -978,7 +1003,7 @@ def find_print_loop(ip, sloops):
 def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   if not isinstance(ip, int): ip = int(ip, 16) #should use (int, long) but fails on python3
   def printl(s, end=''): return print(s, file=print_to, end=end)
-  if not ip in loops:
+  if ip not in loops:
     printl('No loop was detected at %s!' % hex_ip(ip), '\n')
     return
   loop = loops[ip].copy()
@@ -1005,7 +1030,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'imix-ID', 'back', 'entry-block', 'IPC', 'tripcount']
   for x in paths_range(): dell += ['paths-%d'%x]
-  if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
+  #if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
   for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex_ip(loop[x])))
   for x, y in (('inn', 'out'), ('out', 'inn')):

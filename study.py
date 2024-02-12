@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2023, Intel Corporation
+# Copyright (c) 2020-2024, Intel Corporation
 # Author: Ahmad Yasin
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
@@ -11,14 +11,14 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.84
+__version__= 0.85
 
 import common as C, pmu, stats
 import os, sys, time, re
 from lbr import stat_name
 
 def dump_sample():
-  print("""#!/bin/bash
+  print(r"""#!/bin/bash
 cd workloads/`echo $0 | sed 's/\.\///g' | cut -d- -f1`
 a=`echo $0 | sed 's/\.\///;s/\.sh//' | cut -d- -f2`
 ld=.
@@ -37,11 +37,12 @@ log=.$B-$2-$$.log
 #set -x
 [[ ${NO_LLP} ]] || export LD_LIBRARY_PATH=$ld:$LD_LIBRARY_PATH
 $cmd > $log 2>&1
-grep -F Puzzle, $log 
+grep -F Puzzle, $log # replace this to grep a score (performance result) of your workload
 """)
   C.exit()
 
 DM=C.env2str('STUDY_MODE', 'imix-loops')
+STUDY_PROF_MASK = 0x1911a
 Conf = {
   'Events': {'imix-loops': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r10c4:BR_INST_RETIRED.COND_NTAKEN', #'r11c4:BR_INST_RETIRED.COND'
     'imix-dsb': 'r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r0262:DSB_FILL.OTHER_CANCEL,r01470261:DSB2MITE_SWITCHES.COUNT,'
@@ -61,7 +62,7 @@ Conf = {
   'Pebs': {'all-misp': '-b -e %s/event=0xc5,umask=0,name=BR_MISP_RETIRED/ppp -c 20003' % pmu.pmu(),
     'cond-misp': '-b -e %s/event=0xc5,umask=0x11,name=BR_MISP_RETIRED.COND/ppp -c 20003' % pmu.pmu(),
   },
-  'Toplev': {'imix-loops': ' --frequency --metric-group +Summary --single-thread',
+  'Toplev': {'imix-loops': ' --frequency --metric-group +Summary',
   },
   'Tune': {'dsb-align': [[':perf-record:"\' -g -c 20000003\'"']],
     'openmp': [[':perf-stat-ipc:"\'stat -e instructions,cycles,r0106\'"']],
@@ -75,7 +76,7 @@ def modes_list():
 
 def parse_args():
   def conf(x): return Conf[x][DM] if DM in Conf[x] else None
-  ap = C.argument_parser('analyze two or more modes (configs)', mask=0x1911a,
+  ap = C.argument_parser('analyze two or more modes (configs)', mask=STUDY_PROF_MASK,
          defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
   ap.add_argument('config', nargs='*', default=[])
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)
@@ -98,15 +99,15 @@ def parse_args():
     None or zero stats are excluded by default, use -sa to view them.
     
     top & bottom tables filtering:
-      *stat*                 | *diff-condition*          | *ratio-condition*     | *comment*
+      *group*            | *stat description*     | *diff-condition*          | *ratio-condition*     | *comment*
       ==================================================================================================================
-      info.log global stat   | >= diff-thresh after      | ratio of all info.log | starts with '[cC]ount of' and includes 'cond'/'inst'/'pairs'
-                             | multiplying w/ LBR factor | insts >= lbr-thresh%  |
-      metric                 | -                         | -                     | starts with uppercase and doesn't include
-                             |                           |                       | 'instructions'/'pairs'/'branches'/'insts-class'/'insts-subclass'
-      event (counter)        | >= diff-thresh            | -                     |
-      info.log proxy stat    | -                         | -                     |
-      info.log per-loop stat | -                         | -                     | exclude it with -sl (--skip-loops)
+      LBR.Glob           | info.log global stat   | >= diff-thresh after      | ratio of all info.log | starts with '[cC]ount of' and includes 'cond'/'inst'/'pairs'
+                         |                        | multiplying w/ LBR factor | insts >= lbr-thresh%  |
+      LBR.Metric, Metric | metric                 | -                         | -                     | starts with uppercase and doesn't include
+      , Info.*           |                        |                           |                       | 'instructions'/'pairs'/'branches'/'insts-class'/'insts-subclass'
+      LBR.Event, Event   | event (counter)        | >= diff-thresh            | -                     |
+      LBR.Proxy          | info.log proxy stat    | -                         | -                     |
+      LBR.Loop           | info.log per-loop stat | -                         | -                     | exclude it with -sl (--skip-loops)
       
   side-by-side args"""
   side_by_side = ap.add_argument_group(description)
@@ -128,13 +129,15 @@ def parse_args():
                             help='stats sub-names to skip, e.g. "--skip cond" will skip all stats including "cond"')
   add_arg('lbr-threshold', 0.01, "info.log global stats are included in top & bottom tables "
                                  "if stat/all instructions in info.log > this thresh%%")
+  side_by_side.add_argument('-g', '--groups', nargs='+',
+                            help="run only for stats of a group with these sub-names, e.g. Bottleneck, Loop, Proxy")
   args = ap.parse_args()
   if args.dump: dump_sample()
   C.printc('mode: %s' % DM)
   def fassert(x, msg): assert x or args.forgive, msg
   assert len(args.config), "at least 2 modes are required"
   fassert(len(args.config) > 1, "at least 2 modes are required (or use --forgive)")
-  assert args.app and not ' ' in args.app
+  assert args.app and ' ' not in args.app
   fassert(args.profile_mask & 0x100, 'args.pm=0x%x' % args.profile_mask)
   assert args.repeat > 2, "stats module requires '--repeat 3' at least"
   if DM in ('dsb-align', ): pass
@@ -163,52 +166,49 @@ def compare_stats(app1, app2):
     if not isinstance(value1, (int, float)) or not isinstance(value2, (int, float)): return 'N/A'
     return round(value2 - value1, args.round_factor) if op == 'diff' \
       else round(float(value2) / value1, args.round_factor)
-  # considers both removing args --show-all and --skip
+  # considers all hiding args: --show-all, --skip and --group
   # removes ':var' stats
-  def hide(key, value1, value2):
-    return (not args.show_all and (not value1 or not value2 or ':var' in key)) or C.any_in(args.skip, key)
+  def hide(key, group, value1, value2):
+    return (not args.show_all and (not value1 or not value2 or ':var' in key)) or \
+           C.any_in(args.skip, key) or (args.groups and (not group or not C.any_in(args.groups, group)))
   # filtering what stats get into top & bottom tables
   # see description in study.py -h
-  def filter(key, value1, value2, diff, ratio):
-    glob_stat = re.search('([cC]ount) of', key) and C.any_in(['cond', 'inst', 'pairs'], key)
-    if glob_stat:
+  def filter(key, group, value1, value2, diff, ratio):
+    if group == 'LBR.Glob':
+      if not lbr_all_insts1 or not lbr_all_insts2: return False
       if (value1 and 100*float(value1)/lbr_all_insts1 < args.lbr_threshold) or \
               (value2 and 100*float(value2)/lbr_all_insts2 < args.lbr_threshold): return False
       if value1: value1 = value1 * lbr_factor1
       if value2: value2 = value2 * lbr_factor2
       diff = calc(value1, value2, op='diff')
-    is_metric = key[0].isupper() and not \
-      re.search(r"(instructions|pairs|branches|insts-class|insts-subclass)$", key.lower())
+    info_metric = group and 'Info' in group and stats.is_metric(key)
     diff_cond = isinstance(diff, (int, float)) and \
-                (key.startswith('Loop') or is_metric or key.startswith('proxy count')
-                 or abs(diff) >= args.diff_threshold)
+                (group and C.any_in(('Metric', 'LBR.Metric', 'LBR.Proxy', 'LBR.Loop'), group)
+                 or info_metric or abs(diff) >= args.diff_threshold)
     ratio_cond = isinstance(ratio, (int, float)) and not (not value1 and value2 == 0)
     return diff_cond and ratio_cond
   # filtering what stats get into strings table
-  def filter_string(key, value1, value2):
+  def filter_string(key, group, value1, value2):
     return (isinstance(value1, str) or isinstance(value2, str)) and value1 != value2 and \
-        not key == 'App' and not key.startswith('Loop')
+        not key == 'App' and not group == 'LBR.Loop'
   # line format in tables
-  def format_line(k, v1, v2, d, r):
+  def format_line(k, g, v1, v2, d, r):
     def fv(v): return round(v, args.round_factor) if isinstance(v, (int, float)) else str(v)
     def width(i): return int(args.table_width[i]) if len(args.table_width) > i else int(args.table_width[-1])
     return "{:>{width}}".format(k[-width(0):], width=width(0)) + " | " + \
-           "{:>{width}}".format(fv(v1), width=width(1)) + " | " + \
-           "{:>{width}}".format(fv(v2), width=width(2)) + " | " + \
-           "{:>{width}}".format(d, width=width(3)) + " | " + \
-           "{:>{width}}".format(r, width=width(4))
+           "{:>{width}}".format(str(g)[-width(1):], width=width(1)) + " | " + \
+           "{:>{width}}".format(fv(v1), width=width(2)) + " | " + \
+           "{:>{width}}".format(fv(v2), width=width(3)) + " | " + \
+           "{:>{width}}".format(d, width=width(4)) + " | " + \
+           "{:>{width}}".format(r, width=width(5))
   def print_list(l):
     print(header)
     print(sep)
-    for k, v1, v2, d, r in l: print(format_line(k, v1, v2, d, r))
+    for k, g, v1, v2, d, r in l: print(format_line(k, g, v1, v2, d, r))
     print('\n')
-  def get_info_file(app):
-    for filename in os.listdir(os.getcwd()):
-      if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+).perf.data.info.log" % app, filename):
-        return filename
-    return None
-  # safe dict[key]
-  def get_value(d, k): return d[k] if k in d else None
+  def get_info_file(app): return stats.get_file(app, 'info')
+  def get_value_group(d, k):
+    return (d[k][0], d[k][1]) if k in d else (None, None)
   # print table of loops with regressed IPC between configs
   def print_regressed_ipcs():
     loops_num = len([key for key in stats1 if re.search("Loop#[0-9]+ ip", key)])
@@ -216,26 +216,26 @@ def compare_stats(app1, app2):
     # vars to check if first 10 loops have matching IDs between configs
     ids_to_check, diff_ids = loops_num if loops_num < 10 else 10, 0
     for i1 in range(1, loops_num+1):
-      ipc1 = get_value(stats1, 'Loop#%s IPC-mode' % i1)
+      ipc1, group = get_value_group(stats1, 'Loop#%s IPC-mode' % i1)
       if not ipc1: continue
-      id = stats1['Loop#%s ID' % i1]
-      id2 = get_value(stats2, 'Loop#%s ID' % i1)
+      id = stats1['Loop#%s ID' % i1][0]
+      id2 = get_value_group(stats2, 'Loop#%s ID' % i1)[0]
       if i1 <= ids_to_check and id != id2: diff_ids += 1
       if id == id2 and i1 not in loops_paired: i2 = i1
       else:
         i2 = None
         for key in stats2:
-          if re.search("Loop#[0-9]+ ID", key) and stats2[key] == id:
+          if re.search("Loop#[0-9]+ ID", key) and stats2[key][0] == id:
             n = int(key.split()[0].replace('Loop#', ''))
             if n not in loops_paired:
               i2 = n
               break
       if not i2: continue
-      ipc2 = get_value(stats2, 'Loop#%s IPC-mode' % i2)
-      if ipc1 > ipc2 and (ipc2 or args.show_none):
+      ipc2 = get_value_group(stats2, 'Loop#%s IPC-mode' % i2)[0]
+      if ipc2 and ipc1 > ipc2 or args.show_all:
         key = 'Loop:%s #%s #%s IPC-mode' % (id, i1, i2)
         if not C.any_in(args.skip, key):
-          regress_ipcs.append((key, ipc1, ipc2, calc(ipc1, ipc2, op='diff'), calc(ipc1, ipc2)))
+          regress_ipcs.append((key, group, ipc1, ipc2, calc(ipc1, ipc2, op='diff'), calc(ipc1, ipc2)))
           loops_paired.append(i2)
     if len(regress_ipcs) > 0:
       print("Loops with regressed IPC:")
@@ -245,38 +245,43 @@ def compare_stats(app1, app2):
 
   # compare_stats() starts here
   C.printc('\tconfigs side-by-side', C.color.BOLD)
-  info1, info2 = get_info_file(app1_str), get_info_file(app2_str)
+  info1, info2 = get_info_file(app1), get_info_file(app2)
   # adding info files stats
   if info1 and info2:
     stats.sDB[app1_str].update(stats.read_info(info1, read_loops=not args.skip_loops, loop_id=args.loop_id))
     stats.sDB[app2_str].update(stats.read_info(info2, read_loops=not args.skip_loops, loop_id=args.loop_id))
     lbr_all_insts_key = stat_name('ALL', ratio_of=('ALL', ))
     lbr_all_insts1, lbr_all_insts2 = stats.get(lbr_all_insts_key, app1), stats.get(lbr_all_insts_key, app2)
-    lbr_factor1 = float(stats.get('instructions', app1)) / lbr_all_insts1
-    lbr_factor2 = float(stats.get('instructions', app2)) / lbr_all_insts2
+    msg = "LBR run & stats aren't complete, check "
+    if lbr_all_insts1: lbr_factor1 = float(stats.get('instructions', app1)) / lbr_all_insts1
+    else: C.warn(msg + info1)
+    if lbr_all_insts2: lbr_factor2 = float(stats.get('instructions', app2)) / lbr_all_insts2
+    else: C.warn(msg + info2)
   stats1, stats2 = stats.sDB[app1_str], stats.sDB[app2_str]
-  header = format_line('Stat', app1, app2, 'Diff', 'Ratio')
+  header = format_line('Stat', 'Group', app1, app2, 'Diff', 'Ratio')
   sep = '-' * len(header)
-  for key, value1 in stats1.items():
-    value2 = get_value(stats2, key)
-    if not hide(key, value1, value2):
-      all_stats.append((key, value1, value2, calc(value1, value2, op='diff'), calc(value1, value2)))
+  for key in stats1:
+    value1, group = get_value_group(stats1, key)
+    value2 = get_value_group(stats2, key)[0]
+    if not hide(key, group ,value1, value2):
+      all_stats.append((key, group, value1, value2, calc(value1, value2, op='diff'), calc(value1, value2)))
   # passing on elements of stats2 that aren't in stats1
   if args.show_all:
-    for key, value2 in stats2.items():
-      if key not in stats1 and not hide(key, None, value2):
-        all_stats.append((key, None, value2, calc(None, value2, op='diff'), calc(None, value2)))
+    for key in stats2:
+      value2, group = get_value_group(stats2, key)
+      if key not in stats1 and not hide(key, group, None, value2):
+        all_stats.append((key, group, None, value2, calc(None, value2, op='diff'), calc(None, value2)))
   # sorting stats high to low by ratio
-  all_stats.sort(key=lambda item: float(item[4]) if isinstance(item[4], (int, float)) else float('-inf'), reverse=True)
+  all_stats.sort(key=lambda item: float(item[5]) if isinstance(item[5], (int, float)) else float('-inf'), reverse=True)
   # generating side-by-side all stats log
   out_file = f"{app1_str}_{app2_str}.stats.log"
   with open(out_file, 'w') as f:
     f.write(header + '\n')
     f.write(sep + '\n')
-    for (k, v1, v2, d, r) in all_stats: f.write(format_line(k, v1, v2, d, r) + '\n')
+    for (k, g, v1, v2, d, r) in all_stats: f.write(format_line(k, g, v1, v2, d, r) + '\n')
   print(f"Full side-by-side stats written to '{out_file}'\n")
   # print top and bottom ratios tables after filtering
-  filtered_stats = [(k, v1, v2, d, r) for k, v1, v2, d, r in all_stats if filter(k, v1, v2, d, r)]
+  filtered_stats = [(k, g, v1, v2, d, r) for k, g, v1, v2, d, r in all_stats if filter(k, g, v1, v2, d, r)]
   if len(filtered_stats) <= args.table_size: top, bottom = filtered_stats, filtered_stats[::-1]
   else:
     bottom = filtered_stats[-args.table_size:][::-1]
@@ -286,7 +291,7 @@ def compare_stats(app1, app2):
   print(f'Bottom {args.table_size}:')
   print_list(bottom)
   # print diff string stats table
-  strings_stats = [(k, v1, v2, d, r) for k, v1, v2, d, r in all_stats if filter_string(k, v1, v2)]
+  strings_stats = [(k, g, v1, v2, d, r) for k, g, v1, v2, d, r in all_stats if filter_string(k, g, v1, v2)]
   if len(strings_stats) > 0:
     print('String diffs:')
     print_list(strings_stats)
@@ -303,7 +308,8 @@ def main():
 
   x = 'tune'
   a = getattr(args, x) or []
-  extra = ' :sample:3 :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode] if 'misp' in args.mode else ''
+  extra = ' :sample:3' if C.any_in(['dsb', 'misp'], args.mode) else ''
+  if 'misp' in args.mode: extra += ' :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode]
   if pmu.skylake(): extra += ' :perf-stat-add:-1'
   elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
   a.insert(0, [':batch:1 :help:0 :loops:9 :msr:1 :dmidecode:1%s ' % extra])
@@ -321,7 +327,7 @@ def main():
       exe('%s disable-smt disable-aslr -v1' % do0)
       enable_it=1
     if args.stages & 0x8: exe(do_cmd('version log'))
-    if C.any_in(('misp', 'dsb-glc'), args.mode): args.profile_mask |= 0x200
+    if args.profile_mask == STUDY_PROF_MASK and C.any_in(('misp', 'dsb-glc'), args.mode): args.profile_mask |= 0x200
     for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
     if enable_it: exe('%s enable-smt -v1' % do0)
 

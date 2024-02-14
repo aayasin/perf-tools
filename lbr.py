@@ -479,7 +479,7 @@ def edge_stats(line, lines, xip, size):
     inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
    #MRN with IDXReg detection
   mrn_dst=x86.get("dst",line)
-  def mrn_cond(l):return not is_type(x86.JUMP,l) and '%rip' not in l and re.search(x86.MEM_IDX,l)and not re.search("[x-z]mm",l) and not re.search("%[a-d]x|%[sd]i|%[bs]p|%r[18-9]{0,1}w",l)
+  def mrn_cond(l):return not is_type(x86.JUMP,l) and '%rip' not in l and re.search(x86.MEM_IDX,l)and not re.search("[x-z]mm",l) and not re.search("%[a-d]x|%[sd]i|%[bs]p|%r[18-9][0-5]{0,1}w",l)
   if is_type("inc-dec",line) and x86.is_memory(line) and re.search(x86.MEM_IDX,line):
     inc_stat('%s non-MRNable' % ('INC' if 'inc' in x86.get('inst',line) else 'DEC'))
   elif mrn_cond(line) and (x86.is_mem_store(line) or x86.is_mem_rmw(line)) and not re.search("%[a-d]h",mrn_dst):

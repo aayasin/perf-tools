@@ -477,11 +477,12 @@ def edge_stats(line, lines, xip, size):
   if xip in indirects:
     inc(hsts['indirect_%s_targets' % hex_ip(xip)], ip)
     inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
+   #MRN with IDXReg detection
   mrn_dst=x86.get("dst",line)
-  def mrn_cond(l):return not is_type(x86.JUMP,l) and re.search(x86.MEM_IDX,l)and not re.search("xmm|ymm|zmm|rip",l)
+  def mrn_cond(l):return not is_type(x86.JUMP,l) and '%rip' not in l and re.search(x86.MEM_IDX,l)and not re.search("[x-z]mm",l) and not re.search("%[a-d]x|%[sd]i|%[bs]p|%r[18-9]{0,1}w",l)
   if is_type("inc-dec",line) and x86.is_memory(line) and re.search(x86.MEM_IDX,line):
     inc_stat('%s non-MRNable' % ('INC' if 'inc' in x86.get('inst',line) else 'DEC'))
-  elif mrn_cond(line) and x86.is_mem_store(line) and not re.search("ah|bh|ch|dh",mrn_dst) and not re.search("%rip",line) and re.search("ax|bx|cx|dx|si|di|bp|sp|r8w|r9w|r10w|r11w|r12w|r13w|r14w|r15w",line):
+  elif mrn_cond(line) and (x86.is_mem_store(line) or x86.is_mem_rmw(line)) and not re.search("%[a-d]h",mrn_dst):
     x = len(lines)-1
     while x > 0:
       if mrn_cond(lines[x]) and x86.is_mem_load(lines[x]):

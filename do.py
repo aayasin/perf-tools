@@ -192,7 +192,7 @@ def module_version(mod_name):
     mod = study
   else: C.error('Unsupported module: ' + mod_name)
   return '%s=%.2f' % (mod_name, mod.__version__)
-def profiling(): return args.mode != 'process'
+def profiling(): return any(x in args.command for x in ('prof', 'all')) and args.mode != 'process'
 def user_app(): return args.output or args.app != C.RUN_DEF
 def uniq_name(): return args.output or C.command_basename(args.app, args.app_iterations if args.gen_args else None)[:200]
 def toplev_describe(m, msg=None, mod='^'):

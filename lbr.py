@@ -353,8 +353,9 @@ Insts_leaf_func = ['-'.join([x, 'leaf', y]) for y in ('dircall', 'indcall') for 
 Insts_global = Insts + is_imix(None) + x86.mem_type() + Insts_leaf_func + ['all']
 Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first'
               ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
-Insts_Fusions = [x + '-OP fusible' for x in ['MOV', 'LD']]
-Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_global
+Insts_Fusions = [x + '-OP fusible' for x in ['MOV', 'LD']] 
+Insts_MRN = ['%s non-MRNable'%x for x in ['INC','DEC','LD-ST']]
+Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_global + Insts_MRN
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}
 footprint = set()
@@ -478,6 +479,20 @@ def edge_stats(line, lines, xip, size):
   if xip in indirects:
     inc(hsts['indirect_%s_targets' % hex_ip(xip)], ip)
     inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
+  #MRN with IDXReg detection
+  mrn_dst=x86.get("dst",line)
+  def mrn_cond(l):return not is_type(x86.JUMP,l) and '%rip' not in l and re.search(x86.MEM_IDX,l)and not re.search("[x-z]mm",l) and not re.search("%([a-d]x|[sd]i|[bs]p|r(?:[89]|1[0-5])w)",l)
+  if is_type("inc-dec",line) and x86.is_memory(line) and re.search(x86.MEM_IDX,line):
+    inc_stat('%s non-MRNable' % ('INC' if 'inc' in x86.get('inst',line) else 'DEC'))
+  elif mrn_cond(line) and (x86.is_mem_store(line) or x86.is_mem_rmw(line)) and not re.search("%[a-d]h",mrn_dst):
+    x = len(lines)-1
+    while x > 0:
+      if mrn_cond(lines[x]) and x86.is_mem_load(lines[x]):
+        mrn_src=x86.get("srcs",lines[x])
+        if mrn_src and mrn_src[0] == mrn_dst:
+          inc_pair('LD','ST',suffix='non-MRNable')
+          break
+      x-=1 
   if is_type(x86.COND_BR, xline) and is_taken(xline):
     glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
   # checks all lines but first
@@ -882,12 +897,12 @@ c = lambda x: x.replace(':', '-')
 def stat_name(name, prefix='count', ratio_of=None):
   def nm(x):
     if not ratio_of or ratio_of[0] != 'ALL': return x
-    n = (x if 'cond' in name or 'fusible' in name else x.upper()) + ' '
+    n = (x if 'cond' in name or 'fusible' in name or 'MRN' in name else x.upper()) + ' '
     if x.startswith('vec'): n += 'comp '
     if x in is_imix(None):  n += 'insts-class'
     elif x in x86.mem_type(None):  n += 'insts-subclass'
     elif 'cond' in name:    n += 'branches'
-    elif 'fusible' in name: n += 'pairs'
+    elif 'fusible' in name or 'LD-ST' in name: n += 'pairs'
     else: n += 'instructions'
     return n
   return '%s of %s' % (c(prefix), '{: >{}}'.format(c(nm(name)), 60 - len(prefix)))
@@ -921,7 +936,8 @@ def print_global_stats():
     for x in Insts_cond: print_imix_stat(x + ' conditional', glob['cond_' + x])
     print_imix_stat('unaccounted non-fusible conditional', glob['cond_non-fusible'] - glob['counted_non-fusible'])
     if 'JCC-erratum' in glob: print_imix_stat('JCC-erratum conditional', glob['JCC-erratum'])
-    for x in Insts_Fusions: print_imix_stat(x, glob[x])
+    for x in Insts_Fusions: print_imix_stat(x, glob[x]) 
+    for x in Insts_MRN: print_imix_stat(x, glob[x])
     for x in Insts_global: print_imix_stat(x, glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

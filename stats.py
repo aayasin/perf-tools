@@ -182,9 +182,9 @@ def read_perf(f):
   if debug > 2: print(d)
   return d
 
+Renames = {'insn-per-cycle': 'IPC',
+           'GHz': 'Frequency'}
 def parse_perf(l):
-  Renames = {'insn-per-cycle': 'IPC',
-             'GHz': 'Frequency'}
   if debug > 5: print('debug:', l)
   multirun = '+-' in l
   def get_var(i=1): return float(l.split('+-')[i].strip().split('%')[0]) if multirun else None
@@ -198,11 +198,11 @@ def parse_perf(l):
     val = l.split("'")[1]
     name2 = '#-runs'
     val2 = int(l.split("(")[1].split(' ')[0]) if '(' in l else 1
-  elif 'time elapsed' in l:
-    name = 'time'
+  elif 'seconds' in l:
+    name = items[2]
     val = convert(items[0])
     var = get_var(2)
-  elif '#' in l or 'cycles' in l:
+  else:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
     if name.count('_') >= 1 and name.islower() and not re.match('^(cpu_core/|perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
@@ -345,8 +345,10 @@ def csv2stat(filename):
   return perf_log2stat(base + 'perf_stat-r3.log', read_toplev(C.toplev_log2csv(filename), 'SMT_on'), d)
 
 def perf_log2stat(log, smt_on, d={}):
-  repeat = re.findall('.perf_stat-r([1-9]).log', log)[0]
-  base = log.replace('.perf_stat-r%s.log' % repeat, '')
+  r = re.findall('.perf_stat(-B)?-r([1-9]).log', log)[0]
+  bott = '-B' if len(r) > 1 else ''
+  repeat = r[-1]
+  base = log.replace('.perf_stat%s-r%s.log' % (bott, repeat), '')
   bottlenecks = len(d) == 0
   def params(smt_on):
     d['knob.ncores'] = pmu.cpu('corecount')
@@ -361,6 +363,7 @@ def perf_log2stat(log, smt_on, d={}):
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
     if debug > 3: print('reading %s' % f)
     for l in C.file2lines(f):
+      if re.match('^\s*$|perf stat ', l): continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2

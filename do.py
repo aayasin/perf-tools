@@ -600,7 +600,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if profiling():
       if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
       if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
-    logs['bott'] = perf_stat('-r1', 'bottlenecks-view', 16, tma.get('perf-groups'),
+    logs['bott'] = perf_stat('-B -r1', 'bottlenecks-view', 16, tma.get('perf-groups'),
       perfmetrics=None, basic_events=False, last_events='', grep="| grep -E 'seconds [st]|inst_retired_any '", warn=False)
     if do['help'] >= 0: stats.perf_log2stat(logs['bott'], 0)
 
@@ -836,8 +836,8 @@ def profile(mask, toplev_args=['mvl6', None]):
   if do['help'] < 0: profile_mask_help()
   elif args.repeat == 3 and (mask_eq(0x1012) or mask_eq(0x82)):
     stats.csv2stat(C.toplev_log2csv(logs['tma']))
-    d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])), \
-                                                    'num-not_counted-stats', 'num-not_supported-stats', 'DurationTimeInMilliSeconds'
+    d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])
+      ), 'num-not_counted-stats', 'num-not_supported-stats', 'DurationTimeInMilliSeconds'
     not_counted, not_supported = d[not_counted_name], d[not_supported_name]
     if not mask_eq(0x80):
       assert d[time] > tma.get('num-mux-groups') * globs['perf-mux-interval'], "Too short run time! %f [ms]" % d[time]

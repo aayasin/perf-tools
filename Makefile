@@ -184,8 +184,8 @@ pre-push: help
 	$(MAKE) test-tripcount-mean                             # tests tripcount-mean calculation
 	$(MAKE) test-forcecpu                                   # tests force cpu option
 	$(MAKE) test-edge-inst					# tests sampling by instructions
-	$(PY3) $(DO) profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1
+	$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
-	$(PY2) $(DO) profile --tune :time:2 -v3 > .do-time2.log 2>&1 || $(FAIL) # tests default w/ :time (errors only)
+	$(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL) # tests default w/ python2 (errors only)
 	time $(DO) profile -a "openssl speed rsa2048" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)

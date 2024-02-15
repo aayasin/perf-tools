@@ -285,7 +285,7 @@ def arg(num, default=None):
 def argv2str(start=0):
   res = []
   for a in sys.argv[start:]:
-    res.append("\"%s\"" % a if "'" in a else "'%s'" % a if (any(x in a for x in "'{") or a == '') else a)
+    res.append("\"%s\"" % a if "'" in a else "'%s'" % a if (any(x in a for x in "'{ ") or a == '') else a)
   return ' '.join(res)
 
 def args_parse(d, args):

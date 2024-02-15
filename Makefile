@@ -18,6 +18,7 @@ RERUN = -pm 0x80
 SHELL := /bin/bash
 SHOW = tee
 SKIP_EX = false # Skip extra checks
+SS = 3 # default Sleep in Seconds
 ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 
 all: tramp3d-v4
@@ -52,17 +53,17 @@ tramp3d-v4: pmu-tools/workloads/CLTRAMP3D /usr/bin/clang++
 	./CLTRAMP3D
 run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
-	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s1 --tune :perf-stat:\"\'-C2\'\" # for profiling
+	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s$(SS) --tune :perf-stat:\"\'-C2\'\" # for profiling
 test-mem-bw: run-mem-bw
 	sleep 2s
-	set -o pipefail; $(DO) profile -s3 $(ST) -o $< $(RERUN) | $(SHOW)
+	set -o pipefail; $(DO) profile -s$(SS) $(ST) -o $< $(RERUN) | $(SHOW)
 	grep -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log
 	kill -9 `pidof m0-n8192-u01.llv`
 run-mt:
 	./omp-bin.sh $(NUM_THREADS) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv &
 test-mt: run-mt
 	sleep 2s
-	set -o pipefail; $(DO) profile -s1 $(RERUN) | $(SHOW)
+	set -o pipefail; $(DO) profile -s$(SS) $(RERUN) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
 CPUIDI = 90000000
 test-bottlenecks: kernels/cpuid
@@ -156,6 +157,23 @@ test-forcecpu:
 	FORCECPU=SPR $(DO) $(CMD) -a "./workloads/BC.sh 7 SPR-slow0" -pm 100 --tune :imix:0x3f :loops:0 :help:0 $(DO_SUFF)
 test-edge-inst:
 	$(DO) $(CMD) -a './pmu-tools/workloads/CLTRAMP3D' --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
+install-jit:
+	$(MAKE) install1 PKG="openjdk-17-jdk openjdk-17-jre xterm"
+	#cd .. && git clone https://github.com/jvm-profiling-tools/perf-map-agent && cd perf-map-agent && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && cmake . && make && echo "Successfully built perf-map-agent"
+	#cd .. && git clone https://github.com/brendangregg/FlameGraph && cd FlameGraph && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && sed -i -e "s|JAVA_HOME=\${JAVA_HOME:-.*|JAVA_HOME=\${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}|g;s|AGENT_HOME=\${AGENT_HOME:-.*|AGENT_HOME=\${AGENT_HOME:-../perf-map-agent}|g" jmaps
+run-jit: ./workloads/CryptoBench.java
+	find1=$(shell sudo find / -name libperf-jvmti.so 2>1 | grep -v find: | tail -1);\
+		java -XX:+PreserveFramePointer -agentpath:$$find1 $< 999 > $@ 2>&1 &
+	pidof java
+	xterm -T "java $<" -e "tail -f $@" &
+	#xterm -T "java $< stderr" -e "cat .run-jit.log | uniq -c" &
+test-jit: run-jit
+	sleep $(SS); sleep $(SS)
+	$(DO) $(CMD) --tune :perf-jit:1 :forgive:0 :help:0 -s$(SS) -a java$(SS)-t0
+	$(MAKE) kill-jit
+kill-jit: run-jit
+	kill -9 `pidof java`
+	mv run-jit{,.$$PPID}
 
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D*cmd

@@ -35,7 +35,7 @@ sudo apt-get install make
 sudo apt-get install -y libtraceevent-dev libbfd-dev libdwarf-dev libelf-dev libdw-dev libunwind-dev
 make clean
 #make PYTHON=false PYTHON_CONFIG=false
-make NO_JEVENTS=1 # a perf tool overhead bug in Intel event names handling
+make NO_JEVENTS=1 NO_LIBTRACEEVENT=1 # a perf tool overhead bug in Intel event names handling
 ls -l $PWD/perf
 cd -
 ln -sf $PWD/$perfdir/perf ../perf
@@ -44,7 +44,7 @@ if [ $OBJDUMP -eq 1 ]; then
   sudo apt-get install -y libgmp-dev
   git clone http://sourceware.org/git/binutils-gdb.git
   cd binutils-gdb/
-  ./configure
+  ./configure --disable-gdb --disable-ld
   make
   cd ..
   ls -l ./binutils-gdb/binutils/objdump

@@ -33,6 +33,7 @@ def isfile(f): return f and os.path.isfile(f)
 globs = {
   'cmds_file':          None,
   'find-perf':          'sudo find / -name perf -executable -type f | grep ^/',
+  'find-jvmti':         'sudo find /usr -name libperf-jvmti.so | grep -v find:',
   'force-cpu':          C.env2str('FORCECPU'),
   'ldlat-def':          '7',
   'perf-mux-interval':  53,
@@ -90,6 +91,7 @@ do = {'run':        C.RUN_DEF,
   'packages':       ['cpuid', 'dmidecode', 'numactl'] + list(globs['tunable2pkg'].keys()),
   'perf-annotate':  3,
   'perf-filter':    1,
+  'perf-jit':       0, # 1: oneDNN/Java w/ perf builtin agent, 2: Java w/ perf-map-agent
   'perf-lbr':       '-j any,save_type -e %s -c %d' % (pmu.lbr_event(), pmu.lbr_period()),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(globs['ldlat-def']),
   'perf-pebs':      '-b -e %s -c 1000003' % pmu.event('dsb-miss'),
@@ -254,6 +256,9 @@ def find_perf():
   exe(globs['find-perf'] + " | tee find-perf.txt", fail=0)
   for x in C.file2lines('find-perf.txt'):
     C.printc('%s: %s' % (x, exe_1line('%s --version' % x)), col=C.color.BLACK)
+def find_jvmti(f='find-jvmti.txt'):
+  if isfile(f): return C.file2lines(f)[-1]
+  return C.exe_one_line('%s | tee %s | tail -1' % (globs['find-jvmti'], f), None, args.verbose > 1)
 
 def setup_perf(actions=('set', 'log'), out=None):
   def set_it(p, v): set_sysfile(p, str(v))
@@ -506,6 +511,15 @@ def profile(mask, toplev_args=['mvl6', None]):
         do[x] = do[x].replace('000', '0' * (3 + factor), 1)
         C.info('\tcalibrated: %s' % do[x])
     return record_name(do[x])
+  def jit(data):
+    if args.mode == 'profile' or do['perf-jit'] == 0: return data
+    if not perf_newer_than(6.5): error('perf is too old: %s (no JIT support); try: LINUXK=6 LINUXV=6.6.6 ./build-perf.sh' % perf_version())
+    if do['perf-jit'] == 2:
+      exe("sudo ../FlameGraph/jmaps")
+      return data
+    datj =  data.replace('.data', '.datj')
+    exe('%s inject -j -i %s -o %s' % (perf, data, datj))
+    return datj
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
   if args.profile_mask & ~0x1 and args.verbose >= 0: C.info('App: ' + r)
@@ -524,6 +538,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       for l in reversed(record_out):
         if 'sampling ' in l: break
         if 'WARNING: Kernel address maps' in l: C.error("perf tool is missing permissions. Try './do.py setup-perf'")
+    data = jit(data)
     exe(perf_report + " --header-only -i %s | grep duration" % data)
     print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_view(), data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
@@ -533,10 +548,17 @@ def profile(mask, toplev_args=['mvl6', None]):
     if do['perf-annotate']:
       exe(r"%s --stdio -n -l -i %s | c++filt | tee %s "
         r"| tee >(grep -E '^\s+[0-9]+ :' | sort -n | ./ptage > %s-code-ips.log) "
-        r"| grep -E -v -E '^(-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
+        r"| grep -v -E '^(-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
         logs['code'], base, base), '@annotate code', redir_out='2>/dev/null')
       exe("grep -E -w -5 '(%s) :' %s" % ('|'.join(exe2list(r"grep -E '\s+[0-9]+ :' %s | cut -d: -f1 | sort -n | uniq | tail -%d | grep -E -vw '^\s+0'" %
         (logs['code'], do['perf-annotate']))), logs['code']), '@hottest %d+ blocks, all commands' % do['perf-annotate'])
+    if args.mode != 'profile' and do['perf-jit']:
+      exe(perf_report_mods + " -n --no-call-graph -i %s | tee %s-mods.log | grep -A13 Overhead "
+          r"| grep -E -v '^# \.|^\s+$|^$' | sed 's/[ \\t]*$//' | nl -v-1" % (data, base), '@report modules no call-graph')
+      n, j = samples_count(data), int(exe_1line("grep -E 'jitted|\[JIT\]' %s-mods.log | ./ptage | tail -1" % base, 1))
+      C.printc('\n\t'.join((
+        '\t%9d %3.2f%% == jitted' % (j, 100.0 * j / n),
+        '%9d %3.2f%% == total' % (n, 100))))
     if do['xed']: perf_script("-F insn --xed | grep . | %s | tee %s-hot-insts.log | tail" % (sort2up, base),
                               '@time-consuming instructions', data)
   
@@ -658,7 +680,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if n == 0: C.error(r"No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
     elif n < 1e4: warn()
     elif n > 1e5: warn("many")
-    return perf_data, n
+    return jit(perf_data), n
   
   if en(8) and do['sample'] > 1:
     assert C.any_in((pmu.lbr_event()[:-1], 'instructions:ppp', 'cycles:p '), do['perf-lbr']) or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
@@ -844,7 +866,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(17):
     csv_file = perf_stat('-I%d' % do['interval'], 'over-time counting at %dms interval' % do['interval'], 17, csv=True)
     if args.events:
-      for e in args.events.split(','): exe('grep -E -i %s %s > %s' % (e, csv_file, csv_file.replace('.csv', '-%s.csv' % e)))
+      for e in args.events.split(','): exe("grep -E -i '%s' %s > %s" % (e, csv_file, csv_file.replace('.csv', '-%s.csv' % C.chop(e))))
 
   if en(19):
     data = perf_record('pt', 19)[0]
@@ -1008,6 +1030,11 @@ def main():
     for x in ('stat', 'stat-ipc'): do['perf-'+x] += delay
     for x in record_steps: do['perf-'+x] += delay
     args.toplev_args += delay
+  if do['perf-jit']:
+    assert args.sys_wide, "system-wide profiling is required for JIT profiling"
+    if profiling(): C.info("JIT profiling: if Java; make sure JVM was started with '-XX:+PreserveFramePointer -agentpath:%s'" % find_jvmti())
+    if do['perf-jit'] == 1:
+      for x in record_steps: do['perf-'+x] += ' -k1'
   if do['container']:
     if profiling(): C.info('container profiling')
     for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'

@@ -45,9 +45,10 @@ MEM_IDX = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
 def is_imm(line): return '$' in line
 def is_memory(line): return '(' in line and 'lea' not in line and 'nop' not in line
 def is_mem_imm(line): return is_memory(line) and is_imm(line)
-def is_mem_load(line): return is_memory(line) and (is_type(LOAD_ANY, line) or C.any_in(('broadcast', 'insert', 'gather'), line))
+def is_mem_load(line): return is_memory(line) and (is_type(LOAD_ANY, line) or C.any_in(('broadcast', 'insert', 'gather'), line)) 
+def is_type(t, l): return re.match(r"\s+\S+\s+%s" % t, l) is not None 
 def is_mem_store(line): return is_memory(line) and is_type(STORE, line) and C.any_in(('mov', EXTRACT, 'scatter'), line)
-def is_type(t, l): return re.match(r"\s+\S+\s+%s" % t, l) is not None
+def is_mem_rmw(line): return is_memory(line) and is_type(STORE, line) and not C.any_in(('mov', EXTRACT, 'scatter'), line)
 def is_test_load(line): return is_type(CISC_CMP, line) or is_type(BIT_TEST, line)
 
 def get_mem_inst(line):

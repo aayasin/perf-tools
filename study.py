@@ -190,7 +190,7 @@ def compare_stats(app1, app2):
   # filtering what stats get into strings table
   def filter_string(key, group, value1, value2):
     return (isinstance(value1, str) or isinstance(value2, str)) and value1 != value2 and \
-        not key == 'App' and not group == 'LBR.Loop'
+        not key == 'app' and not group == 'LBR.Loop'
   # line format in tables
   def format_line(k, g, v1, v2, d, r):
     def fv(v): return round(v, args.round_factor) if isinstance(v, (int, float)) else str(v)

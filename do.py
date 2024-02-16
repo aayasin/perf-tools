@@ -486,6 +486,8 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(1): logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
   if en(2): perf_stat('-a', 'system-wide counting', 2, grep='| grep -E "seconds|insn|topdown|pkg"',
                       events=a_events() if do['perf-stat-add'] > -1 else '')
+  elif args.sys_wide: perf_stat('-C0', '@measuring TSC', 2, events='msr/tsc/', grep='| grep /tsc/',
+                                basic_events=False, last_events='', perfmetrics=False)
   if en(3) and do['sample']:
     data = '%s.perf.data' % record_name(do['perf-record'])
     profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.default_period(), data, do['perf-record'], r),

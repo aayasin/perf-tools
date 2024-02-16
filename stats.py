@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.94
+__version__= 0.95
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -194,12 +194,12 @@ def parse_perf(l):
   def get_group(n): return 'Metric' if is_metric(n) else 'Event'
   if not re.match(r'^\s*[0-9P]', l): pass
   elif 'Performance counter stats for' in l:
-    name = 'App'
+    name = 'app'
     val = l.split("'")[1]
     name2 = '#-runs'
     val2 = int(l.split("(")[1].split(' ')[0]) if '(' in l else 1
   elif 'seconds' in l:
-    name = items[2]
+    name = items[4 if multirun else 2]
     val = convert(items[0])
     var = get_var(2)
   else:
@@ -215,7 +215,7 @@ def parse_perf(l):
     val = convert(items[0])
     var = get_var()
     metric_idx = name_idx + 3
-    if name == 'cycles:k': pass
+    if name == 'cycles:k' or l.count('#') == 0: pass
     elif l.count('#') == 2: # TMA-L2 metrics of Golden Cove
       val2 = convert(items[name_idx+2], adjust_percent=False)
       val3 = convert(items[name_idx+6], adjust_percent=False)
@@ -345,11 +345,8 @@ def csv2stat(filename):
   return perf_log2stat(base + 'perf_stat-r3.log', read_toplev(C.toplev_log2csv(filename), 'SMT_on'), d)
 
 def perf_log2stat(log, smt_on, d={}):
-  r = re.findall('.perf_stat(-B)?-r([1-9]).log', log)[0]
-  bott = '-B' if len(r) > 1 else ''
-  repeat = r[-1]
-  base = log.replace('.perf_stat%s-r%s.log' % (bott, repeat), '')
-  bottlenecks = len(d) == 0
+  suff = re.findall('(.perf_stat(-B)?-r[1-9].log)', log)[0]
+  base, bottlenecks = log.replace(suff[0], ''), len(d) == 0
   def params(smt_on):
     d['knob.ncores'] = pmu.cpu('corecount')
     d['knob.nsockets'] = pmu.cpu('socketcount')

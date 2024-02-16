@@ -165,8 +165,8 @@ def read_perf(f):
     if e == 'r2424': d['L2MPKI_Code'] = (1000 * val / inst, group)
     if e == 'topdown-retiring': d['UopPI'] = (v / inst, group)
     if e == 'ref-cycles' and d['app'][0] == 'system wide':
-      d['TSC'] = read_perf(f.replace('perf_stat-r3.log', 'perf_stat-C0.log'))['msr/tsc/'][0]
-      d['CPUs_Utilized'] = (v / d['TSC'], group)
+      d['TSC'] = (read_perf(f.replace('perf_stat-r3.log', 'perf_stat-C0.log'))['msr/tsc/'][0], 'Event')
+      d['CPUs_Utilized'] = (v / d['TSC'][0], group)
   if f is None: return calc_metric(None) # a hack!
   if debug > 3: print('reading %s' % f)
   lines = C.file2lines(f)
@@ -284,6 +284,7 @@ def read_perf_toplev(filename):
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
     for r in reader:
       if r['Event'] in ('Event', 'dummy'): continue
+      if debug > 6: print('debug:', r)
       x = r['Event']
       if '<not counted>' in r['Value']:
         d['num-not_counted-stats'] += 1

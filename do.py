@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 3.02
+__version__ = 3.03
 
 import argparse, os.path, sys
 import analyze, common as C, pmu, stats, tma
@@ -483,11 +483,14 @@ def profile(mask, toplev_args=['mvl6', None]):
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
   if args.profile_mask & ~0x1 and args.verbose >= 0: C.info('App: ' + r)
-  if en(1): logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
+  if en(1):
+    logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
+    if args.sys_wide or '-a' in do['perf-stat']:
+      perf_stat('-C0', '@measuring TSC', 2, events='msr/tsc/', grep = "| grep -E 'seconds|tsc'",
+                basic_events=False, last_events='', perfmetrics=False)
+      C.printc('\tcorrect CPUs_Utilized = %.2f' % get_stat('CPUs_Utilized'), C.color.GREEN)
   if en(2): perf_stat('-a', 'system-wide counting', 2, grep='| grep -E "seconds|insn|topdown|pkg"',
                       events=a_events() if do['perf-stat-add'] > -1 else '')
-  elif args.sys_wide: perf_stat('-C0', '@measuring TSC', 2, events='msr/tsc/', grep='| grep /tsc/',
-                                basic_events=False, last_events='', perfmetrics=False)
   if en(3) and do['sample']:
     data = '%s.perf.data' % record_name(do['perf-record'])
     profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.default_period(), data, do['perf-record'], r),

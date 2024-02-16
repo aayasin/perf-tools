@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2023, Intel Corporation
+# Copyright (c) 2020-2024, Intel Corporation
 # Author: Ahmad Yasin
 #
 #   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
@@ -39,7 +39,7 @@ def print_metrics(app):
 
 def write_stat(app): return csv2stat(C.command_basename(app) + '.toplev-vl6-perf.csv')
 
-debug = 0
+debug = C.env2int('STATS_DEBUG')
 sDB = {}
 stats = {'verbose': 0}
 
@@ -144,12 +144,13 @@ def print_DB(c):
   d = {}
   for x in sDB[c].keys():
     if x.endswith(':var') or x.startswith('topdown-') or '.' in x or x in ['branch-misses']: continue
-    v = sDB[c][x]
+    v = sDB[c][x][0]
+    if not v and not stats['verbose']: continue
     if x in read_perf(None): v = float('%.2f' % v)
     val = '%18s' % C.float2str(v) if C.is_num(v) else v
-    if x+':var' in sDB[c] and sDB[c][x+':var']: val += ' +- %s%%' % sDB[c][x+':var']
+    if x+':var' in sDB[c]: val += ' +- %s%%' % sDB[c][x+':var'][0]
     d['%30s' % x] = val
-  print(c, '::\n', C.dict2str(d, '\t\n').replace("'", ""))
+  print(c, '::\n', C.dict2str(d, '\t\n').replace("'", ""), sep='')
   return d
 
 def read_perf(f):
@@ -163,6 +164,9 @@ def read_perf(f):
     if e == 'r0160': d['IpUnknown_Branch'] = (inst / v, group)
     if e == 'r2424': d['L2MPKI_Code'] = (1000 * val / inst, group)
     if e == 'topdown-retiring': d['UopPI'] = (v / inst, group)
+    if e == 'ref-cycles' and d['app'][0] == 'system wide':
+      d['TSC'] = read_perf(f.replace('perf_stat-r3.log', 'perf_stat-C0.log'))['msr/tsc/'][0]
+      d['CPUs_Utilized'] = (v / d['TSC'], group)
   if f is None: return calc_metric(None) # a hack!
   if debug > 3: print('reading %s' % f)
   lines = C.file2lines(f)
@@ -173,7 +177,7 @@ def read_perf(f):
       name, group, val, var, name2, group2, val2, name3, group3, val3 = parse_perf(l)
       if name:
         d[name] = (val, group)
-        d[name + ':var'] = (var, group)
+        if var: d[name + ':var'] = (var, group)
         calc_metric(name, val)
       if name2: d[name2] = (val2, group2)
       if name3: d[name3] = (val3, group3)
@@ -443,10 +447,12 @@ def inst_fusions(hitcounts, info):
     print_stat('%s fusible-candidate' % stat, value, ratio_of=('ALL', total), log=info)
 
 def main():
-  if C.arg(1).endswith('.info.log'): return rollup_all()
+  a1 = C.arg(1)
+  if a1.endswith('.info.log'): return rollup_all()
+  if ' ' in a1: return print_metrics(a1)
   stats['verbose'] = 1
   print(pmu.cpu('eventlist'))
-  s = csv2stat(C.arg(1))
+  s = csv2stat(a1)
   C.exe_cmd("echo scp $USER@`hostname -A | cut -d' ' -f1`:$PWD/%s ." % s)
 
 if __name__ == "__main__":

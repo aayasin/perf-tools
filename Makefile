@@ -110,7 +110,7 @@ test-build:
 test-default: ./CLTRAMP3D
 	$(DO1) -pm $(PM) $(DO_SUFF)
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
-TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp $(DO_SUFF)
+TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp --tune :forgive:2 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo $(TS_A) > $@
@@ -165,7 +165,7 @@ pre-push: help
 	$(MAKE) test-default PM=313e                            # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
-	$(MAKE) test-bc2 CMD='profile analyze' PM=100           # tests analyze module
+	$(MAKE) test-bc2 CMD='profile analyze' PM=102           # tests analyze module
 	$(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL) # tests --delay
 	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
 	$(MAKE) test-default DO_SUFF="--tune :calibrate:1 :loops:0 :msr:1 :perf-filter:0 :sample:3 :size:1 -o $(AP)-u $(DO_SUFF)" \

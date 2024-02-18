@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.08 # see version line of do.py
+__version__= x86.__version__ + 2.09 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -143,6 +143,16 @@ def line_inst(line):
     return 'vecX-int'
   return None
 
+jump_to_mid_loop = {}
+def detect_jump_to_mid_loop(ip, xip):
+  if xip in jump_to_mid_loop:
+    jump_to_mid_loop[xip] += 1
+    return
+  for l in contigous_loops:
+    if ip != l and is_in_loop(ip, l) and not is_in_loop(xip, l):
+      jump_to_mid_loop[xip] = 1
+      break
+
 def tripcount(ip, loop_ipc, state):
   if state == 'new' and loop_ipc in loops:
     if 'tripcount' not in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
@@ -173,12 +183,12 @@ def loop_stats(line, loop_ipc, tc_state):
     return
   # loop-body stats, FIXME: on the 1st encoutered loop in a new sample for now
   # TODO: improve perf of loop_stats invocation
-  #if (glob['loop_stats_en'] == 'No' or
-  #  (glob['loop_stats_en'] == 'One' and line_ip(line) != loop_ipc and tc_state == 'new')):
+  #if (stats.loops() == 'No' or
+  #  (stats.loops() == 'One' and line_ip(line) != loop_ipc and tc_state == 'new')):
   #  #not (is_loop(line) or (type(tcstate) == int)))):
   #  return tc_state
   #elif tc_state == 'new' and is_loop(line):
-  if glob['loop_stats_en'] and tc_state == 'new' and is_loop(line):
+  if stats.loop() and tc_state == 'new' and is_loop(line):
     loop_stats.id = line_ip(line)
     loop_stats.atts = ''
   if loop_stats.id:
@@ -200,7 +210,7 @@ bwd_br_tgts = [] # better make it local to read_sample..
 loop_cands = []
 def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
                 MOLD=4e4): #Max Outer Loop Distance
-  global bwd_br_tgts, loop_cands # unlike nonlocal, global works in python2 too!
+  global bwd_br_tgts, loop_cands, contigous_loops # unlike nonlocal, global works in python2 too!
   def find_block_ip(x = len(lines)-2):
     while x>=0:
       if is_taken(lines[x]):
@@ -235,6 +245,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           takens += [ lines[at] ]
           begin, at = find_block_ip(at-1)
         else: break
+  def ilen_on(): return 'ilen:' in lines[-1]
 
   if ip in loops:
     loop = loops[ip]
@@ -248,7 +259,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           inc(loop['paths-%d'%x], ';'.join([hex_ip(a) for a in lbr_takens[-x:]]))
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
-      size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf, erratum = 1, {}, [], 0, 0, 0, 0 if 'ilen:' in lines[-1] else None
+      size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf, erratum = 1, {}, [], 0, 0, 0, 0 if ilen_on() else None
       types = ['taken', 'lea', 'cmov'] + x86.MEM_INSTS + user_loop_imix
       for i in types: cnt[i] = 0
       x = len(lines)-2
@@ -285,11 +296,12 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     return
   
   # only simple loops, of these attributes, are supported:
-  # * are entirely observed in a single sample (e.g. tripcount < 32)
+  # * loop-body is entirely observed in a single sample
   # * a tripcount > 1 is observed
   # * no function calls
   if is_taken(lines[-1]):
     xip = line_ip(lines[-1])
+    if ilen_on(): detect_jump_to_mid_loop(ip, int(xip))
     if xip <= ip: pass # not a backward jump
     elif (use_cands and ip in loop_cands) or (not use_cands and ip in bwd_br_tgts):
       if use_cands: loop_cands.remove(ip)
@@ -313,7 +325,9 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       }
       if srcline: loops[ip]['srcline'] = srcline.replace(':', ';')
       ilen = get_ilen(lines[-1])
-      if ilen: loops[ip]['sizeIB'] = int(xip) - ip + ilen # size In Bytes
+      if ilen:
+        loops[ip]['sizeIB'] = int(xip) - ip + ilen # size In Bytes
+        if (ip + loops[ip]['sizeIB'] - ilen) == int(xip): contigous_loops += [ip]
       return
     elif use_cands and len(lines) > 2 and ip in bwd_br_tgts and has_ip(len(lines)-2):
       bwd_br_tgts.remove(ip)
@@ -326,7 +340,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
 edge_en = 0
 LBR_Event = pmu.lbr_event()[:-4]
 lbr_events = []
-loops = {}
+loops, contigous_loops = {}, []
 stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles', 'total_loops_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
@@ -365,6 +379,16 @@ footprint = set()
 pages = set()
 indirects = set()
 ips_after_uncond_jmp = set()
+
+class stats:
+  SIZE, LOOP, ILEN = (2**i for i in range(3))
+  enables = 0
+  @staticmethod
+  def ilen(): return stats.enables & stats.ILEN
+  @staticmethod
+  def loop(): return stats.enables & stats.LOOP
+  @staticmethod
+  def size(): return stats.enables & stats.SIZE
 
 def inc_pair(first, second='JCC', suffix='non-fusible'):
   c = '%s-%s %s' % (first, second, suffix)
@@ -546,8 +570,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   valid, lines, bwd_br_tgts = 0, [], []
   labels = verbose & 0x1 and not loop_ipc
   assert verbose & 0x1 or not labels, "labels argument must be False!"
-  glob['size_stats_en'] = skip_bad and not loop_ipc
-  glob['loop_stats_en'] = lp_stats_en
+  if skip_bad and not loop_ipc: stats.enables |= stats.SIZE
+  if lp_stats_en: stats.enables |= stats.LOOP
   glob['ip_filter'] = ip_filter
   # edge_en permits to collect per-instruction stats (beyond per-taken-based) if config is good for edge-profile
   edge_en = event in pmu.lbr_unfiltered_events() and not ip_filter and not loop_ipc
@@ -565,7 +589,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     insts, size, takens, xip, timestamp, srcline = 0, 0, [], None, None, None
     tc_state = 'new'
     def update_size_stats():
-      if not glob['size_stats_en'] or size<0: return
+      if not stats.size() or size<0: return
       if stat['size']['sum'] == 0:
         stat['size']['min'] = stat['size']['max'] = size
       else:
@@ -689,6 +713,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
           srcline = None  # srcline <-> loop
       if skip_bad: tc_state = loop_stats(line, loop_ipc, tc_state)
       if edge_en:
+        if glob['all'] == 1:  # 1st instruction observed
+          if 'ilen:' in line: stats.enables |= stats.ILEN
+          if stats.ilen(): glob['JCC-erratum'] = 0
         if len(takens) and is_taken(line) and verbose & 0x2: #FUNCR
           x = get_taken_idx(lines, -1)
           if x >= 0:
@@ -761,12 +788,11 @@ def is_line_start(ip, xip): return (ip >> 6) ^ (xip >> 6) if ip and xip else Fal
 def is_after_uncond_jmp(ip): return ip in ips_after_uncond_jmp
 
 def is_jcc_erratum(line, previous=None):
-  # JCC/CALL/RET/JMP
-  if not is_type(x86.COND_BR, line) and not is_type(x86.CALL_RET, line) \
-          and not is_type(x86.JMP_RET, line): return False
-  ip = line_ip(line)
   length = get_ilen(line)
   if not length: return False
+  # JCC/CALL/RET/JMP
+  if not is_type(x86.COND_BR, line) and not is_type(x86.CALL_RET, line) and not is_type(x86.JMP_RET, line): return False
+  ip = line_ip(line)
   if previous and x86.is_jcc_fusion(previous, line):
     ip = line_ip(previous)
     length += get_ilen(previous)
@@ -919,6 +945,7 @@ def print_imix_stat(n, c): print_stat(n, c, ratio_of=('ALL', glob['all']))
 
 def print_global_stats():
   def nc(x): return 'non-cold ' + x
+  def print_loops_stat(n, c): print_stat(nc(n + ' loops'), c, prefix='proxy count', ratio_of=('loops', len(loops)))
   cycles, scl = os.getenv('PTOOLS_CYCLES'), 1e3
   if cycles:
     lbr_ratio = ratio(scl * stat['total_cycles'], int(cycles))
@@ -928,17 +955,16 @@ def print_global_stats():
   if len(footprint): print_estimate(nc('code footprint [KB]'), '%.2f' % (len(footprint) / 16.0))
   if len(pages): print_stat(nc('code 4K-pages'), len(pages))
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
-  print_stat('cycles in loops', stat['total_loops_cycles'], prefix='proxy count',
-             ratio_of=('total cycles', stat['total_cycles']))
-  for n in (4, 5, 6): print_stat(nc('%dB-unaligned loops' % 2**n), len([l for l in loops.keys() if l & (2**n-1)]),
-                                 prefix='proxy count', ratio_of=('loops', len(loops)))
-  print_stat(nc('non-contiguous loops'), len([l for l in loops.keys() if 'non-contiguous' in loops[l]['attributes']]),
-             prefix='proxy count', ratio_of=('loops', len(loops)))
+  print_stat('cycles in loops', stat['total_loops_cycles'], prefix='proxy count', ratio_of=('total cycles', stat['total_cycles']))
+  for n in (4, 5, 6): print_loops_stat('%dB-unaligned' % 2**n, len([l for l in loops.keys() if l & (2**n-1)]))
+  if stats.ilen() : print_loops_stat('non-contiguous', len(loops) - len(contigous_loops))
   print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
-  if glob['size_stats_en']:
+  if stats.size():
     for x in Insts_cond: print_imix_stat(x + ' conditional', glob['cond_' + x])
     print_imix_stat('unaccounted non-fusible conditional', glob['cond_non-fusible'] - glob['counted_non-fusible'])
-    if 'JCC-erratum' in glob: print_imix_stat('JCC-erratum conditional', glob['JCC-erratum'])
+    if stats.ilen():
+      print_imix_stat('JCC-erratum conditional', glob['JCC-erratum'])
+      print_imix_stat('jump-into-mid-loop', sum(jump_to_mid_loop.values()))
     for x in Insts_Fusions: print_imix_stat(x, glob[x]) 
     for x in Insts_MRN: print_imix_stat(x, glob[x])
     for x in Insts_global: print_imix_stat(x, glob[x])
@@ -951,7 +977,7 @@ def print_global_stats():
                    prefix='misprediction-ratio', comment='paths histogram')
 
 def print_common(total):
-  if glob['size_stats_en']:
+  if stats.size():
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
   print('LBR samples:', hist_fmt(stat))
@@ -1044,7 +1070,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   loop['size'] = str(loop['size']) if loop['size'] else '-'
   printl('%soop#%d: [ip: %s, ' % ('L' if detailed else 'l', num, hex_ip(ip)))
   for x in fixl: printl('%s: %s, ' % (x, loop[x]))
-  if not glob['loop_stats_en']: del loop['attributes']
+  if not stats.loop(): del loop['attributes']
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'imix-ID', 'back', 'entry-block', 'IPC', 'tripcount']

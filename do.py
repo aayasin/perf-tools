@@ -641,7 +641,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     info, comm = '%s.info.log' % data, get_comm(data)
     clean = r"sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def print_info(x):
-      if args.mode != 'profile': exe_v0('printf "%s" >%s %s' % (x, '' if print_info.first and do['reprocess'] >= 0 else '>', info))
+      if args.mode != 'profile': exe_v0('printf "%s" >%s %s' % (x, '' if print_info.first and do['reprocess'] > 0 else '>', info))
       print_info.first = False
     print_info.first = True
     def static_stats():
@@ -709,7 +709,7 @@ def profile(mask, toplev_args=['mvl6', None]):
           exe(log_br_count('mispredicted conditional taken', 'misp_tk_conds'))
           if do['imix'] & 0x20 and args.mode != 'profile': calc_misp_ratio()
         exe(log_br_count('mispredicted taken', 'mispreds'))
-    else: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of stats log files')
+    elif do['reprocess'] != 0: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of stats log files')
     if do['xed']:
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
@@ -767,7 +767,8 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(9) and do['sample'] > 2:
     data = perf_record('pebs', 9, pmu.event_name(do['perf-pebs']))[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
-    if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs, Insts (PEBS)", data)
+    if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data),
+                              "@ top-10 IPs, Insts of %s" % pmu.event_name(do['perf-pebs']), data)
     else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:

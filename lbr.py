@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.07 # see version line of do.py
+__version__= x86.__version__ + 2.08 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -120,14 +120,17 @@ def num_valid_sample(): return stat['total'] - stat['bad'] - stat['bogus']
 vec_size = 3 if pmu.cpu_has_feature('avx512vl') else 2
 def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
 def vec_len(i, t='int'): return 'vec%d-%s' % (128 * (2 ** i), t)
+IMIX_CLASS = x86.MEM_INSTS + ['mem_indir-branch', 'nonmem-branch']
 def line_inst(line):
   pInsts = ['cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper'] + user_loop_imix
-  allInsts = ['nop', 'lea', 'cisc-test'] + x86.MEM_INSTS + pInsts
+  allInsts = ['nop', 'lea', 'cisc-test'] + IMIX_CLASS + pInsts
   if not line: return allInsts
   if 'nop' in line: return 'nop'
   if '(' in line:  # load/store take priority in CISC insts
     if 'lea' in line: return 'lea'
+    if is_branch(line): return 'mem_indir-branch'
     return x86.get_mem_inst(line)
+  if is_branch(line): return 'nonmem-branch'
   for x in pInsts: # skip non-vector p/v-prefixed insts
     if x in line: return x
   r = re.match(r"\s+\S+\s+(\S+)", line)
@@ -345,7 +348,7 @@ def inst2pred(i):
 # determine what is counted globally
 def is_imix(t):
   # TODO: cover FP vector too
-  IMIX_LIST = x86.MEM_INSTS + ['logic']
+  IMIX_LIST = IMIX_CLASS + ['logic']
   if not t: return IMIX_LIST + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
   return t in IMIX_LIST or t.startswith('vec')
 Insts = inst2pred(None) + ['cmov', 'lea', 'lea-scaled', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix

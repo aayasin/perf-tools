@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.85
+__version__= 0.87
 
 import common as C, pmu, stats
 import os, sys, time, re
@@ -312,7 +312,8 @@ def main():
   if 'misp' in args.mode: extra += ' :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode]
   if pmu.skylake(): extra += ' :perf-stat-add:-1'
   elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
-  a.insert(0, [':batch:1 :help:0 :loops:9 :msr:1 :dmidecode:1%s ' % extra])
+  a.insert(0, [':batch:1 :help:0 :lbr-verbose:1 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s ' % (
+    int(pmu.cpu('corecount')/2), extra)])
   do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
@@ -320,7 +321,8 @@ def main():
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
 
-  C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'EVENTMAP')] + sys.argv), '.study.cmd')
+  C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'EVENTMAP')
+                      ] + sys.argv + ['# version %.2f' % __version__]), '.study.cmd')
   if args.stages & 0x1:
     enable_it=0
     if not args.smt and pmu.cpu('smt-on'):

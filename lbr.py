@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.09 # see version line of do.py
+__version__= x86.__version__ + 2.10 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -246,11 +246,14 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           begin, at = find_block_ip(at-1)
         else: break
   def ilen_on(): return 'ilen:' in lines[-1]
+  def indirect_jmp_enter():
+    return 'jmp' in lines[-1] and is_type(x86.INDIRECT, lines[-1])
 
   if ip in loops:
     loop = loops[ip]
     loop['hotness'] += 1
     if srcline and not 'srcline' in loop: loop['srcline'] = srcline
+    if indirect_jmp_enter(): loop['attributes'] += ';entered_by_indirect'
     if is_taken(lines[-1]):
       iter_update()
       if ip == loop_ipc:
@@ -319,7 +322,8 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           ins.add(hex_ip(l))
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(hex_ip(ip))
-      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'imix-ID': None, 'attributes': '',
+      loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'imix-ID': None,
+        'attributes': ';entered_by_indirect' if indirect_jmp_enter() else '',
         'entry-block': 0 if xip > ip else find_block_ip()[0], #'BK': {hex(xip): 1, },
         'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
       }
@@ -852,23 +856,39 @@ def get_taken(sample, n):
     if i < (len(sample)-1): to = line_ip(sample[i+1], sample)
   return {'from': frm, 'to': to, 'taken': 1}
 
+# tripcount-mean stat calculation for loops with tripcount-mode 32+
+# supports only loops with size attribute
+# no support for non-contiguous loops
+# calculation doesn't consider indirect jumps entrances to loops
 def tripcount_mean(loop, loop_ipc):
-  hex_ipc = '0%x' % loop_ipc
-  hotness = int(C.str2list(C.exe_one_line(C.grep(hex_ipc, hitcounts)))[0])
-  avg = before = after = 0
-  prev_line = C.exe_one_line('%s' % C.grep(hex_ipc, hitcounts, '-B1'))
-  l = C.str2list(prev_line)
-  if hex_ipc in l[1]: return None  # no inst before loop
-  if not re.search(x86.JMP_RET, prev_line): before += int(l[0])  # JCC before loop is not considered a special case
-  jmp_line = C.exe_one_line(C.grep('%s' % r'jmp*\s' + hex_ip(loop_ipc), hitcounts, '-E'))  # JCC that may jump to loop is not included
-  if not jmp_line == '': before += int(C.str2list(jmp_line)[0])
-  next_line = C.str2list(C.exe_one_line(C.grep('0%x' % loop['back'], hitcounts, '-A1')))
-  index = 6 if 'ilen:' in next_line else 4
-  if len(next_line) > index:
-    after = int(next_line[index])  # only if inst found after loop
+  if not isinstance(loop['size'], int): return None
+  if 'non-contiguous' in loop['attributes']: return None
+  hotness = lambda l: int(C.str2list(l)[0])
+  hex_ipc, size = '0%x' % loop_ipc, loop['size']
+  loop_body = C.exe_output(C.grep(hex_ipc, hitcounts, '-B1 -A%s' % size), sep='\n').split('\n')
+  before = 0
+  hex_ipc = hex_ipc[1:]
+  head = 0 if hex_ipc in loop_body[0] else 1
+  loop_hotness = hotness(loop_body[head])
+  if head == 1 and not re.search(x86.JMP_RET, loop_body[0]):  # JCC before loop is not considered a special case
+    before += hotness(loop_body[0])  # entrance by inst before loop
+  addresses = hex_ipc
+  for i in range(head + 1, head + size):
+    line = loop_body[i].replace(str(hotness(loop_body[i])), '')
+    addresses += '|' + line_ip_hex(line)
+  # entrance by JMP to loop code
+  # JCC that may jump to loop is not included
+  entrances = C.exe_output(C.grep(r'jmp*\s+0x(%s)' % addresses, hitcounts, '-E'), sep='\n')
+  if entrances != '':
+    for line in entrances.split('\n'): before += hotness(line)
+  if before == 0:
+    C.warn('used default tripcount-mean calculation for loop at %s' % hex_ip(loop_ipc))
+    return None
+  if not '0x%x' % loop['back'] in loop_body[-1]:  # hotness after exiting loop code
+    after = hotness(loop_body[-1])
     avg = float(before + after) / 2
   else: avg = float(before)
-  return round(hotness / avg, 2)
+  return round(loop_hotness / avg, 2)
 
 def print_loop_hist(loop_ipc, name, weighted=False, sortfunc=None):
   loop = loops[loop_ipc]

@@ -22,10 +22,17 @@ int main(int argc, const char* argv[])
     asm("	PAUSE");
     for (i0=0; i0<n; i0++) {
         for(i1=0; i1<20; i1++) {
-        asm("   nop");
+            asm("   nop");
         }
         for(i1=0; i1<100; i1++) {
-        asm("   add %rax,%rax");
+            asm("   add %rax,%rax");
+        }
+        i1 = 0;
+        asm("   jmp Lbl_mid");
+        for(; i1<70; i1++) {
+            asm("   nop");
+            asm("Lbl_mid:");
+            asm("   add %rbx,%rbx");
         }
     }
     asm(".align 512; Lbl_end:");

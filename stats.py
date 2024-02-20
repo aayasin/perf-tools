@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.95
+__version__= 0.96
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -85,7 +85,7 @@ def convert(v, adjust_percent=True):
     return v / 100 if adjust_percent else v
   return str(v)
 
-def read_loops_info(info, loop_id='imix-ID', as_loops=False):
+def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=True):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
   loops = C.exe_output(C.grep('Loop#', info), sep='\n')
@@ -102,13 +102,14 @@ def read_loops_info(info, loop_id='imix-ID', as_loops=False):
         stat, val = attr_list[0].strip(), convert(attr_list[1].strip())
         stat_name = 'ID' if loop_id == stat else stat
         if as_loops: d[key][stat_name] = val
-        else: d['%s %s' % (key, stat_name)] = (val, 'LBR.Loop')
+        else: d['%s%s%s' % (key, sep if sep else ' ', stat_name)] = (val, 'LBR.Loop') if groups else val
   return d
 
 def is_metric(s):
   return s[0].isupper() and not s.isupper() and \
          not re.search(r"(instructions|pairs|branches|insts-class|insts-subclass)$", s.lower())
-def read_info(info, read_loops=False, loop_id='imix-ID'):
+
+def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
   for l in C.file2lines(info):
@@ -119,15 +120,16 @@ def read_info(info, read_loops=False, loop_id='imix-ID'):
     elif re.findall('([cC]ount|estimate) of', l):
       l = l.split(':')
       s = l[0].strip()#' '.join(l[0].split()) # re.sub('  +', ' ', l[0])
+      if sep: s = re.sub(r'\s+', sep, s)
       v = convert(l[1])
-    if v:
+    if not v is None:
       if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
         g += 'Glob'
       elif is_metric(s): g += 'Metric'
       elif s.startswith('proxy count'): g += 'Proxy'
       else: g += 'Event'
-      d[s] = (v, g)
-  if read_loops: d.update(read_loops_info(info, loop_id))
+      d[s] = (v, g) if groups else v
+  if read_loops: d.update(read_loops_info(info, loop_id, sep=sep, groups=groups))
   return d
 
 def rollup(c, perf_stat_file=None):
@@ -347,6 +349,14 @@ def csv2stat(filename):
   d = patch_metrics(d)
   base = basename()
   if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
+  # add info.log globals stats
+  info = r"%s-janysave_type-er20c4ppp-c([0-9]+)\.perf\.data\.info\.log" % (basename()[:-1])
+  info_files = [f for f in os.listdir() if re.match(info, f)]
+  if len(info_files):
+    info = info_files[0]
+    if len(info_files) > 1:
+      C.warn('multiple info.log files exist for same app, %s will be added to .stat file' % info)
+    d.update(read_info(info, sep='_', groups=False))
   return perf_log2stat(base + 'perf_stat-r3.log', read_toplev(C.toplev_log2csv(filename), 'SMT_on'), d)
 
 def perf_log2stat(log, smt_on, d={}):

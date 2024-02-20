@@ -1,0 +1,2 @@
+strace -o strace.log -s999 my-command
+git clone --recurse-submodules https://github.com/aayasin/perf-tools

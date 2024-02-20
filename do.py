@@ -1068,5 +1068,3 @@ def get(param):
 if __name__ == "__main__":
   main()
   if globs['cmds_file']: globs['cmds_file'].close()
-
-# strace -o strace.log -s999 my-command

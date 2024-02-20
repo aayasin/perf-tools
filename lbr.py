@@ -828,7 +828,7 @@ def is_loop_by_ip(ip):  return ip in loops
 def is_loop(line):    return is_loop_by_ip(line_ip(line))
 def is_taken(line):   return '# ' in line
 # FIXME: this does not work for non-contigious loops!
-def is_in_loop(ip, loop): return ip >= loop and ip <= loops[loop]['back']
+def is_in_loop(ip, loop): return loop <= ip <= loops[loop]['back']
 def get_inst(l):      return C.str2list(l)[1]
 def get_loop(ip):     return loops[ip] if ip in loops else None
 def get_field(l, f):

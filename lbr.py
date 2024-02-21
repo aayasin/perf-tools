@@ -266,13 +266,15 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf, erratum = 1, {}, [], 0, 0, 0, 0 if ilen_on() else None
-      types = ['taken', 'lea', 'cmov'] + x86.MEM_INSTS + user_loop_imix
+      types = ['lea', 'cmov'] + x86.MEM_INSTS + user_loop_imix
       for i in types: cnt[i] = 0
       x = len(lines)-2
       while x >= 1:
         size += 1
-        if is_taken(lines[x]): cnt['taken'] += 1
-        if is_type(x86.COND_BR, lines[x]): conds += [line_ip(lines[x])]
+        inst_ip = line_ip(lines[x])
+        if is_taken(lines[x]):
+          break # do not fill loop size/etc unless all in-body branches are non-takens
+        if is_type(x86.COND_BR, lines[x]): conds += [inst_ip]
         if x86.is_jcc_fusion(lines[x], lines[x + 1]): op_jcc_mf += 1
         elif x == len(lines) - 2 or not x86.is_jcc_fusion(lines[x + 1], lines[x + 2]):
           if x86.is_ld_op_fusion(lines[x], lines[x + 1]): ld_op_mf += 1
@@ -281,10 +283,9 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         if erratum is not None and is_jcc_erratum(lines[x+1], lines[x]): erratum += 1
         t = line_inst(lines[x])
         if t and t in types: cnt[t] += 1
-        inst_ip = line_ip(lines[x])
         if inst_ip == ip:
-          loop['size'], loop['Conds'], loop['op-jcc-mf'], loop['mov-op-mf'], loop['ld-op-mf'] = \
-            size, len(conds), op_jcc_mf, mov_op_mf, ld_op_mf
+          loop['size'], loop['Conds'], loop['op-jcc-mf'], loop['mov-op-mf'], loop['ld-op-mf'] = (size,
+            len(conds), op_jcc_mf, mov_op_mf, ld_op_mf)
           if erratum is not None: loop['jcc-erratum'] = erratum
           for i in types: loop[i] = cnt[i]
           hexa = lambda x: hex(x)[2:]
@@ -292,7 +293,6 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           if len(conds):
             loop['Cond_polarity'] = {}
             for c in conds: loop['Cond_polarity'][c] = {'tk': 0, 'nt': 0}
-          if debug and int(debug, 16) == ip: print(size, stat['total'])
           break
         elif inst_ip < ip or inst_ip > loop['back']:
           break
@@ -1024,17 +1024,19 @@ def print_all(nloops=10, loop_ipc=0):
       for x in paths_range(): print_loop_hist(loop_ipc, 'paths-%d'%x, sortfunc=lambda x: x[::-1])
       if glob['loop_iters']: lp['cyc/iter'] = '%.2f' % (glob['loop_cycles'] / glob['loop_iters'])
       lp['FL-cycles%'] = ratio(glob['loop_cycles'], stat['total_cycles'])
-      if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1 and lp['taken'] < 2:
+      if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1:
         for c in lp['Cond_polarity'].keys():
           lp['%s_taken' % hex_ip(c)] = ratio(lp['Cond_polarity'][c]['tk'], lp['Cond_polarity'][c]['tk'] + lp['Cond_polarity'][c]['nt'])
       tot = print_loop_hist(loop_ipc, 'tripcount', True, lambda x: int(x.split('+')[0]))
       if tot: lp['tripcount-coverage'] = ratio(tot, lp['hotness'])
-      if hitcounts and lp['size']:
-        if lp['taken'] == 0:
+      if hitcounts:
+        if lp['size']:
           C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts, '-B1 -A%d' % lp['size'] if verbose & 0x40 else '-A%d' % (lp['size']-1)),
-          'Hitcounts & ASM of loop %s' % hex_ip(loop_ipc))
+            'Hitcounts & ASM of loop %s' % hex_ip(loop_ipc))
           if llvm_log: lp['IPC-ideal'] = llvm_mca_lbr.get_llvm(hitcounts, llvm_log, lp, hex_ip(loop_ipc))
-        else: lp['attributes'] += ';likely_non-contiguous'
+        else:
+          if debug: C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, hitcounts), 'Headline of loop %s' % hex_ip(loop_ipc))
+          lp['attributes'] += ';likely_non-contiguous'
       find_print_loop(loop_ipc, sloops)
     else:
       C.warn('Loop %s was not observed' % hex_ip(loop_ipc))
@@ -1098,6 +1100,9 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'imix-ID', 'back', 'entry-block', 'IPC', 'tripcount']
   for x in paths_range(): dell += ['paths-%d'%x]
   #if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
+  if 'takens' in loop:
+    for i in range(len(loop['takens'])):
+      loop['takens'][i] = hex_ip(loop['takens'][i])
   if not (verbose & 0x20): dell += ['Cond_polarity', 'cyc/iter'] # No support for >1 Cond. cyc/iter needs debug (e.g. 548-xm3-basln)
   for x in ('back', 'entry-block'): printl('%s: %s, ' % (x, hex_ip(loop[x])))
   for x, y in (('inn', 'out'), ('out', 'inn')):

@@ -518,7 +518,8 @@ def profile(mask, toplev_args=['mvl6', None]):
       exe("sudo ../FlameGraph/jmaps")
       return data
     datj =  data.replace('.data', '.datj')
-    exe('%s inject -j -i %s -o %s' % (perf, data, datj))
+    if isfile(datj): C.info('reuse %s' % datj)
+    else: exe('%s inject -j -i %s -o %s' % (perf, data, datj))
     return datj
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')

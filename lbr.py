@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.10 # see version line of do.py
+__version__= x86.__version__ + 2.11 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -153,6 +153,8 @@ def detect_jump_to_mid_loop(ip, xip):
       jump_to_mid_loop[xip] = 1
       break
 
+def info_lines(info, lines1): C.info_p(info, '\t\n'.join(['\t'] + lines1))
+
 def tripcount(ip, loop_ipc, state):
   if state == 'new' and loop_ipc in loops:
     if 'tripcount' not in loops[loop_ipc]: loops[loop_ipc]['tripcount'] = {}
@@ -225,8 +227,11 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     return False
   def iter_update():
     #inc(loop['BK'], hex(line_ip(lines[-1])))
-    if ip != loop_ipc: return
+    assert ip == loop_ipc
     if 'IPC' not in loop: loop['IPC'] = {}
+    for x in paths_range():
+      if 'paths-%d' % x not in loop: loop['paths-%d' % x] = {}
+      inc(loop['paths-%d' % x], ';'.join([hex_ip(a) for a in lbr_takens[-x:]]))
     if not has_timing(lines[-1]): return
     cycles, takens = 0, []
     begin, at = find_block_ip()
@@ -246,20 +251,18 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           begin, at = find_block_ip(at-1)
         else: break
   def ilen_on(): return 'ilen:' in lines[-1]
-  def indirect_jmp_enter():
-    return 'jmp' in lines[-1] and is_type(x86.INDIRECT, lines[-1])
+  def indirect_jmp_enter(): return 'jmp' in lines[-1] and is_type(x86.INDIRECT, lines[-1])
 
   if ip in loops:
     loop = loops[ip]
     loop['hotness'] += 1
     if srcline and not 'srcline' in loop: loop['srcline'] = srcline
-    if indirect_jmp_enter(): loop['attributes'] += ';entered_by_indirect'
     if is_taken(lines[-1]):
-      iter_update()
-      if ip == loop_ipc:
-        for x in paths_range():
-          if 'paths-%d'%x not in loop: loop['paths-%d'%x] = {}
-          inc(loop['paths-%d'%x], ';'.join([hex_ip(a) for a in lbr_takens[-x:]]))
+      if indirect_jmp_enter() and 'entered_by_indirect' not in loop['attributes']:
+        loop['attributes'] += ';entered_by_indirect'
+      if ip == loop_ipc and line_ip(lines[-1]) == loop['back']: iter_update()
+    elif not loop['entry-block']:
+      loop['entry-block'] = find_block_ip()[0]
     # Try to fill size & attributes for already detected loops
     if not loop['size'] and not loop['outer'] and len(lines)>2 and line_ip(lines[-1]) == loop['back']:
       size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf, erratum = 1, {}, [], 0, 0, 0, 0 if ilen_on() else None
@@ -294,8 +297,6 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         elif inst_ip < ip or inst_ip > loop['back']:
           break
         x -= 1
-    if not loop['entry-block'] and not is_taken(lines[-1]):
-      loop['entry-block'] = find_block_ip()[0]
     return
   
   # only simple loops, of these attributes, are supported:
@@ -304,8 +305,10 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
   # * no function calls
   if is_taken(lines[-1]):
     xip = line_ip(lines[-1])
-    if ilen_on(): detect_jump_to_mid_loop(ip, int(xip))
+    if ilen_on(): detect_jump_to_mid_loop(ip, xip)
     if xip <= ip: pass # not a backward jump
+    elif is_callret(lines[-1]): pass # requires --xed
+    elif (xip - ip) >= MOLD: warn(0x200, "too large distance in:\t%s" % lines[-1].split('#')[0].strip())
     elif (use_cands and ip in loop_cands) or (not use_cands and ip in bwd_br_tgts):
       if use_cands: loop_cands.remove(ip)
       else: bwd_br_tgts.remove(ip)
@@ -336,8 +339,6 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     elif use_cands and len(lines) > 2 and ip in bwd_br_tgts and has_ip(len(lines)-2):
       bwd_br_tgts.remove(ip)
       loop_cands += [ip]
-    elif is_callret(lines[-1]): pass # requires --xed
-    elif (xip - ip) >= MOLD: warn(0x200, "too large distance in:\t%s" % lines[-1].split('#')[0].strip())
     elif ip not in bwd_br_tgts and (use_cands or has_ip(len(lines)-2)):
       bwd_br_tgts += [ip]
 
@@ -465,7 +466,7 @@ def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
       name = ' -> '.join((lines[callder_idx].strip()[:-1] if callder_idx > 0 else '?', name))
       inc(hsts[NOLFC], name + '-%d' % insts_per_call)
       if verbose & 0x10:
-        C.info_p('call to leaf-func %s of size %d' % (name, insts_per_call), '\t\n'.join(['\t'] + lines[-(len(lines)-x):] + [line]))
+        info_lines('call to leaf-func %s of size %d' % (name, insts_per_call), lines[-(len(lines)-x):] + [line])
       break
     elif is_branch(lines[x]):
       branches += 1
@@ -586,7 +587,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     if loop_ipc:
       read_sample.tick *= 10
       read_sample.stop = None
-  
+
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
     # size is # instructions in sample while insts is # instruction since last taken
@@ -977,6 +978,7 @@ def print_global_stats():
   print_stat(nc('loops'), len(loops), prefix='proxy count', comment='hot loops')
   print_stat('cycles in loops', stat['total_loops_cycles'], prefix='proxy count', ratio_of=('total cycles', stat['total_cycles']))
   for n in (4, 5, 6): print_loops_stat('%dB-unaligned' % 2**n, len([l for l in loops.keys() if l & (2**n-1)]))
+  print_loops_stat('undetermined size', len([l for l in loops.keys() if loops[l]['size'] is None]))
   if stats.ilen() : print_loops_stat('non-contiguous', len(loops) - len(contigous_loops))
   print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
   if stats.size():

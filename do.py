@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 3.03
+__version__ = 3.04
 
 import argparse, os.path, sys
 import analyze, common as C, pmu, stats, tma
@@ -345,7 +345,20 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
     "grep -E '(Size|Type|Speed|Bank Locator):' | sort | uniq -c | sort -nr | %s >> %s" % (label('.', 'dmidecode'), out))
 
 def perf_version(): return exe_1line(args.perf + ' --version', heavy=False).replace('perf version ', '')
-def perf_version_float(): v = perf_version(); return float('.'.join(v.split('.')[0:2])) if v.isdigit() else 10
+def perf_newer_than(to_check):
+  ver = perf_version()
+  if not ver.replace('.', '').isdigit():
+    C.warn('unrecognized perf version: %s' % ver)
+    return None
+  ver, to_check = ver.split('.'), str(to_check).split('.')
+  length = len(to_check)
+  for i, n in enumerate(ver):
+    v1, v2 = int(n), int(to_check[i])
+    if v1 > v2: return True
+    if v1 < v2: return False
+    if length == i + 1: return True
+  return False
+
 def get_perf_toplev():
   perf, env, ptools = args.perf, '', {}
   if perf != 'perf':
@@ -407,7 +420,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
   def perf_F(ilen=False):
     ilen = ilen or do['lbr-jcc-erratum'] or do['lbr-indirects']
-    if ilen and perf_version_float() < 5.18: error('perf is too old: %s (no ilen support)' % perf_version())
+    if ilen and not perf_newer_than(5.17): error('perf is too old: %s (no ilen support)' % perf_version())
     return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
                                                         ',+srcline' if do['loop-srcline'] else '',
                                                         ' 2>>' + err if do['loop-srcline'] else '')
@@ -905,6 +918,34 @@ def parse_args():
   x = ap.parse_args()
   return x
 
+def handle_tunables():
+  global args
+  # updating default values before reading input
+  do['nodes'] += ("," + args.nodes)
+  if args.events and '{' in args.events: do['perf-stat-add'] = -1
+  if perf_newer_than(5.17): do['lbr-jcc-erratum'] = 1
+  # processing tunables input
+  if args.tune:
+    for tlists in args.tune:
+      for t in tlists:
+        if t.startswith(':'):
+          l = t.split(':')
+          if l[1] not in do.keys(): error("Unsupported tunable: '%s'" % l[1])
+          t = "do['%s']=%s" % (l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
+        if args.verbose > 3: print(t)
+        exec(t)
+  # patching tunables
+  do['perf-ldlat'] = do['perf-ldlat'].replace(globs['ldlat-def'], str(do['ldlat']))
+  if do['perf-stat-add'] > 0:
+    x = ',branches,branch-misses'
+    if args.repeat > 1: x += ',cycles:k'
+    do['perf-stat-def'] += x
+  if do['plot']:
+    do['packages'] += ['feh']
+    do['python-pkgs'] += ['matplotlib', 'brewer2mpl']
+  if do['super']:
+    do['perf-stat-def'] += ',syscalls:sys_enter_sched_yield'
+
 def main():
   global args
   args = parse_args()
@@ -917,31 +958,11 @@ def main():
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
   if args.print_only and args.verbose <= 0: args.verbose = 1
-  do['nodes'] += ("," + args.nodes)
-  if args.events and '{' in args.events: do['perf-stat-add'] = -1
-  if args.tune:
-    for tlists in args.tune:
-      for t in tlists:
-        if t.startswith(':'):
-          l = t.split(':')
-          if l[1] not in do.keys(): error("Unsupported tunable: '%s'" % l[1])
-          t = "do['%s']=%s" % (l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
-        if args.verbose > 3: print(t)
-        exec(t)
+  handle_tunables()
   pmu.pmutools = args.pmu_tools
   if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
   if any(perf_version() == x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')):
     C.error('Unsupported perf tool: ' + perf_version())
-  do['perf-ldlat'] = do['perf-ldlat'].replace(globs['ldlat-def'], str(do['ldlat']))
-  if do['perf-stat-add'] > 0:
-    x = ',branches,branch-misses'
-    if args.repeat > 1: x += ',cycles:k'
-    do['perf-stat-def'] += x
-  if do['plot']:
-    do['packages'] += ['feh']
-    do['python-pkgs'] += ['matplotlib', 'brewer2mpl']
-  if do['super']:
-    do['perf-stat-def'] += ',syscalls:sys_enter_sched_yield'
   do_cmd = '%s # version %s' % (C.argv2str(), version())
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)

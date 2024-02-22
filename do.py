@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 3.03
+__version__ = 3.04
 
 import argparse, os.path, sys
 import analyze, common as C, pmu, stats, tma

@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 3.04
+__version__ = 3.05
 
 import argparse, os.path, sys
 import analyze, common as C, pmu, stats, tma
@@ -416,7 +416,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def en(n): return mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')):] + px.join(rapl) + ('/' if '/' in px else '')
-    return 'msr/tsc/' + (power() if args.power and not pmu.v5p() else '')
+    return power() if args.power and not pmu.v5p() else ''
   def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
   def perf_F(ilen=False):
     ilen = ilen or do['lbr-jcc-erratum'] or do['lbr-indirects']
@@ -424,7 +424,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
                                                         ',+srcline' if do['loop-srcline'] else '',
                                                         ' 2>>' + err if do['loop-srcline'] else '')
-  def perf_stat(flags, msg, step, events='', perfmetrics=do['core'], csv=False,
+  def perf_stat(flags, msg, step, events='', perfmetrics=do['core'],
+                csv=False, # note !csv implies to collect TSC
                 basic_events=do['perf-stat-add'] > 1, last_events=',' + do['perf-stat-def'], warn=True,
                 grep = "| grep -E 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
@@ -439,13 +440,16 @@ def profile(mask, toplev_args=['mvl6', None]):
     if args.events: evts += append(pmu.perf_format(args.events), evts)
     if args.events or args.metrics or grep is None: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
     if evts != '': perf_args += ' -e "cpu-clock,%s%s"' % (evts, last_events)
-    log = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log')
+    log, tscperf = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log'), ''
+    if not csv:
+      assert 'msr/tsc/' not in perf_args
+      tscperf = ' '.join([perf, 'stat -a -C0 -e msr/tsc/', '-o', log.replace('.log', '-C0.log ')])
     stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
-    ret = profile_exe(perf + stat, msg, step, mode='perf-stat', fail=0 if warn else -1)
+    ret = profile_exe(tscperf + perf + stat, msg, step, mode='perf-stat', fail=0 if warn else -1)
     if args.stdout or do['tee']==0 or do['help']<0: return C.error('perf-stat failed') if ret else None
     if args.mode == 'process': return log
     if not isfile(log) or os.path.getsize(log) == 0:
-      ret = profile_exe(ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
+      ret = profile_exe(tscperf + ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
     if not isfile(log) or int(exe_1line('wc -l ' + log, 0, False)) < 5:
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', step, events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
@@ -498,9 +502,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   if args.profile_mask & ~0x1 and args.verbose >= 0: C.info('App: ' + r)
   if en(1):
     logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
-    if args.sys_wide or '-a' in do['perf-stat']:
-      perf_stat('-C0', '@measuring TSC', 2, events='msr/tsc/', grep = "| grep -E 'seconds|tsc'",
-                basic_events=False, last_events='', perfmetrics=False)
+    if profiling() and (args.sys_wide or '-a' in do['perf-stat']):
       C.printc('\tcorrect CPUs_Utilized = %.2f' % get_stat('CPUs_Utilized'), C.color.GREEN)
   if en(2): perf_stat('-a', 'system-wide counting', 2, grep='| grep -E "seconds|insn|topdown|pkg"',
                       events=a_events() if do['perf-stat-add'] > -1 else '')

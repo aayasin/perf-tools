@@ -155,6 +155,11 @@ def print_DB(c):
   print(c, '::\n', C.dict2str(d, '\t\n').replace("'", ""), sep='')
   return d
 
+def get_TSC(f):
+  tsc = read_perf(f.replace('.log', '-C0.log'))['msr/tsc/'][0]
+  if f.endswith('-r3.log'): tsc = int(tsc / 3)
+  return tsc
+
 def read_perf(f):
   d = {}
   def calc_metric(e, v=None):
@@ -166,8 +171,8 @@ def read_perf(f):
     if e == 'r0160': d['IpUnknown_Branch'] = (inst / v, group)
     if e == 'r2424': d['L2MPKI_Code'] = (1000 * val / inst, group)
     if e == 'topdown-retiring': d['UopPI'] = (v / inst, group)
-    if e == 'ref-cycles' and d['app'][0] == 'system wide':
-      d['TSC'] = (read_perf(f.replace('perf_stat-r3.log', 'perf_stat-C0.log'))['msr/tsc/'][0], 'Event')
+    if e == 'ref-cycles':
+      d['TSC'] = (get_TSC(f), 'Event')
       d['CPUs_Utilized'] = (v / d['TSC'][0], group)
   if f is None: return calc_metric(None) # a hack!
   if debug > 3: print('reading %s' % f)
@@ -285,7 +290,7 @@ def read_perf_toplev(filename):
   with open(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
     for r in reader:
-      if r['Event'] in ('Event', 'dummy'): continue
+      if r['Event'] in ('Event', 'dummy', 'msr/tsc/'): continue
       if debug > 6: print('debug:', r)
       x = r['Event']
       if '<not counted>' in r['Value']:
@@ -296,13 +301,12 @@ def read_perf_toplev(filename):
         continue
       v = int(float(r['Value']))
       if v == 0: d['num_zero_stats'] += 1
-      if x == 'msr/tsc/': x = 'tsc'
       elif x == 'duration_time':
         x = 'DurationTimeInMilliSeconds'
         v = float(v/1e6)
         d[x] = v
         continue
-      elif '.' in x or x.startswith('cpu/topdown-') or x == 'cycles': pass
+      elif '.' in x or any(x.startswith(p) for p in ['cpu/topdown-', 'cycles', 'unc_']): pass
       else: C.printf("unrecognized Event '%s' in reading %s\n" % (r['Event'], filename))
       b = re.match(r"[a-zA-Z\.0-9_]+:?", x).group(0)
       for i in (b, ':sup', ':user'): x = x.replace(i, i.upper())
@@ -379,6 +383,7 @@ def perf_log2stat(log, smt_on, d={}):
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2
+    ue['TSC'] = get_TSC(f)
     return ue
   uarch = params(smt_on)
   d.update(user_events(log))

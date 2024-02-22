@@ -120,7 +120,7 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
     elif re.findall('([cC]ount|estimate) of', l):
       l = l.split(':')
       s = l[0].strip()#' '.join(l[0].split()) # re.sub('  +', ' ', l[0])
-      if sep: s = re.sub(r'\s+', sep, s)
+      if sep: s = C.chop(re.sub(r'[\s\-]+', sep, s))
       v = convert(l[1])
     if not v is None:
       if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
@@ -280,7 +280,7 @@ def read_toplev(filename, metric=None):
 
 def read_perf_toplev(filename):
   perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
-  d = {'num-zero-stats': 0, 'num-not_counted-stats': 0, 'num-not_supported-stats': 0}
+  d = {'num_zero_stats': 0, 'num_not_counted_stats': 0, 'num_not_supported_stats': 0}
   if debug > 3: print('reading %s' % filename)
   with open(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
@@ -289,13 +289,13 @@ def read_perf_toplev(filename):
       if debug > 6: print('debug:', r)
       x = r['Event']
       if '<not counted>' in r['Value']:
-        d['num-not_counted-stats'] += 1
+        d['num_not_counted_stats'] += 1
         continue
       if '<not supported>' in r['Value']:
-        d['num-not_supported-stats'] += 1
+        d['num_not_supported_stats'] += 1
         continue
       v = int(float(r['Value']))
-      if v == 0: d['num-zero-stats'] += 1
+      if v == 0: d['num_zero_stats'] += 1
       if x == 'msr/tsc/': x = 'tsc'
       elif x == 'duration_time':
         x = 'DurationTimeInMilliSeconds'
@@ -363,7 +363,7 @@ def perf_log2stat(log, smt_on, d={}):
   suff = re.findall('(.perf_stat(-B)?-r[1-9].log)', log)[0]
   base, bottlenecks = log.replace(suff[0], ''), len(d) == 0
   def params(smt_on):
-    d['knob.ncores'] = pmu.cpu('corecount')
+    d['knob.ncores'] = int(pmu.cpu('corecount') / pmu.cpu('socketcount'))
     d['knob.nsockets'] = pmu.cpu('socketcount')
     d['knob.nthreads'] = 2 if smt_on else 1
     d['knob.forcecpu'] = 1 if C.env2str('FORCECPU') else 0
@@ -377,7 +377,7 @@ def perf_log2stat(log, smt_on, d={}):
     for l in C.file2lines(f):
       if re.match('^\s*$|perf stat ', l): continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
-      if name: ue[name] = val.replace(' ', '-') if type(val) == str else val
+      if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2
     return ue
   uarch = params(smt_on)

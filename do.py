@@ -856,7 +856,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   elif args.repeat == 3 and (mask_eq(0x1012) or mask_eq(0x82)):
     stats.csv2stat(C.toplev_log2csv(logs['tma']))
     d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])
-      ), 'num-not_counted-stats', 'num-not_supported-stats', 'DurationTimeInMilliSeconds'
+      ), 'num_not_counted_stats', 'num_not_supported_stats', 'DurationTimeInMilliSeconds'
     not_counted, not_supported = d[not_counted_name], d[not_supported_name]
     if not mask_eq(0x80) and do['forgive'] < 2:
       assert d[time] > tma.get('num-mux-groups') * globs['perf-mux-interval'], "Too short run time! %f [ms]" % d[time]

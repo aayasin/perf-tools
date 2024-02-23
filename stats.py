@@ -134,12 +134,11 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
 
 def rollup(c, perf_stat_file=None):
   if c in sDB: return
-  #sDB[c]={}; sDB[c].update(read_info(c + "-janysave_type-er20c4ppp-c700001.perf.data.info.log")); return
-  if not perf_stat_file: perf_stat_file = c + '.perf_stat-r3.log'
+  perf_stat_file, info = perf_stat_file or c + '.perf_stat-r3.log', c + '.toplev-mvl2.log'
   # TODO: call do.profile to get file names
   sDB[c] = read_perf(perf_stat_file)
   sDB[c].update(read_toplev(c + '.toplev-vl6.log'))
-  sDB[c].update(read_toplev(c + '.toplev-mvl2.log'))
+  if os.path.exists(info): sDB[c].update(read_toplev(info))
   if debug > 1: print_DB(c)
 
 def print_DB(c):
@@ -258,8 +257,7 @@ Key2group = {
 def read_toplev(filename, metric=None):
   d = {}
   if debug > 3: print('reading %s' % filename)
-  if not os.path.exists(filename): return d
-  for l in C.file2lines(filename):
+  for l in C.file2lines(filename, fail=True):
     try:
       if not re.match(r"^(|core )(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
       items = l.strip().split()
@@ -387,7 +385,9 @@ def perf_log2stat(log, smt_on, d={}):
     return ue
   uarch = params(smt_on)
   d.update(user_events(log))
-  if bottlenecks: d = patch_metrics(d)
+  if bottlenecks:
+    d = patch_metrics(d)
+    d['DurationTimeInMilliSeconds'] = d['time'] * 1000
   stat = '.'.join((base + ('-bottlenecks' if bottlenecks else ''), uarch, 'stat'))
   with open(stat, 'w') as out:
     for x in sorted(d.keys(), reverse=True):

@@ -375,13 +375,14 @@ def get_perf_toplev():
   elif do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
-  return (perf, ptools['toplev.py'], ptools['ocperf'], ptools['genretlat'])
+  return perf, ptools['toplev.py'], ptools['ocperf'], ptools['genretlat'], env
 
 def profile(mask, toplev_args=['mvl6', None]):
   out, profile_help = uniq_name(), {}
-  perf, toplev, ocperf, genretlat = get_perf_toplev()
+  perf, toplev, ocperf, genretlat, env = get_perf_toplev()
   base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
   logs = {'stat': None, 'code': base + '-code.log', 'tma': None}
+  def prepend_PERF(cmd): return env + cmd.replace(env, '') if 'PERF=' in cmd else cmd
   def profile_exe(cmd, msg, step, mode='redirect', tune='', fail=0):
     if do['help'] < 0:
       if ' -r3' in cmd: tune = '[--repeat 3%s]' % (' --tune :levels:2' if ' -vl2 ' in cmd else '')
@@ -392,7 +393,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       return
     if mode == 'log-setup': return log_setup()
     if args.sys_wide and not (' -a ' in cmd): C.error("Incorrect system wide in profile-step='%s' cmd='%s'" % (msg, cmd))
-    if mode == 'perf-stat': return exe1(cmd, msg, fail=fail)
+    if mode == 'perf-stat': return exe1(prepend_PERF(cmd), msg, fail=fail)
     else: return exe(cmd, msg)
   def profile_mask_help(filename = 'profile-mask-help.md'):
     hdr = ('%7s' % 'mask', '%-50s' % 'profile-step', 'additional [optional] arguments')

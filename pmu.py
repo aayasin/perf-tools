@@ -161,8 +161,10 @@ def cpu_has_feature(feature):
     if forcecpu:
       if C.any_in(['ICL', 'ICX', 'TGL'], forcecpu): flags = hide('arch_lbr')
       if C.any_in(['ADL', 'MTL'], forcecpu): flags = hide('avx512')
+      if name(1) in ('icelake', ) and goldencove(): flags += ' arch_lbr'
     return flags
   cpu_has_feature.flags = get_flags()
+  return cpu_has_feature(feature)
 cpu_has_feature.flags = None
 
 def force_cpu_toplev(forcecpu): return ('sprmax' if forcecpu.upper() == 'SPR-HBM' else forcecpu.lower()) if forcecpu else ''

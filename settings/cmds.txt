@@ -1,2 +1,3 @@
 strace -o strace.log -s999 my-command
+sed -E 's/\[[0-9]+\]//'
 git clone --recurse-submodules https://github.com/aayasin/perf-tools

@@ -45,6 +45,7 @@ stats = {'verbose': 0}
 
 # internal methods
 def get_stat_int(s, c, stat_file=None, val=-1):
+  if not c in sDB and s in ('CPUs_Utilized', ): return read_perf(stat_file)[s][0]
   rollup(c, stat_file)
   val = None
   try:

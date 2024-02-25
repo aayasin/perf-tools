@@ -86,9 +86,11 @@ def printf(x, flush=True, std=sys.stderr, col=color.GREY):
   std.write(col + x + color.END)
   if flush: std.flush()
 
-def annotate(stuff, label=''):
+import traceback
+def annotate(stuff, label='', stack=False):
   xs = stuff if type(stuff) is tuple else [stuff]
   printf('%s: '%label, flush=False)
+  if stack: traceback.print_stack()
   for x in xs: printf('%s of %s; '%(str(x), type(x)), flush=False)
   printf('.\n')
 

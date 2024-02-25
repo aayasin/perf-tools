@@ -1,4 +1,4 @@
-MGR = sudo spt
+MGR = sudo apt
 all: run-textbook
 	@echo mmm running in background ..
 install:

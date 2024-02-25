@@ -44,8 +44,8 @@ def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 3))
 def warn(mask, x): return C.warn(x) if edge_en and (verbose & mask) else None
 
 if debug: C.dump_stack_on_error = 1
-def exit(x, sample, label, n=0, msg=str(debug)):
-  if x: C.annotate(x, label)
+def exit(x, sample, label, n=0, msg=str(debug), stack=False):
+  if x: C.annotate(x, label, stack=stack)
   print_sample(sample, n)
   C.error(msg) if x else sys.exit(0)
 
@@ -99,7 +99,7 @@ def line_ip(line, sample=None):
   try:
     return str2int(line_ip_hex(line), (line, sample))
   except:
-    exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line.strip())
+    exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line.strip(), stack=True)
 
 def line_timing(line):
   x = re.match(r"[^#]+# (\S+) (\d+) cycles \[\d+\] ([0-9\.]+) IPC", line)
@@ -508,7 +508,7 @@ def edge_stats(line, lines, xip, size):
     if abs(ip - (xip + ilen)) >= 2 ** 31:
       inc(hsts['indirect-x2g'], xip)
       if 'MISP' in xline: inc(hsts['indirect-x2g-misp'], xip)
-  if xip in indirects:
+  if xip and xip in indirects:
     inc(hsts['indirect_%s_targets' % hex_ip(xip)], ip)
     inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
   #MRN with IDXReg detection

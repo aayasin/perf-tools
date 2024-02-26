@@ -273,7 +273,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         size += 1
         inst_ip = line_ip(lines[x])
         if is_taken(lines[x]):
-          break # do not fill loop size/etc unless all in-body branches are non-takens
+          break # do not fill loop size/etc unless all in-body branches are non-taken
         if is_type(x86.COND_BR, lines[x]): conds += [inst_ip]
         if x86.is_jcc_fusion(lines[x], lines[x + 1]): op_jcc_mf += 1
         elif x == len(lines) - 2 or not x86.is_jcc_fusion(lines[x + 1], lines[x + 2]):
@@ -513,6 +513,7 @@ def edge_stats(line, lines, xip, size):
     #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
   #MRN with IDXReg detection
   mrn_dst=x86.get("dst",line)
+  # CHECK: is this RIP only (64-bit) or applies to EIP too ?!
   def mrn_cond(l):return not is_type(x86.JUMP,l) and '%rip' not in l and re.search(x86.MEM_IDX,l)and not re.search("[x-z]mm",l) and not re.search("%([a-d]x|[sd]i|[bs]p|r(?:[89]|1[0-5])w)",l)
   if is_type("inc-dec",line) and x86.is_memory(line) and re.search(x86.MEM_IDX,line):
     inc_stat('%s non-MRNable' % ('INC' if 'inc' in x86.get('inst',line) else 'DEC'))

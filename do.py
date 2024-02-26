@@ -434,7 +434,7 @@ def profile(mask, toplev_args=['mvl6', None]):
                 basic_events=do['perf-stat-add'] > 1, last_events=',' + do['perf-stat-def'], warn=True,
                 grep = "| grep -E 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
-    evts, perf_args = events, [flags, '-x,' if csv else '--log-fd=1', do['perf-stat'] ]
+    evts, perf_args, user_events = events, [flags, '-x,' if csv else '--log-fd=1', do['perf-stat'] ], args.events and step != 16
     if args.metrics: perf_args += ['--metric-no-group', '-M', args.metrics] # 1st is workaround bug 4804e0111662 in perf-stat -r2 -M
     perf_args = ' '.join(perf_args)
     if perfmetrics and do['perf-stat-add'] > -1:
@@ -442,8 +442,8 @@ def profile(mask, toplev_args=['mvl6', None]):
       evts += append(es, evts)
       if fs: perf_args += fs
     if basic_events and do['core']: evts += append(pmu.basic_events(), evts)
-    if args.events: evts += append(pmu.perf_format(args.events), evts)
-    if args.events or args.metrics or grep is None: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
+    if user_events: evts += append(pmu.perf_format(args.events), evts)
+    if user_events or args.metrics or grep is None: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
     if evts != '': perf_args += ' -e "cpu-clock,%s%s"' % (evts, last_events)
     log, tscperf = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log'), ''
     if csv:

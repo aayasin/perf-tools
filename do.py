@@ -18,9 +18,10 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 3.06
+__version__ = 3.07
 
-import argparse, os.path, sys
+import argparse, os.path, re, sys
+
 import analyze, common as C, pmu, stats, tma
 from datetime import datetime
 from getpass import getuser
@@ -37,7 +38,8 @@ globs = {
   'setup-log':          'setup-system.log',
   'time':               '/usr/bin/time',
   'tunable2pkg':        {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python3-pip'},
-  'uname-a':            C.exe_one_line('uname -a')
+  'uname-a':            C.exe_one_line('uname -a'),
+  'V_timing':           4,
 }
 if globs['uname-a'].startswith('Darwin'):
   C.error("Are you on MacOS? it is not supported; 'uname -a =' %s" % globs['uname-a'])
@@ -112,7 +114,7 @@ do = {'run':        C.RUN_DEF,
 }
 args = argparse.Namespace()
 
-def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=1, background=False, export=None):
+def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=False, export=None):
   def get_time_cmd():
     X, i = x.split(), 0
     while C.any_in(('=', 'python'), X[i]): i += 1
@@ -129,8 +131,9 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, timeit=False, fail=1,
   x = x.replace('| ./', '| %s/' % C.dirname())
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
   profiling = C.any_in([' stat', ' record', 'toplev.py', 'genretlat'], x)
-  if do['time'] and profiling: timeit = True
-  if timeit and not export: x = get_time_cmd()
+  if export: pass
+  elif (args.verbose > globs['V_timing'] and re.match(r'perf (script|annotate)', x)) or (
+       do['time'] and profiling): x = get_time_cmd()
   x = bash(x, export).replace('  ', ' ').strip()
   debug = args.verbose > 0
   if getuser() == 'root': x = x.replace('sudo ', '')
@@ -443,7 +446,9 @@ def profile(mask, toplev_args=['mvl6', None]):
     if args.events or args.metrics or grep is None: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
     if evts != '': perf_args += ' -e "cpu-clock,%s%s"' % (evts, last_events)
     log, tscperf = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log'), ''
-    if not csv:
+    if csv:
+      if profiling() and isfile(log): os.remove(log)
+    else:
       assert 'msr/tsc/' not in perf_args
       tscperf = ' '.join([perf, 'stat -a -C0 -e msr/tsc/', '-o', log.replace('.log', '-C0.log ')])
     stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
@@ -455,7 +460,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if not isfile(log) or int(exe_1line('wc -l ' + log, 0, False)) < 5:
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', step, events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
-    if ret: C.error('perf_stat() failed')
+    if ret: C.error('perf_stat() failed (despite multiple attempts)')
     return log
   def samples_count(d): return 1e5 if args.mode == 'profile' else int(exe_1line(
     '%s script -i %s -D 2>/dev/null | %sgrep -F RECORD_SAMPLE | wc -l' % (perf, d,
@@ -484,8 +489,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
     if perf_script.first and not en(8) and not do['batch']: C.warn('LBR profile-step is disabled')
     perf_script.first = False
-    return exe(' '.join((perf, 'script', perf_ic(data, perf_script.comm), x)), msg, redir_out=None,
-               timeit=(args.verbose > 2), export=export, fail=fail)
+    return exe(' '.join((perf, 'script', perf_ic(data, perf_script.comm), x)), msg, redir_out=None, export=export, fail=fail)
   perf_script.first = True
   perf_script.comm = do['comm']
   def record_name(flags): return '%s%s' % (out, C.chop(flags, (C.CHOP_STUFF, 'cpu_core', 'cpu')))
@@ -526,7 +530,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe(r"%s --stdio -n -l -i %s | c++filt | tee %s "
         r"| tee >(grep -E '^\s+[0-9]+ :' | sort -n | ./ptage > %s-code-ips.log) "
         r"| grep -E -v -E '^(-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
-        logs['code'], base, base), '@annotate code', redir_out='2>/dev/null', timeit=(args.verbose > 2))
+        logs['code'], base, base), '@annotate code', redir_out='2>/dev/null')
     exe("grep -E -w -5 '(%s) :' %s" % ('|'.join(exe2list(r"grep -E '\s+[0-9]+ :' %s | cut -d: -f1 | sort -n | uniq | tail -%d | grep -E -vw '^\s+0'" %
       (logs['code'], do['perf-ann-top']))), logs['code']), '@hottest %d+ blocks, all commands' % do['perf-ann-top'])
     if do['xed']: perf_script("-F insn --xed | grep . | %s | tee %s-hot-insts.log | tail" % (sort2up, base),
@@ -741,6 +745,8 @@ def profile(mask, toplev_args=['mvl6', None]):
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if args.verbose > 2: do['lbr-verbose'] |= 0x800
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=0x%x" % (do['lbr-verbose'] | C.env2int('LBR_VERBOSE', base=16))
+        if type(do['lbr-indirects']) == int:
+          do['lbr-indirects'] = get_indirects('%s.indirects.log' % data, int(do['lbr-indirects']))
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         open(err, 'w').close()
         misp, cmd, msg = '', perf_F(), '@info'
@@ -853,7 +859,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     profile_exe('%s record %s -o %s -- %s' % (perf, flags, perf_data, r), 'FlameGraph', 20, tune='flameg')
     x = '-i %s %s > %s.svg ' % (perf_data,
       ' | ./FlameGraph/'.join(['', 'stackcollapse-perf.pl', 'flamegraph.pl']), perf_data)
-    exe(' '.join((perf, 'script', x)), msg=None, redir_out=None, timeit=(args.verbose > 2))
+    exe(' '.join((perf, 'script', x)), msg=None, redir_out=None)
     print('firefox %s.svg &' % perf_data)
 
   if do['help'] < 0: profile_mask_help()
@@ -996,7 +1002,7 @@ def main():
   if do['container']:
     if profiling(): C.info('container profiling')
     for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'
-  if args.verbose > 2: C.info('timing perf tool post-processing')
+  if args.verbose > globs['V_timing']: C.info('timing perf tool post-processing')
   if args.app and '|' in args.app: C.error("Invalid use of pipe in app: '%s'. try putting it in a .sh file" % args.app)
   if not do['batch'] or args.mode == 'profile':
     cmds_file = '.%s.cmd' % uniq_name()
@@ -1082,12 +1088,14 @@ def main():
       return -1
   return 0
 
+def get_indirects(log, num):
+  return ','.join(['0x%s' % x.lstrip('0') for x in exe2list("tail -%d %s | grep -v total | sed 's/bnd jmp/bnd-jmp/'" % (num, log))[2:][::5]])
 def get(param):
   assert param and len(param) == 3, '3 parameters expected: e.g. get:<what>:<logfile>:<num>'
   sub, log, num = param
   num = int(num)
   if log == '-': log = exe_1line('ls -1tr *.%s.log | tail -1' % ('info' if sub == 'x2g-indirects' else sub))
-  if sub == 'indirects': print(','.join([ '0x%s' % x.lstrip('0') for x in exe2list("tail -%d %s | grep -v total | sed 's/bnd jmp/bnd-jmp/'" % (num, log))[2:][::5] ]))
+  if sub == 'indirects': print(get_indirects(log, num))
   elif sub == 'x2g-indirects':  exe("grep -E '^0x[0-9a-f]+:' %s | sort -n -k2 |grep -v total|uniq|tail -%d|cut -d: -f1|tr '\\n' ,|sed 's/.$/\\n/'" % (log, num))
 
 if __name__ == "__main__":

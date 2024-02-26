@@ -510,7 +510,7 @@ def edge_stats(line, lines, xip, size):
       if 'MISP' in xline: inc(hsts['indirect-x2g-misp'], xip)
   if xip and xip in indirects:
     inc(hsts['indirect_%s_targets' % hex_ip(xip)], ip)
-    inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
+    #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
   #MRN with IDXReg detection
   mrn_dst=x86.get("dst",line)
   def mrn_cond(l):return not is_type(x86.JUMP,l) and '%rip' not in l and re.search(x86.MEM_IDX,l)and not re.search("[x-z]mm",l) and not re.search("%([a-d]x|[sd]i|[bs]p|r(?:[89]|1[0-5])w)",l)

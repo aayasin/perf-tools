@@ -176,7 +176,7 @@ pre-push: help
 	    CMD='suspend-smt profile tar' PM=3931a &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-*.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command
-	$(MAKE) test-default APP=./$(AP) PM=313e DO_SUFF="--tune :perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
+	$(MAKE) test-default APP=./$(AP) CMD="log profile" PM=313e DO_SUFF="--tune :perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
 	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
 	mkdir -p test-dir; cd test-dir; ln -sf ../run.sh; ln -sf ../common.py; ln -sf ../CLTRAMP3D && \
 	    make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1\

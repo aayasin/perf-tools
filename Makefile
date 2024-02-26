@@ -18,7 +18,7 @@ RERUN = -pm 0x80
 SHELL := /bin/bash
 SHOW = tee
 SKIP_EX = false # Skip extra checks
-SS = 3 # default Sleep in Seconds
+SS = 3# default Sleep in Seconds
 ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 
 all: tramp3d-v4
@@ -162,8 +162,8 @@ install-jit:
 	#cd .. && git clone https://github.com/jvm-profiling-tools/perf-map-agent && cd perf-map-agent && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && cmake . && make && echo "Successfully built perf-map-agent"
 	#cd .. && git clone https://github.com/brendangregg/FlameGraph && cd FlameGraph && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && sed -i -e "s|JAVA_HOME=\${JAVA_HOME:-.*|JAVA_HOME=\${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}|g;s|AGENT_HOME=\${AGENT_HOME:-.*|AGENT_HOME=\${AGENT_HOME:-../perf-map-agent}|g" jmaps
 run-jit: ./workloads/CryptoBench.java
-	find1=$(shell sudo find / -name libperf-jvmti.so 2>1 | grep -v find: | tail -1);\
-		java -XX:+PreserveFramePointer -agentpath:$$find1 $< 999 > $@ 2>&1 &
+	find1=$(shell tail -1 find-jvmti.txt);\
+	java -XX:+PreserveFramePointer -agentpath:$$find1 $< 999 > $@ 2>&1 &
 	pidof java
 	xterm -T "java $<" -e "tail -f $@" &
 	#xterm -T "java $< stderr" -e "cat .run-jit.log | uniq -c" &

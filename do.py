@@ -194,7 +194,7 @@ def module_version(mod_name):
     mod = study
   else: C.error('Unsupported module: ' + mod_name)
   return '%s=%.2f' % (mod_name, mod.__version__)
-def profiling(): return any(x in args.command for x in ('prof', 'all')) and args.mode != 'process'
+def profiling(): return any(x in args.command for x in ('profile', 'prof-no-mux', 'all')) and args.mode != 'process'
 def user_app(): return args.output or args.app != C.RUN_DEF
 def uniq_name(): return args.output or C.command_basename(args.app, args.app_iterations if args.gen_args else None)[:200]
 def toplev_describe(m, msg=None, mod='^'):
@@ -523,7 +523,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     return datj
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
-  if args.profile_mask & ~0x1 and args.verbose >= 0: C.info('App: ' + r)
+  if args.profile_mask & ~0x1:
+    if args.verbose >= 0: C.info('App: ' + r)
+    if profiling() and do['perf-jit'] == 1:
+      x = "ps -ef | grep java | grep -v 'grep java' | grep '\-XX:+PreserveFramePointer' | grep '\-agentpath'"
+      assert exe(x) == 0, 'java was not launched properly'
   if en(1):
     logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
     if profiling() and (args.sys_wide or '-a' in do['perf-stat']):
@@ -674,7 +678,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     cmd = "bash -c '%s %s %s'" % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
     profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
     warn_file(perf_data)
-    if tag not in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
+    if tag not in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), jit(perf_data)))
     n = samples_count(perf_data)
     def warn(x='little'): C.warn("Too %s samples collected (%s in %s); rerun with '--tune :calibrate:%d'" % (x, n,
       perf_data, do['calibrate'] + (-1 if x == 'little' else 1)))

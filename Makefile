@@ -162,6 +162,7 @@ install-jit:
 	#cd .. && git clone https://github.com/jvm-profiling-tools/perf-map-agent && cd perf-map-agent && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && cmake . && make && echo "Successfully built perf-map-agent"
 	#cd .. && git clone https://github.com/brendangregg/FlameGraph && cd FlameGraph && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && sed -i -e "s|JAVA_HOME=\${JAVA_HOME:-.*|JAVA_HOME=\${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}|g;s|AGENT_HOME=\${AGENT_HOME:-.*|AGENT_HOME=\${AGENT_HOME:-../perf-map-agent}|g" jmaps
 run-jit: ./workloads/CryptoBench.java
+	$(DO) profile --tune :perf-jit:1 -s1 -pm 4 #hack to create next txt file
 	find1=$(shell tail -1 find-jvmti.txt);\
 	java -XX:+PreserveFramePointer -agentpath:$$find1 $< 999 > $@ 2>&1 &
 	pidof java

@@ -465,7 +465,7 @@ def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
         callder_idx -= 1
       name = ' -> '.join((lines[callder_idx].strip()[:-1] if callder_idx > 0 else '?', name))
       inc(hsts[NOLFC], name + '-%d' % insts_per_call)
-      if verbose & 0x10:
+      if verbose & 0x10 and 'IPC' in lines[-(len(lines)-x)]:
         info_lines('call to leaf-func %s of size %d' % (name, insts_per_call), lines[-(len(lines)-x):] + [line])
       break
     elif is_branch(lines[x]):

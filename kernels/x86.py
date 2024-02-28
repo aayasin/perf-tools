@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.42
+__version__ = 0.43
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -32,7 +32,7 @@ EXTRACT   = 'xtr' # covers legacy, AVX* and x87 flavors
 IMUL      = r"imul.*"
 INDIRECT  = r"(jmp|call).*%"
 JMP_RET   = r"(jmp|ret)"
-JUMP      = '(j|%s|sys%s|bnd jmp)' % (CALL_RET, CALL_RET)
+JUMP      = '(j|%s|sys%s|(bnd|notrack) jmp)' % (CALL_RET, CALL_RET)
 LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"v?mov[a-z0-9]*\s+[^,]*\("
 LOAD_ANY  = r"[a-z0-9]+\s+[^,]*\("  # use is_mem_load()
@@ -41,6 +41,11 @@ STORE     = r"\s+\S+\s+[^\(\),]+,"  # use is_mem_store()
 TEST_CMP  = r"(test|cmp).?\s"
 
 MEM_IDX = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
+
+def inst_patch(i='JMP'):
+  assert i == 'JMP'
+  r = ';'.join(['s/%s jmp/%s-jmp/' % (x, x) for x in ('bnd', 'notrack')])
+  return "sed '%s'" % r
 
 def is_imm(line): return '$' in line
 def is_memory(line): return '(' in line and 'lea' not in line and 'nop' not in line

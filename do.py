@@ -23,6 +23,7 @@ __version__ = 3.07
 import argparse, os.path, re, sys
 
 import analyze, common as C, pmu, stats, tma
+from kernels import x86
 from datetime import datetime
 from getpass import getuser
 from math import log10
@@ -1035,7 +1036,7 @@ def main():
       args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+['xed', 'tee', 'loop-ideal-ipc'])])))
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    find_perf()
-    elif c == 'git-log-oneline': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | grep -E -v "
+    elif c == 'git-log1': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | grep -E -v "
       r"'Merge (branch .master.|pull request #)|forbid perf tool|\sa (bug|) fix|[ /]\-$'")
     elif c == 'tools-update': tools_update()
     elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
@@ -1089,7 +1090,7 @@ def main():
   return 0
 
 def get_indirects(log, num):
-  return ','.join(['0x%s' % x.lstrip('0') for x in exe2list("tail -%d %s | grep -v total | sed 's/bnd jmp/bnd-jmp/'" % (num, log))[2:][::5]])
+  return ','.join(['0x%s' % x.lstrip('0') for x in exe2list("tail -%d %s | grep -v total | %s" % (num, log, x86.inst_patch()))[2:][::5]])
 def get(param):
   assert param and len(param) == 3, '3 parameters expected: e.g. get:<what>:<logfile>:<num>'
   sub, log, num = param

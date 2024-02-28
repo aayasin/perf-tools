@@ -3,15 +3,14 @@ usage: do.py command [command ..] [options]
 positional arguments:
   command               setup-perf log profile analyze tar, all (for these 5)
                         supported options: all analyze build build-perf clean
-                        eventlist-update find-perf git-log-oneline help
-                        install-python log profile prof-no-mux reboot setup-
-                        all setup-perf sync-date tar tools-update version
-                        enable-aslr disable-aslr suspend-aslr enable-atom
-                        disable-atom suspend-atom enable-fix-freq disable-fix-
-                        freq suspend-fix-freq enable-hugepages disable-
-                        hugepages suspend-hugepages enable-prefetches disable-
-                        prefetches suspend-prefetches enable-smt disable-smt
-                        suspend-smt
+                        eventlist-update find-perf git-log1 help install-
+                        python log profile prof-no-mux reboot setup-all setup-
+                        perf sync-date tar tools-update version enable-aslr
+                        disable-aslr suspend-aslr enable-atom disable-atom
+                        suspend-atom enable-fix-freq disable-fix-freq suspend-
+                        fix-freq enable-hugepages disable-hugepages suspend-
+                        hugepages enable-prefetches disable-prefetches
+                        suspend-prefetches enable-smt disable-smt suspend-smt
 
 optional arguments:
   -h, --help            show this help message and exit

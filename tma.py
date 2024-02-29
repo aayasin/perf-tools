@@ -21,7 +21,7 @@ def fixed_metrics(intel_names=False, force_glc=False):
     prefix = ',topdown-'
     def prepend(l): return prefix.join([''] + l)
     events += prepend(['retiring', 'bad-spec', 'fe-bound', 'be-bound'])
-    events_files = len([f for f in os.listdir('/sys/devices/cpu/events/') if f.startswith('topdown')])
+    events_files = len([f for f in os.listdir(pmu.sys_devices_cpu() + '/events/') if f.startswith('topdown')])
     if (pmu.goldencove_on() or force_glc) and events_files == 8:
       events += prepend(['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound'])
       flags = ' --td-level=2'

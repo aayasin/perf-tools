@@ -84,6 +84,10 @@ if args.GEN:
     gen_kernel("-i 'mov %r13,%r12' 'add %r14,%r12' NOP -n 14", 'mov-op-nop')
     gen_kernel("-i 'mov 0x0(%rsp),%r12' NOP 'add %r13,%r12' -n 14", 'ld-nop-op')
     gen_kernel("-i 'mov %r13,%r12' NOP 'add %r14,%r12' -n 14", 'mov-nop-op')
+    gen_kernel("-i 'incq (%rsp,%rdx,1)' 'decq (%rsp,%rdx,1)' -n1", 'incdec-mrn-cancel')
+    gen_kernel("-i 'incq (%rsp,1)' 'decq (%rsp,1)' -n1", 'incdec-mrn')
+    gen_kernel("-i 'movq (%rsp,%rdx,1), %rcx' 'addq $1, (%rsp,%rdx,1)' -n1" , 'ldst-mrn-cancel')
+    gen_kernel("-i 'movq (%rsp,1), %rcx' 'addq $1, (%rsp,1)' -n1", 'ldst-mrn')
 
     kernels.append("memcpy")
     kernels.append("pagefault")

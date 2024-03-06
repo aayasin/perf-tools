@@ -107,7 +107,7 @@ test-build:
 	grep Time datadep-20e6.toplev-vl2.log
 	$(SKIP_EX) || ( set -o pipefail; ./do.py profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
 	    -pm 20006 -r 1 | $(SHOW) ) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
-test-default: ./CLTRAMP3D
+test-default:
 	$(DO1) -pm $(PM) $(DO_SUFF)
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp --tune :forgive:2 $(DO_SUFF)
@@ -141,7 +141,7 @@ else exit 1}' || $(FAIL)
 endef
 test-tripcount-mean: lbr.py do.py kernels/x86.py
 	gcc -g -O2 kernels/tripcount-mean.c -o kernels/tripcount-mean > /dev/null 2>&1
-	$(DO) $(CMD) -a './kernels/tripcount-mean $(TMI)' --perf ../perf -pm 100 > /dev/null 2>&1
+	$(DO) log $(CMD) -a './kernels/tripcount-mean $(TMI)' --perf ../perf -pm 100 > /dev/null 2>&1
 	$(call check_tripcount,1,90,110)
 	$(call check_tripcount,2,60,80)
 CPUS = ICX SPR SPR-HBM TGL ADL
@@ -178,7 +178,7 @@ pre-push: help
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command
 	$(MAKE) test-default APP=./$(AP) CMD="log profile" PM=313e DO_SUFF="--tune :perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
 	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
-	mkdir -p test-dir; cd test-dir; ln -sf ../run.sh; ln -sf ../common.py; ln -sf ../CLTRAMP3D && \
+	mkdir -p test-dir; cd test-dir; ln -sf ../common.py && \
 	    make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1\
 	    # tests default from another directory, toplev describe
 	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command

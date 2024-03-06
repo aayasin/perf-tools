@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 3.07
+__version__ = 3.08
 
 import argparse, os.path, re, sys
 
@@ -129,7 +129,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=Fa
   if msg and do['batch']: msg += " for '%s'" % args.app
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee']: x = x.split('|')[0]
-  x = x.replace('| ./', '| %s/' % C.dirname())
+  x = x.replace(' ./', ' %s/' % C.dirname())
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
   profiling = C.any_in([' stat', ' record', 'toplev.py', 'genretlat'], x)
   if export: pass
@@ -725,12 +725,14 @@ def profile(mask, toplev_args=['mvl6', None]):
         else:
           perf_script("-F +brstackinsn --xed | GREP_INST"
             "| tee >(grep MISPRED | %s | tee >(grep -E -v 'call|jmp|ret' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log) "
+            "| tee >(sed -E 's/\[[0-9]+\]//' | %s | ./slow-branch | sort -n | PTAGE_R=2 ./ptage > %s.slow.log) "
             "| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
-            (clean, sort2uf, data, sort2uf, data, clean, sort2uf, data, sort2uf, data, sort2uf, data),
+            (clean, sort2uf, data, sort2uf, data, sort2u, data, clean, sort2uf, data, sort2uf, data, sort2uf, data),
             '@processing taken branches', data)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'misp_tk_conds'))
           if do['imix'] & 0x20 and args.mode != 'profile': calc_misp_ratio()
+          if do['imix'] & 0x8: exe('tail -6 %s.slow.log | grep -v ===total' % data, '@Top-5 slow sequences end with branch:')
         exe(log_br_count('mispredicted taken', 'mispreds'))
     elif do['reprocess'] != 0: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of stats log files')
     if do['xed']:

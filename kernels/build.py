@@ -89,7 +89,6 @@ if args.GEN:
     gen_kernel("-i 'movq (%rsp,%rdx,1), %rcx' 'addq $1, (%rsp,%rdx,1)' -n16" , 'ldst-mrn-cancel')
     gen_kernel("-i 'movq (%rsp,1), %rcx' 'addq $1, (%rsp,1)' -n16", 'ldst-mrn')
 
-
     kernels.append("memcpy")
     kernels.append("pagefault")
     kernels.append("tripcount-mean")

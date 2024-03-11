@@ -56,9 +56,10 @@ def str2int(ip, plist):
     print_sample(plist[1])
     assert 0, "expect address in '%s' of '%s'" % (ip, plist[0])
 
+def is_empty_line(line): return line.strip() == '' or re.match(r"^$", line)
 def skip_sample(s):
   line = read_line()
-  while not re.match(r"^$", line):
+  while not is_empty_line(line):
     line = read_line()
     assert line, 'was input truncated? sample:\n%s'%s
   return 0
@@ -620,13 +621,14 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
         return lines if len(lines) > min_lines and not skip_bad else None
       header = is_header(line)
       if header:
-        ev = header.group(3)[:-1]
+        ev = header.group(3)
+        if ev.endswith(':'): ev = ev[:-1]
         # first sample here (of a given event)
         if ev not in lbr_events:
           if not len(lbr_events) and '[' in header.group(1):
             for k in header_field.keys(): header_field[k] += 1
           lbr_events += [ev]
-          x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
+          x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split()[-1])
           def f2s(x): return C.flag2str(' ', C.env2str(x, prefix=True))
           if len(lbr_events) == 1: x += ' primary= %s edge=%d%s%s' % (event, edge_en, f2s('LBR_STOP'), f2s('LBR_IMIX'))
           if ip_filter: x += ' ip_filter= %s' % str(ip_filter)
@@ -644,7 +646,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
             break
           inc(stat['IPs'], header_ip_str(line))
       # a sample ended
-      if re.match(r"^$", line):
+      if is_empty_line(line):
         if not skip_bad and (not min_lines or len(lines) > min_lines): break
         len_m1 = 0
         if len(lines): len_m1 = len(lines)-1
@@ -678,7 +680,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
       if skip_bad and tag in line:
         valid = 0
         invalid('bad', tag)
-        assert re.match(r"^$", read_line())
+        assert is_empty_line(read_line())
         break
       # a line with a label
       if not labels and is_label(line):

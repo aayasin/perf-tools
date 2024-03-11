@@ -18,9 +18,9 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.42
+__version__ = 3.52
 
-import argparse, os.path, re, sys
+import argparse, os.path, sys
 
 import analyze, common as C, pmu, stats, tma
 from lbr import x86
@@ -173,8 +173,10 @@ def print_cmd(x, show=True):
   if show and not do['batch'] and args.verbose >= 0: C.printc(x)
   if len(vars(args))>0 and globs['cmds_file']: globs['cmds_file'].write('# ' + x + '\n')
 
-def bash(x, px=None): return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if 'tee >(' in x and 'awk' not in x or\
-  x.startswith(globs['time']) or px else x
+def bash(x, px=None):
+  win = 'process-win' in args.command
+  cond = (('tee >(' in x or x.startswith(globs['time']) or px) and not win) or (win and px)
+  return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if cond else x
 def exe_1line(x, f=None, heavy=True):
   return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(bash(x), f, args.verbose > 1)
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
@@ -398,7 +400,7 @@ def get_perf_toplev():
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
   return perf, ptools['toplev.py'], ptools['ocperf'], ptools['genretlat'], env
 
-def profile(mask, toplev_args=['mvl6', None]):
+def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   out, profile_help = uniq_name(), {}
   perf, toplev, ocperf, genretlat, env = get_perf_toplev()
   base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
@@ -479,7 +481,9 @@ def profile(mask, toplev_args=['mvl6', None]):
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
     if ret: C.error('perf_stat() failed (despite multiple attempts)')
     return log
-  def samples_count(d): return 1e5 if args.mode == 'profile' else int(exe_1line(
+  def samples_count(d):
+    if windows_file: return int(C.exe_one_line(C.grep('BR_INST_RETIRED.NEAR_TAKENpdir', windows_file, '-c')))
+    return 1e5 if args.mode == 'profile' else int(exe_1line(
     '%s script -i %s -D 2>/dev/null | %sgrep -F RECORD_SAMPLE | wc -l' % (perf, d,
     ('tee >(tail -50 > %s.debug.log) | ' % d) if do['debug'] else '') ))
   def get_comm(data):
@@ -498,7 +502,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       if perf_script.first: C.info('processing first %d samples only' % samples)
       export += ' LBR_STOP=%d' % samples
       x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (3*K*samples))
-    if do['perf-filter'] and not perf_script.comm:
+    if do['perf-filter'] and not perf_script.comm and not windows_file:
       perf_script.comm = get_comm(data)
       if perf_script.first and args.mode != 'profile': C.info("filtering on command '%s' in next post-processing" % perf_script.comm)
     instline = r'^\s+[0-9a-f]+\s'
@@ -506,19 +510,21 @@ def profile(mask, toplev_args=['mvl6', None]):
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
     if perf_script.first and not en(8) and not do['batch']: C.warn('LBR profile-step is disabled')
     perf_script.first = False
-    return exe(' '.join((perf, 'script', perf_ic(data, perf_script.comm), x)), msg, redir_out=None, export=export, fail=fail)
+    if windows_file: x = x.replace(x.split('|')[0], 'cat %s ' % windows_file)
+    return exe(' '.join((perf, 'script', perf_ic(data, perf_script.comm), x)) if not windows_file else x, msg, redir_out=None, export=export, fail=fail)
   perf_script.first = True
   perf_script.comm = do['comm']
   def record_name(flags): return '%s%s' % (out, C.chop(flags, (C.CHOP_STUFF, 'cpu_core', 'cpu')))
   def get_stat(s, default=None): return stats.get_stat_log(s, logs['stat']) if isfile(logs['stat']) else default
   def record_calibrate(x):
-    factor = do['calibrate']
-    if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs_utilized', 1)))
-    if factor:
-      if '000' not in C.flag_value(do[x], '-c'): error("cannot calibrate '%s' with '%s'" % (x, do[x]))
-      else:
-        do[x] = do[x].replace('000', '0' * (3 + factor), 1)
-        C.info('\tcalibrated: %s' % do[x])
+    if not windows_file:
+      factor = do['calibrate']
+      if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs_utilized', 1)))
+      if factor:
+        if '000' not in C.flag_value(do[x], '-c'): error("cannot calibrate '%s' with '%s'" % (x, do[x]))
+        else:
+          do[x] = do[x].replace('000', '0' * (3 + factor), 1)
+          C.info('\tcalibrated: %s' % do[x])
     return record_name(do[x])
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
@@ -662,14 +668,15 @@ def profile(mask, toplev_args=['mvl6', None]):
   def perf_record(tag, step, msg=None, record='record', track_ipc=do['perf-stat-ipc']):
     perf_data, flags = '%s.perf.data' % record_calibrate('perf-%s' % tag), do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or (do['forgive'] > 1), 'No unfiltered LBRs! for %s: %s' % (tag, flags)
-    cmd = "bash -c '%s %s %s'" % (perf, track_ipc, r) if track_ipc and len(track_ipc) else '-- %s' % r
-    profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
-    warn_file(perf_data)
-    if tag not in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
+    if not windows_file:
+      cmd = "bash -c '%s %s %s'" % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
+      profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
+      warn_file(perf_data)
+      if tag not in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
     n = samples_count(perf_data)
-    def warn(x='little'): C.warn("Too %s samples collected (%s in %s); rerun with '--tune :calibrate:%d'" % (x, n,
-      perf_data, do['calibrate'] + (-1 if x == 'little' else 1)))
-    if n == 0: C.error(r"No samples collected in %s ; Check if perf is in use e.g. 'ps -ef | grep perf'" % perf_data)
+    def warn(x='little'): C.warn("Too %s samples collected (%s in %s)%s" % (x, n, perf_data if not windows_file else windows_file,
+                                  '' if windows_file else "; rerun with '--tune :calibrate:%d'" % (do['calibrate'] + (-1 if x == 'little' else 1))))
+    if n == 0: C.error(r"No samples collected in %s ; Check if perf is in use e.g. '\ps -ef | grep perf'" % perf_data)
     elif n < 1e4: warn()
     elif n > 1e5: warn("many")
     return perf_data, n
@@ -677,16 +684,17 @@ def profile(mask, toplev_args=['mvl6', None]):
   def tail(f=''): return "tail %s | grep -v total" % f
 
   if en(8) and do['sample'] > 1:
-    assert C.any_in((pmu.lbr_event()[:-1], 'instructions:ppp', 'cycles:p '), do['perf-lbr']) or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
+    assert C.any_in((pmu.lbr_event()[:-1], 'instructions:ppp', 'cycles:p ', 'BR_INST_RETIRED.NEAR_TAKENpdir'), do['perf-lbr']) \
+           or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
     data, nsamples = perf_record('lbr', 8)
-    info, comm = '%s.info.log' % data, get_comm(data)
+    info, comm = '%s.info.log' % data, get_comm(data) if not windows_file else None
     clean = r"sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def print_info(x):
       if args.mode != 'profile': exe_v0('printf "%s" >%s %s' % (x, '' if print_info.first and do['reprocess'] > 0 else '>', info))
       print_info.first = False
     print_info.first = True
     def static_stats():
-      if args.mode == 'profile': return
+      if args.mode == 'profile' or windows_file: return
       bins = exe2list(perf + r" script -i %s | awk -F'\\(' '{print $NF}' | cut -d\) -f1 "
         "| grep -E -v '^\[|anonymous|/tmp/perf-' | %s | tail -5" % (data, sort2u))[1:][::2]
       assert len(bins)
@@ -714,7 +722,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     if not isfile(info) or do['reprocess'] > 1 or do['reprocess'] < 0:
       if do['size']: static_stats()
       print_info('# processing %s%s\n' % (data, C.flag2str(" filtered on ", comm)))
-      if do['lbr-branch-stats']: exe(perf + r" report %s | grep -A13 'Branch Statistics:' | tee -a %s | grep -E -v ':\s+0\.0%%|CROSS'" %
+      if do['lbr-branch-stats'] and not windows_file:
+        exe(perf + r" report %s | grep -A13 'Branch Statistics:' | tee -a %s | grep -E -v ':\s+0\.0%%|CROSS'" %
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, r" grep -E -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
@@ -767,7 +776,7 @@ def profile(mask, toplev_args=['mvl6', None]):
           cmd += " | tee >(%s %s %s %s >> %s) %s | GREP_INST | %s " % (
             lbr_env, C.realpath('lbr_stats'), do['lbr-stats-tk'], ev, info, misp, clean)
           if do['imix'] & 0x1:
-            cmd += r"| tee >(sort| sed 's/\s\+/\\t/g' | sed -E 's/ilen:\s*[0-9]+//g' | uniq -c | sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
+            cmd += r"| tee >(sort| sed -e 's/\s\+/\\t/g' -e 's/\\t\+/\t/g' | sed -E 's/ilen:\s*[0-9]+//g' | uniq -c | sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
             msg += ', hitcounts'
           if do['imix'] & 0x2:
             cmd += "| cut -f2- | tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) " % (sort2up, out)
@@ -793,8 +802,9 @@ def profile(mask, toplev_args=['mvl6', None]):
           cmd += ' | tee >(%s %s %s >> %s) ' % (C.realpath('loop_stats'), exe_1line('tail -%d %s | head -1' % (top, loops), 2)[:-1], ev, info)
           top -= 1
         cmd += ' | ./loop_stats %s %s >> %s && echo' % (exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info)
-        print_cmd(perf + " script -i %s -F +brstackinsn --xed -c %s | %s %s %s >> %s" % (data, comm, C.realpath('loop_stats'),
-          exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info))
+        print_cmd("%s | %s %s %s >> %s" % ('cat %s' % windows_file if windows_file else
+                  (perf + " script -i %s -F +brstackinsn --xed -c %s" % (data, comm)),
+                  C.realpath('loop_stats'), exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info))
         perf_script("%s %s && %s" % (perf_F(), cmd,
                     C.grep('FL-cycles...[1-9][0-9]?', info, color=1)), "@detailed stats for hot loops", data,
                     export='PTOOLS_HITS=%s%s%s' % (hits, (' LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] & 0x1 else '',
@@ -892,7 +902,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     print('firefox %s.svg &' % perf_data)
 
   if do['help'] < 0: profile_mask_help()
-  elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)):
+  elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)) and not windows_file:
     stats.csv2stat(C.toplev_log2csv(logs['tma']))
     d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])
       ), 'num_not_counted_stats', 'num_not_supported_stats', 'DurationTimeInMilliSeconds'
@@ -1006,6 +1016,9 @@ def main():
   if any(perf_version() == x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')):
     C.error('Unsupported perf tool: ' + perf_version())
   do_cmd = '%s # version %s' % (C.argv2str(), version())
+  if 'process-win' in args.command:
+    windows_file = args.app
+    args.output = args.app = args.app.split('-')[0]  # <app>-c<SAF>.perf.script
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   if args.mode == 'process':
@@ -1116,6 +1129,12 @@ def main():
       scp = 'scp %s %s' % (r, to)
       exe('tar -czvf %s %s ; echo %s' % (r, fs, scp), redir_out=None)
       #subprocess.Popen(['scp', r, to])
+    elif c == 'process-win':
+      if not windows_file: error('use -a to provide windows file to process')
+      # <app>-c<SAF>.perf.script
+      do['perf-lbr'] = '-j any,save_type -e BR_INST_RETIRED.NEAR_TAKENpdir -c %s' % windows_file.split('-')[1].split('.')[0][1:]
+      do['perf-filter'] = 0
+      profile(0x100, windows_file=windows_file)
     else:
       C.error("Unknown command: '%s' !" % c)
       return -1

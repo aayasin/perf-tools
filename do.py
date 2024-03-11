@@ -409,6 +409,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   perf, toplev, ocperf, genretlat, env = get_perf_toplev()
   base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
   logs = {'stat': None, 'code': base + '-code.log', 'tma': None}
+  process_win = bool(args.windows_file)
   def prepend_PERF(cmd): return env + cmd.replace(env, '') if 'PERF=' in cmd else cmd
   def profile_exe(cmd, msg, step, mode='redirect', tune='', fail=0):
     if do['help'] < 0:
@@ -506,7 +507,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       if perf_script.first: C.info('processing first %d samples only' % samples)
       export += ' LBR_STOP=%d' % samples
       x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (3*K*samples))
-    if do['perf-filter'] and not perf_script.comm:
+    if do['perf-filter'] and not perf_script.comm and not process_win:
       perf_script.comm = get_comm(data)
       if perf_script.first and args.mode != 'profile': C.info("filtering on command '%s' in next post-processing" % perf_script.comm)
     instline = r'^\s+[0-9a-f]+\s'
@@ -978,6 +979,7 @@ def parse_args():
   ap.add_argument('-o', '--output', help='basename to use for output files')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
+  ap.add_argument('-w', '--windows-file', default=None, help='windows file to process in process-win command')
   x = ap.parse_args()
   return x
 

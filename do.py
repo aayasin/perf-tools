@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report
-__version__ = 3.08
+__version__ = 3.09
 
 import argparse, os.path, re, sys
 
@@ -44,6 +44,7 @@ globs = {
 }
 if globs['uname-a'].startswith('Darwin'):
   C.error("Are you on MacOS? it is not supported; 'uname -a =' %s" % globs['uname-a'])
+if pmu.cpu('vendor') != 'GenuineIntel': C.warn('Non-Intel platform detected: ' + pmu.cpu('vendor'))
 
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
@@ -317,18 +318,18 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   for f in ('/sys/kernel/mm/transparent_hugepage/enabled',
             '/sys/devices/system/node/node0/memory_side_cache/index1/size'):
     if isfile(f): prn_sysfile(f, out)
-  log_patch("sudo sysctl -a | tee setup-sysctl.log | grep -E 'randomize_va_space|hugepages ='")
+  log_patch("sysctl -a | tee setup-sysctl.log | grep -E 'randomize_va_space|hugepages ='")
   C.fappend('IP-address: %s' % exe_1line('hostname -i'), out)
   exe("env > setup-env.log")
   new_line()          #CPU
-  exe(r"lscpu | tee setup-lscpu.log | grep -E 'family|Model|Step|(Socket|Core|Thread)\(' >> " + out)
+  exe(r"lscpu | tee setup-lscpu.log | grep -E 'family|L3 cache|Model|Step|(Socket|Core|Thread)\(' >> " + out)
   if do['msr']:
     if do['msr'] > 1: do['msrs'] += [pmu.MSR['IA32_MCU_OPT_CTRL']]
     for m in do['msrs']:
       v = pmu.msr_read(m)
       exe('echo "MSR 0x%03x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
   if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x00000001', 'cpuid'), out))
-  exe("sudo dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d,
+  exe("dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d,
     label('Command line|Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
   new_line()          #PMU
@@ -964,6 +965,7 @@ def main():
   global args
   args = parse_args()
   #args sanity checks
+  if '207' in exe_1line("lscpu | grep -F 'Model:'"): C.error('EMR detected; prepend your command with: FORCECPU=SPR ./do.py ..')
   if args.gen_args or 'build' in args.command:
     if not user_app(): C.error('must specify --app-name with any of: --gen-args, build')
     if 'build' not in args.command: C.error('must use build command with --gen-args')

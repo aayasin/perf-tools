@@ -1006,7 +1006,10 @@ def print_common(total):
   print('LBR samples:', hist_fmt(stat))
   if edge_en and total:
     print_global_stats()
-    print(' instructions.\n#'.join(['# Notes: CMP = CMP or TEST', ' RMW = Read-Modify-Write', 'Global-stats-end'])+'\n')
+    print("""# Notes: CMP = CMP or TEST instructions.
+# RMW = Read-Modify-Write instructions.
+# GLOBAL denotes Global or static memory references.
+#Global-stats-end\n""")
   C.warn_summary('info', 50)
   C.warn_summary()
 

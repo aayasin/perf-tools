@@ -965,7 +965,8 @@ def main():
   global args
   args = parse_args()
   #args sanity checks
-  if '207' in exe_1line("lscpu | grep -F 'Model:'"): C.error('EMR detected; prepend your command with: FORCECPU=SPR ./do.py ..')
+  if '207' in exe_1line("lscpu | grep -F 'Model:'") and not C.env2str('FORCECPU'):
+    C.error('EMR detected; prepend your command with: FORCECPU=SPR ./do.py ..')
   if args.gen_args or 'build' in args.command:
     if not user_app(): C.error('must specify --app-name with any of: --gen-args, build')
     if 'build' not in args.command: C.error('must use build command with --gen-args')

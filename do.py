@@ -430,7 +430,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')):] + px.join(rapl) + ('/' if '/' in px else '')
     return power() if args.power and not pmu.v5p() else ''
-  def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
+  def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', '"%s"' % comm)])
   def perf_F(ilen=False):
     ilen = ilen or do['lbr-jcc-erratum'] or do['lbr-indirects']
     if ilen and not perf_newer_than(5.17): error('perf is too old: %s (no ilen support)' % perf_version())

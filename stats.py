@@ -135,10 +135,10 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
 
 def rollup(c, perf_stat_file=None):
   if c in sDB: return
-  perf_stat_file, info = perf_stat_file or c + '.perf_stat-r3.log', c + '.toplev-mvl2.log'
+  perf_stat_file, info, vl6 = perf_stat_file or c + '.perf_stat-r3.log', c + '.toplev-mvl2.log', c + '.toplev-vl6.log'
   # TODO: call do.profile to get file names
   sDB[c] = read_perf(perf_stat_file)
-  sDB[c].update(read_toplev(c + '.toplev-vl6.log'))
+  if os.path.exists(vl6): sDB[c].update(read_toplev(vl6))
   if os.path.exists(info): sDB[c].update(read_toplev(info))
   if debug > 1: print_DB(c)
 

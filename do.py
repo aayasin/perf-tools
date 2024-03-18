@@ -44,7 +44,7 @@ globs = {
 }
 if globs['uname-a'].startswith('Darwin'):
   C.error("Are you on MacOS? it is not supported; 'uname -a =' %s" % globs['uname-a'])
-if pmu.cpu('vendor') != 'GenuineIntel': C.warn('Non-Intel platform detected: ' + pmu.cpu('vendor'))
+if not pmu.intel(): C.warn('Non-Intel platform detected: ' + pmu.cpu('vendor'))
 
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
@@ -940,7 +940,7 @@ def handle_tunables():
   # updating default values before reading input
   do['nodes'] += ("," + args.nodes)
   if args.events and '{' in args.events: do['perf-stat-add'] = -1
-  if perf_newer_than(5.17): do['lbr-jcc-erratum'] = 1
+  if pmu.intel() and perf_newer_than(5.17): do['lbr-jcc-erratum'] = 1
   # processing tunables input
   if args.tune:
     for tlists in args.tune:

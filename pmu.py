@@ -49,6 +49,7 @@ def redwoodcove_on(): return cpu_has_feature('CPUID.23H')
 
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
+def intel():      return 'Intel' in cpu('vendor')
 
 # non-IA
 def amd():

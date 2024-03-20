@@ -203,7 +203,7 @@ def parse_perf(l):
   name = name2 = name3 = group = group2 = group3 = var = None
   val = val2 = val3 = -1
   def get_group(n): return 'Metric' if is_metric(n) else 'Event'
-  if not re.match(r'^\s*[0-9P]', l): pass
+  if not re.match(r'^\s*[0-9P]', l) or len(items) == 1: pass
   elif 'Performance counter stats for' in l:
     name = 'app'
     val = l.split("'")[1]

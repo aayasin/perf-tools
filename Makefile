@@ -64,7 +64,7 @@ test-mt: run-mt
 	sleep 2s
 	set -o pipefail; $(DO) profile -s1 $(RERUN) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
-CPUIDI = 50000000
+CPUIDI = 90000000
 test-bottlenecks: kernels/cpuid
 	$(DO1) -pm 10 --tune :help:0
 	grep Bottleneck cpuid-$(CPUIDI).toplev-vl6.log | sort -n -k4 | tail -1 | grep --color Irregular_Overhead

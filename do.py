@@ -133,7 +133,6 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=Fa
   if msg and do['batch']: msg += " for '%s'" % args.app
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee']: x = x.split('|')[0]
-  x = x.replace(' ./', ' %s/' % C.dirname())
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
   profiling = C.any_in([' stat', ' record', 'toplev.py', 'genretlat'], x)
   if export: pass
@@ -169,7 +168,8 @@ def print_cmd(x, show=True):
   if show and not do['batch'] and args.verbose >= 0: C.printc(x)
   if len(vars(args))>0 and globs['cmds_file']: globs['cmds_file'].write('# ' + x + '\n')
 
-def bash(x, px=None): return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if 'tee >(' in x or x.startswith(globs['time']) or px else x
+def fulldir(x): return x.replace(' ./', ' %s/' % C.dirname())
+def bash(x, px=None): return '%s bash -c "%s" 2>&1' % (px or '', fulldir(x).replace('"', '\\"')) if 'tee >(' in x or x.startswith(globs['time']) or px else fulldir(x)
 def exe_1line(x, f=None, heavy=True):
   return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(bash(x), f, args.verbose > 1)
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
@@ -526,7 +526,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   if args.profile_mask & ~0x1:
     if args.verbose >= 0: C.info('App: ' + r)
     if profiling() and do['perf-jit'] == 1:
-      x = "ps -ef | grep java | grep -v 'grep java' | grep '\-XX:+PreserveFramePointer' | grep '\-agentpath'"
+      x = "ps -ef | grep java | grep -v 'grep java|hack record' | grep '\-XX:+PreserveFramePointer' | grep '\-agentpath'"
       assert exe(x) == 0, 'java was not launched properly'
   if en(1):
     logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)

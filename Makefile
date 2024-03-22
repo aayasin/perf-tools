@@ -109,6 +109,8 @@ test-build:
 	    -pm 20006 -r 1 | $(SHOW) ) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
 test-default:
 	$(DO1) -pm $(PM) $(DO_SUFF)
+	info=$(shell ls -1tr *info.log | tail -1); grep '^LBR samples' $$info | awk -F 'samples/s: ' '{print $$2}' | \
+        awk -F '}' '{print $$1}' | awk '{if ($$1 > 30) exit 0; else exit 1}' || $(FAIL)
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp --tune :forgive:2 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py

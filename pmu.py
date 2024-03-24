@@ -77,7 +77,7 @@ def lbr_event():
   # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
   return 'rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp')
 def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
-def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p')
+def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p', 'BR_INST_RETIRED.NEAR_TAKENpdir')
 
 def ldlat_event(lat):
   return '"{%s/mem-loads-aux,period=%d/,%s/mem-loads,ldlat=%s/pp}" -d -W' % (pmu(),

@@ -32,7 +32,7 @@ sudo apt-get install libiberty-dev libzstd-dev #demangle
 #sudo apt-get install libelf
 sudo apt-get install make
 #warning: next line was tested only on Ubuntu
-sudo apt-get install -y libbfd-dev libdwarf-dev libelf-dev libdw-dev libunwind-dev
+sudo apt-get install -y libtraceevent-dev libbfd-dev libdwarf-dev libelf-dev libdw-dev libunwind-dev
 make clean
 #make PYTHON=false PYTHON_CONFIG=false
 make NO_JEVENTS=1 # a perf tool overhead bug in Intel event names handling

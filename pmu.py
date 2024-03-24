@@ -49,6 +49,12 @@ def redwoodcove_on(): return cpu_has_feature('CPUID.23H')
 
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
+def intel():      return 'Intel' in cpu('vendor')
+
+# non-IA
+def amd():
+  x = C.exe_one_line("lscpu | grep 'Model name'")
+  return 'AMD' in x and 'EPYC' in x
 
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
@@ -68,7 +74,8 @@ def event_name(x):
   return e
 
 def lbr_event():
-  return ('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'
+  # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
+  return 'rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp')
 def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
 def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p', 'BR_INST_RETIRED.NEAR_TAKENpdir')
 
@@ -216,6 +223,7 @@ def cpu(what, default=None):
       #'name':         cs.true_name,
       'smt-on':       cs.ht,
       'socketcount':  cs.sockets,
+      'vendor':       cs.vendor,
       'x86':          int(platform.machine().startswith('x86')),
       'forcecpu':     int(True if forcecpu else False)
     }

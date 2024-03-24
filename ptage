@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # outputs percentages & sum of number-prefixed inputs
 # Author: Ahmad Yasin
-# edited: Sep. 2021
+# edited: March 2024
 #
 from __future__ import print_function
 __author__ = 'ayasin'
@@ -11,7 +11,7 @@ import sys
 
 # usage: <ex: some-output | sort -n> | ptage
 
-ptage_r = C.env2int('PTAGE_R')
+fmt = '{:5.%df}' % C.env2int('PTAGE_R', 1)
 total, lines = 0, []
   
 while True:
@@ -19,14 +19,12 @@ while True:
   if not line: break
   if not line.strip()[0].isdigit(): continue
   total += float(C.str2list(line)[0])
-  lines.append(line.rstrip('\r\n'))
+  lines.append(line)
 
 for l in lines:
   n = float(C.str2list(l)[0])
-  s = "%.1f%%\t" % (100.0*n/total)
-  if ptage_r:
-    s = '%s%%' % round(100.0*n/total, ptage_r)
-  print(s + l)
+  percent = fmt.format(100.0 * n/total) + '%'
+  print(percent, l, end='')
  
-print("100%%\t %d\t\t\t===total"%int(total))
+print("  100%%\t%d\t\t\t===total"%int(total))
 

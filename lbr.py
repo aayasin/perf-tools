@@ -14,7 +14,7 @@ __author__ = 'ayasin'
 
 import common as C, pmu
 from common import inc
-import os, re, sys
+import os, re, sys, time
 import llvm_mca_lbr
 from kernels import x86
 try:
@@ -22,7 +22,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.11 # see version line of do.py
+__version__= x86.__version__ + 2.12 # see version line of do.py
 
 def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
 
@@ -344,6 +344,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
 
 edge_en = 0
 LBR_Event = pmu.lbr_event()[:-4]
+LBR_Edge_Events = pmu.lbr_unfiltered_events()
 lbr_events = []
 loops, contigous_loops = {}, []
 stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles', 'total_loops_cycles')}
@@ -580,7 +581,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
   if lp_stats_en: stats.enables |= stats.LOOP
   glob['ip_filter'] = ip_filter
   # edge_en permits to collect per-instruction stats (beyond per-taken-based) if config is good for edge-profile
-  edge_en = event in pmu.lbr_unfiltered_events() and not ip_filter and not loop_ipc
+  edge_en = event in LBR_Edge_Events and not ip_filter and not loop_ipc
   if stat['total'] == 0:
     if edge_en: edge_en_init(indirect_en)
     if ret_latency: header_ip_str.position = 8
@@ -588,6 +589,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, labels=False, ret_la
     if loop_ipc:
       read_sample.tick *= 10
       read_sample.stop = None
+    else:
+      stat['samples/s'] = time.time()
 
   while not valid:
     valid, lines, bwd_br_tgts = 1, [], []
@@ -1003,10 +1006,14 @@ def print_common(total):
   if stats.size():
     totalv = (total - stat['bad'] - stat['bogus'])
     stat['size']['avg'] = round(stat['size']['sum'] / totalv, 1) if totalv else -1
+  stat['samples/s'] = round(total / (time.time() - stat['samples/s']), 1)
   print('LBR samples:', hist_fmt(stat))
   if edge_en and total:
     print_global_stats()
-    print(' instructions.\n#'.join(['# Notes: CMP = CMP or TEST', ' RMW = Read-Modify-Write', 'Global-stats-end'])+'\n')
+    print("""# Notes: CMP = CMP or TEST instructions.
+# RMW = Read-Modify-Write instructions.
+# GLOBAL denotes Global or static memory references.
+#Global-stats-end\n""")
   C.warn_summary('info', 50)
   C.warn_summary()
 

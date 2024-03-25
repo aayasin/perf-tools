@@ -3,5 +3,6 @@ sed -E 's/\[[0-9]+\]//'
 
 git fetch origin && git rebase origin/master
 git add do.py && git rebase --continue
+git push -f origin JIT-profiling
 
 git clone --recurse-submodules https://github.com/aayasin/perf-tools

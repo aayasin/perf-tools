@@ -378,7 +378,7 @@ def perf_log2stat(log, smt_on, d={}):
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
     if debug > 3: print('reading %s' % f)
     for l in C.file2lines(f):
-      if re.match('^\s*$|perf stat ', l): continue # skip empty lines
+      if re.match('^\s*$', l) or 'perf stat ' in l: continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2

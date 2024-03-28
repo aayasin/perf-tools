@@ -151,7 +151,7 @@ def parse_args():
 args = None
 def app(flavor):
   if args.attempt == '-1': return args.app
-  return "'%s %s %s'" % (args.app, flavor, 't%s' % args.attempt if args.attempt.isdigit() else args.attempt)
+  return "'%s %s%s'" % (args.app, flavor, ' t%s' % args.attempt if args.attempt.isdigit() else args.attempt)
 
 def compare_stats(app1, app2):
   app1_str, app2_str = C.command_basename(app1), C.command_basename(app2)

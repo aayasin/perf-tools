@@ -48,6 +48,7 @@ def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   if not log_only: print(msg)
   if not outfile: outfile = log_stdio
   if outfile: fappend(msg, outfile)
+  return msg
 log_stdio=None
 
 log_db = {'info': {}, 'warn': {}}
@@ -268,6 +269,14 @@ def startswith(l, s):
   for i in l:
     if s.startswith(i): return 1
   return 0
+
+# 0-9 -> 0-9
+# 10-35 -> a-z
+# 36-63 -> A-Z
+def num2char(n):
+  if n < 10: return str(n)
+  if n < 36: return chr(ord('a') + n - 10)
+  return chr(ord('A') + n - 36)
 
 def is_num(x, hex=False):
   try:

@@ -15,7 +15,7 @@ __version__= 0.87
 
 import common as C, pmu, stats
 import os, sys, time, re
-from lbr import stat_name
+from lbr.lbr import stat_name
 
 def dump_sample():
   print(r"""#!/bin/bash

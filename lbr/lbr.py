@@ -25,7 +25,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.17 # see version line of do.py
+__version__= x86.__version__ + 2.18 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 

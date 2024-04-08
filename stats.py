@@ -264,7 +264,7 @@ def read_toplev(filename, metric=None):
       items = l.strip().split()
       if debug > 5: print('debug:', len(items), items, l)
       if items[0] == 'core': items.pop(0)
-      if l.startswith('Info'):
+      if l.startswith('Info') and 'Uncore_Frequency' not in l:
         d[items[1]] = (convert(items[3]), items[0])  # (value, group)
       elif '<==' in l:
         d['Critical-Group'] = (Key2group[items[0]], None)

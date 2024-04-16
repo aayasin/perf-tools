@@ -112,5 +112,6 @@ Alder Lake | 5.13 | 5.17
 Raptor Lake | 5.18 |
 Sapphire Rapids | 5.18 |
 Meteor Lake | 6.4 | 6.3 or 6.5 onwards
+Granite Rapids | 6.3 | 6.5
 
 Besides, perf tool version 5.13 or newer is required (except observed [broken perf versions](settings/perf-bad.txt)). See `do.py --install-perf` for more.

@@ -766,7 +766,7 @@ def is_header(line):
   def patch(x):
     if debug: C.printf("\nhacking '%s' in: %s" % (x, line))
     return line.replace(x, '-', 1)
-  if 'ilen:' in line: return False
+  if '\tilen:' in line: return False
   if '[' in line[:50]:
     p = line.split('[')[0]
     assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()

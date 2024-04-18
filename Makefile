@@ -95,7 +95,7 @@ lspmu:
 help: do-help.txt
 do-help.txt: do.py common.py pmu.py tma.py
 	./pmu.py
-	./$< -h > $@ && sed -i 's|/home/admin1/ayasin/perf-tools|\.|' $@
+	./$< -h > $@ && sed -i 's|/.*pmu-tools|./pmu-tools|' $@
 	$(DO) profile --tune :flameg:1 :forgive:1 :help:-1 :msr:1 :tma-group:"'Auto-Detect'" :sample:3 --mode profile \
 	    -pm ffffff > /dev/null && cat profile-mask-help.md
 

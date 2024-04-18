@@ -264,7 +264,7 @@ def read_toplev(filename, metric=None):
       items = l.strip().split()
       if debug > 5: print('debug:', len(items), items, l)
       if items[0] == 'core': items.pop(0)
-      if l.startswith('Info'):
+      if l.startswith('Info') and 'Uncore_Frequency' not in l:
         d[items[1]] = (convert(items[3]), items[0])  # (value, group)
       elif '<==' in l:
         d['Critical-Group'] = (Key2group[items[0]], None)
@@ -378,7 +378,7 @@ def perf_log2stat(log, smt_on, d={}):
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
     if debug > 3: print('reading %s' % f)
     for l in C.file2lines(f):
-      if re.match('^\s*$|perf stat ', l): continue # skip empty lines
+      if re.match('^\s*$', l) or 'perf stat ' in l: continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2

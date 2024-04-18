@@ -1,6 +1,7 @@
+model,ZeroOk
 MTL,C01_WAIT;C02_WAIT;FP_Assists;AVX_Assists;C0_Wait;Contested_Accesses;Data_Sharing;False_Sharing
-SPR-HBM,MBA_Stalls;C01_WAIT;C02_WAIT;FP_Assists;AVX_Assists;C0_Wait;PMM_Bound;FP_Vector_512b;FP_AMX;Int_AMX;Contested_Accesses;Data_Sharing;False_Sharing
-SPR,MBA_Stalls;C01_WAIT;C02_WAIT;FP_Assists;AVX_Assists;C0_Wait;PMM_Bound;FP_Vector_512b;FP_AMX;Int_AMX;Contested_Accesses;Data_Sharing;False_Sharing
+SPR-HBM,MBA_Stalls;C01_WAIT;C02_WAIT;FP_Assists;AVX_Assists;C0_Wait;PMM_Bound;FP_Vector_512b;Contested_Accesses;Data_Sharing;False_Sharing
+SPR,MBA_Stalls;C01_WAIT;C02_WAIT;FP_Assists;AVX_Assists;C0_Wait;PMM_Bound;FP_Vector_512b;Contested_Accesses;Data_Sharing;False_Sharing
 ADL,C01_WAIT;C02_WAIT;FP_Assists;AVX_Assists;C0_Wait;Contested_Accesses;Data_Sharing;False_Sharing
 TGL,FP_Assists;FP_Vector_512b;Contested_Accesses;Data_Sharing;False_Sharing
 RKL,FP_Assists;FP_Vector_512b;Contested_Accesses;Data_Sharing;False_Sharing

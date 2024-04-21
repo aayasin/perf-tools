@@ -33,9 +33,10 @@ def icelake():    return name() in ('icelake', 'icl', 'icx', 'tgl')
 def alderlake():  return name() in ('alderlake_hybrid', 'adl')
 def sapphire():   return name() in ('sapphire_rapids', 'spr', 'spr-hbm')
 def meteorlake(): return name() in ('meteorlake_hybrid', 'mtl')
+def granite():    return name() in ('granite_rapids', 'gnr')
 # aggregations
 def goldencove():   return alderlake() or sapphire()
-def redwoodcove():  return meteorlake()
+def redwoodcove():  return meteorlake() or granite()
 def perfmetrics():  return icelake() or goldencove() or goldencove_on()
 # Skylake onwards
 def v4p(): return os.path.exists(sys_devices_cpu() + '/format/frontend') # PEBS_FRONTEND introduced by Skylake (& no root needed)
@@ -110,6 +111,13 @@ TPEBS = {'MTL':
   "FRONTEND_RETIRED.STLB_MISS,BR_MISP_RETIRED.INDIRECT_COST,BR_MISP_RETIRED.INDIRECT_CALL_COST,"
   "MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.SPLIT_LOADS,MEM_INST_RETIRED.LOCK_LOADS,FRONTEND_RETIRED.ANY_DSB_MISS,"
   "FRONTEND_RETIRED.ITLB_MISS,FRONTEND_RETIRED.L1I_MISS,FRONTEND_RETIRED.MS_FLOWS,FRONTEND_RETIRED.UNKNOWN_BRANCH",
+
+  'GNR': "BR_MISP_RETIRED.COND_NTAKEN_COST,BR_MISP_RETIRED.COND_TAKEN_COST,BR_MISP_RETIRED.INDIRECT_CALL_COST,BR_MISP_RETIRED.INDIRECT_COST,"
+    "BR_MISP_RETIRED.RET_COST,FRONTEND_RETIRED.ANY_DSB_MISS,FRONTEND_RETIRED.ITLB_MISS,FRONTEND_RETIRED.L1I_MISS,"
+	"FRONTEND_RETIRED.MS_FLOWS,FRONTEND_RETIRED.UNKNOWN_BRANCH,MEM_INST_RETIRED.LOCK_LOADS,MEM_INST_RETIRED.SPLIT_LOADS,"
+	"MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.STLB_HIT_LOADS,MEM_INST_RETIRED.STLB_HIT_STORES,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS,"
+	"MEM_LOAD_L3_HIT_RETIRED.XSNP_NO_FWD,MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM,MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM,MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD,"
+	"MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM,MEM_LOAD_RETIRED.L2_HIT,MEM_LOAD_RETIRED.L3_HIT",
 }
 # TODO: move this code to tma module
 def get_events(tag='MTL'):

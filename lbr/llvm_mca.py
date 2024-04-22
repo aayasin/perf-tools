@@ -16,7 +16,7 @@ import sys
 __author__ = 'akhalil'
 # edited: Mar 2023
 INTRO_MESSAGE = '\
-*******llvm_mca_lbr.py********\n\
+*******llvm_mca.py********\n\
 -Amiri Khalil        amiri.khalil@intel.com\n\
 -Andi Kleen        andi.kleen@intel.com\n\
 \n\

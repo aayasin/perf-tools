@@ -12,7 +12,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 
-from lbr import *
+from lbr.lbr import *
 import common as C
 
 c = {x: 0 for x in ('loop_head', 'loop_16B_unaligned', 'loop_32B_unaligned', 'loop_seq', 'loop_jmp2mid', 'loop_jmp2head',
@@ -34,28 +34,20 @@ while True:
                        skip_bad=not 'ANY_DSB_MISS' in ev)
   if not sample: break
   assert len(sample) > 2, 'invalid sample: ' + str(sample)
-  if edge_en: continue
+  if LC.edge_en: continue
   c['total'] += 1
-  if not is_taken(sample[-2]): c['sequential'] += 1
+  if not LC.is_taken(sample[-2]): c['sequential'] += 1
   bogus = sample[-1].strip().startswith('...')
-  if not bogus and is_after_uncond_jmp(line_ip(sample[-1])): c['after_uncond_jmp'] += 1
-  ip = header_ip(sample[0]) if bogus else line_ip(sample[-1])
-  if is_loop_by_ip(ip):
+  if not bogus and is_after_uncond_jmp(LC.line_ip(sample[-1])): c['after_uncond_jmp'] += 1
+  ip = header_ip(sample[0]) if bogus else LC.line_ip(sample[-1])
+  if loops.is_loop_by_ip(ip):
     c['loop_head'] += 1
     if ip & 0xF: c['loop_16B_unaligned'] += 1
     elif ip & 0x1F: c['loop_32B_unaligned'] += 1
-    if not is_taken(sample[-2]): c['loop_seq'] += 1
-    elif is_taken(sample[-2]) and is_jmp_next(get_taken(sample, -1)): c['loop_jmp2head'] += 1
+    if not LC.is_taken(sample[-2]): c['loop_seq'] += 1
+    elif LC.is_taken(sample[-2]) and is_jmp_next(get_taken(sample, -1)): c['loop_jmp2head'] += 1
     br = get_taken(sample, -2)
-    if br['to'] > ip and br['to'] <= get_loop(ip)['back']:
-      c['loop_jmp2mid'] += 1
-      continue
-      print_sample(sample, 22)
-      print_loop(ip)
-      print_br(br)
-      print(c)
-      print(stat)
-      exit(0)
+    if br['to'] > ip and br['to'] <= loops.get_loop(ip)['back']: c['loop_jmp2mid'] += 1
 
 if 1:
   if not loop: print_header()
@@ -64,8 +56,8 @@ if 1:
     '\n  Global:', ', '.join([C.ratio('sequential', c), C.ratio('loop_head', c), C.ratio('after_uncond_jmp', c)]),
     '\n  Loops:', ', '.join([loop_r('seq'), loop_r('jmp2mid'), loop_r('jmp2head'), loop_r('16B_unaligned'), loop_r('32B_unaligned')]) )
   if filter:
-    print_loop(loop)
-    print(stat)
+    loops.print_loop(loop)
+    print(LC.stat)
   else:
     print_all(top, loop_ipc=loop)
 

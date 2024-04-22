@@ -16,7 +16,7 @@ __version__= 0.96
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
-from lbr import print_stat
+from lbr.lbr import print_stat
 from kernels import x86
 
 def get_file(app, ext):

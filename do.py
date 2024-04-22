@@ -68,7 +68,6 @@ do = {'run':        C.RUN_DEF,
    # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens, 5: misp report, 6: slow-branch
   'imix':           0x3f if pmu.amd() else 0x7f,
   'loop-ideal-ipc': 0,
-  'loop-srcline':   0,
   'loops':          min(pmu.cpu('corecount'), 30),
   'log-stdout':     1,
   'lbr-branch-stats': 1,
@@ -109,6 +108,7 @@ do = {'run':        C.RUN_DEF,
   'reprocess':      2, # for LBR profile-step: -1: append, 0: lazy, 1: reuse header, 2: process anew
   'sample':         2,
   'size':           0,
+  'srcline':        0,
   'super':          0,
   'tee':            1,
   'time':           0,
@@ -179,8 +179,8 @@ def warn_file(x):
 def version(): return str(round(__version__, 3 if args.tune else 2))
 def module_version(mod_name):
   if mod_name == 'lbr':
-    import lbr
-    mod = lbr
+    import lbr.lbr
+    mod = lbr.lbr
   elif mod_name == 'analyze':
     import analyze
     mod = analyze
@@ -430,8 +430,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     ilen = ilen or do['lbr-jcc-erratum'] or do['lbr-indirects']
     if ilen and not perf_newer_than(5.17): error('perf is too old: %s (no ilen support)' % perf_version())
     return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
-                                                        ',+srcline' if do['loop-srcline'] else '',
-                                                        ' 2>>' + err if do['loop-srcline'] else '')
+                                                        ',+srcline' if do['srcline'] else '',
+                                                        ' 2>>' + err if do['srcline'] else '')
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'],
                 csv=False, # note !csv implies to collect TSC
                 basic_events=do['perf-stat-add'] > 1, last_events=',' + do['perf-stat-def'], warn=True,
@@ -690,7 +690,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         C.error("perf script failed to extract srcline info! Check errors at '%s'. "
                 "Try to use a newer or a different compiler" % err)
     def report_info(info, err, hists=['IPC', 'IpTB']):
-      if do['loop-srcline']: check_err(err)
+      if do['srcline']: check_err(err)
       hist_cmd = ''
       for h in hists: hist_cmd += " && %s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % h, info, '-A33'), h)
       exe("%s && tail %s | grep -v '[cC]ount of' %s" % (C.grep('code footprint', info), info, hist_cmd),
@@ -742,12 +742,13 @@ def profile(mask, toplev_args=['mvl6', None]):
       ips = '%s.ips.log'%data
       hits = '%s.hitcounts.log'%data
       loops = '%s.loops.log' % data
+      funcs = '%s.funcs.log' % data
       llvm_mca = '%s.llvm_mca.log' % data
       err = '%s.error.log' % data
       ev = C.flag_value(do['perf-lbr'], '-e')
       print_info('\n%s\n#\n' % lbr_hdr)
       if not isfile(hits) or do['reprocess']:
-        lbr_env = "LBR_LOOPS_LOG=%s" % loops
+        lbr_env = "LBR_LOOPS_LOG=%s LBR_FUNCS_LOG=%s" % (loops, funcs)
         cycles = get_stat(pmu.event('cycles')) or get_stat('cycles', 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if args.verbose > 2: do['lbr-verbose'] |= 0x800

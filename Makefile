@@ -19,6 +19,7 @@ SHELL := /bin/bash
 SHOW = tee
 SKIP_EX = false # Skip extra checks
 ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
+TEST_LBR_PERF = 1
 
 all: tramp3d-v4
 	@echo done
@@ -109,8 +110,10 @@ test-build:
 	    -pm 20006 -r 1 | $(SHOW) ) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
 test-default:
 	$(DO1) -pm $(PM) $(DO_SUFF)
+ifeq ($(TEST_LBR_PERF), 1)
 	info=$(shell ls -1tr *info.log | tail -1); grep '^LBR samples' $$info | awk -F 'samples/s: ' '{print $$2}' | \
-        awk -F '}' '{print $$1}' | awk '{if ($$1 > 30) exit 0; else exit 1}' || $(FAIL)
+	    awk -F '}' '{print $$1}' | awk '{if ($$1 > 30) exit 0; else exit 1}' || $(FAIL)
+endif
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp --tune :forgive:2 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
@@ -158,7 +161,7 @@ test-edge-inst:
 	$(DO) $(CMD) -a './pmu-tools/workloads/CLTRAMP3D' --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 
 clean:
-	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D*cmd
+	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D*cmd .ipc_*.txt
 pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5

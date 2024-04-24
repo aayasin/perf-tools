@@ -23,11 +23,12 @@ def inst_fusions(hitcounts, info):
                 'MOV-OP':     0,
                 'VEC LD-OP':  0,
                 'VEC MOV-OP': 0}
+  hotness = lambda s: C.str2list(s)[0]
   def is_mov(l):
+    l = l.replace(hotness(l), '')  # remove hotness
     return x86_f.is_fusion_mov(x86.get('inst', l), int=False) and not x86.is_mem_store(l)
   def calc_stats():
     block = hotness_key = None
-    hotness = lambda s: C.str2list(s)[0]
     int_cands_log = hitcounts.replace("hitcounts", "int-fusion-candidates")
     vec_cands_log = int_cands_log.replace('int', 'vec')
     def find_cand(lines):

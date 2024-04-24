@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.96
+__version__= 0.97
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -397,13 +397,17 @@ def perf_log2stat(log, smt_on, d={}):
   return stat
 
 def inst_fusions(hitcounts, info):
-  stats_data = {'LD-OP': 0,
-                'MOV-OP': 0}
+  stats_data = {'LD-OP':      0,
+                'MOV-OP':     0,
+                'VEC LD-OP':  0,
+                'VEC MOV-OP': 0}
   def calc_stats():
     block = hotness_key = None
     hotness = lambda s: C.str2list(s)[0]
-    is_mov = lambda l: 'mov' in l and not x86.is_mem_store(l)
-    cands_log = hitcounts.replace("hitcounts", "fusion-candidates")
+    is_mov = lambda l: 'mov' in l and not re.search(x86.CMOV, l) \
+                       and not re.search(x86.MOV_X, l) and not x86.is_mem_store(l)
+    int_cands_log = hitcounts.replace("hitcounts", "int-fusion-candidates")
+    vec_cands_log = int_cands_log.replace('int', 'vec')
     def find_cand(lines):
       patch = lambda s: s.replace(s.split()[0], '')
       if len(lines) < 3: return None  # need 3 insts at least
@@ -423,25 +427,28 @@ def inst_fusions(hitcounts, info):
           # jcc macro-fusion disables candidate
           if i < len(to_check) - 1 and x86.is_jcc_fusion(line, patch(to_check[i+1])): return None
           ld_fusion, mov_fusion = x86.is_ld_op_fusion(mov_line, line), x86.is_mov_op_fusion(mov_line, line)
-          if not ld_fusion and not mov_fusion: return None
-          # check if dest reg was used as src before OP or OP src reg was ever modified
+          vld_fusion, vmov_fusion = x86.is_vec_ld_op_fusion(mov_line, line), x86.is_vec_mov_op_fusion(mov_line, line)
+          int_fusion, vec_fusion = ld_fusion or mov_fusion, vld_fusion or vmov_fusion
+          if not int_fusion and not vec_fusion: return None
+          # check if dest reg was used as src before OP or any OP src was ever modified
           srcs = x86.get('srcs', line)
-          assert len(srcs) == 1
-          src_reg = srcs[0]
+          src_reg = srcs[-1]
           for x in range(1, i + 2):
-            if re.search(x86.CMOV, x86.get('inst', lines[x])): return None  # CMOV will use wrongly modified RFLAGS
-            if x86.is_sub_reg(x86.get('dst', lines[x]), src_reg): return None  # OP src reg was modified before OP
+            if int_fusion and re.search(x86.CMOV, x86.get('inst', lines[x])): return None  # CMOV will use wrongly modified RFLAGS
+            line_dst = x86.get('dst', lines[x])
+            for src in srcs:
+              if not x86.is_imm(src) and x86.is_sub_reg(line_dst, src): return None  # OP src was modified before OP
             if C.any_in(dest_subs, lines[x]): return None  # dest reg used before OP
           # candidate found
-          new_hotness = int(hotness(lines[0]))
-          if ld_fusion: stats_data['LD-OP'] += new_hotness
-          else: stats_data['MOV-OP'] += new_hotness
+          key = 'LD' if ld_fusion else 'MOV' if mov_fusion else 'VEC LD' if vld_fusion else 'VEC MOV'
+          stats_data[key + '-OP'] += int(hotness(lines[0]))
           # append candidate block to log
           header, tail = lines[0][:25] + "\n", lines[i+2][:25] + "zz - block end\n"  # headers to differentiate blocks
           block_list = [header] + lines[0:i+3] + [tail]
-          C.fappend(''.join(block_list), cands_log, end='')
+          C.fappend(''.join(block_list), int_cands_log if int_fusion else vec_cands_log, end='')
       return None
-    if os.path.exists(cands_log): os.remove(cands_log)
+    if os.path.exists(int_cands_log): os.remove(int_cands_log)
+    if os.path.exists(vec_cands_log): os.remove(vec_cands_log)
     # for each hotness block, create a list of the lines then check
     with open(hitcounts, "r") as hits:
       for line in hits:

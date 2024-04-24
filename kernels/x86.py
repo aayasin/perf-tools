@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.43
+__version__ = 0.53
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -37,6 +37,7 @@ LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"v?mov[a-z0-9]*\s+[^,]*\("
 LOAD_ANY  = r"[a-z0-9]+\s+[^,]*\("  # use is_mem_load()
 MOV       = r"v?mov"
+MOV_X     = r"%s(s|z)x" % MOV
 STORE     = r"\s+\S+\s+[^\(\),]+,"  # use is_mem_store()
 TEST_CMP  = r"(test|cmp).?\s"
 
@@ -181,7 +182,7 @@ def is_mov_op_fusion(line1, line2):
   if 'lock' in line1 or 'lock' in line2: return False
   # MOV reg-reg
   inst = get('inst', line1)
-  if re.search(CMOV, inst) or 'mov' not in inst: return False
+  if re.search(CMOV, inst) or re.search(MOV_X, inst) or 'vmov' in inst or 'mov' not in inst: return False
   if is_memory(line1) or is_imm(line1): return False
   inst = get('inst', line2)
   if not C.any_in(['add', 'sub', 'and', 'or', 'xor', 'imul', 'inc', 'dec', 'not',
@@ -201,7 +202,8 @@ def is_mov_op_fusion(line1, line2):
 
 def is_ld_op_fusion(line1, line2):
   if 'lock' in line1 or 'lock' in line2: return False
-  if not re.search(LOAD, line1) or re.search(CMOV, get('inst', line1)): return False
+  inst = get('inst', line1)
+  if not re.search(LOAD, line1) or re.search(CMOV, inst) or 'vmov' in inst: return False
   if not C.any_in(['add', 'sub', 'and', 'or', 'xor', 'imul'], get('inst', line2)): return False
   if '(%rip' in line1: return False  # not RIP relative
   if re.search(MEM_IDX, line1): return False  # no index register
@@ -218,3 +220,84 @@ def is_ld_op_fusion(line1, line2):
   # no 64-bit fusion in imul
   if 'imul' in line2 and op_dest in REGS_64: return False
   return True
+
+SUFF1, SUFF2 = ['b', 'w', 'd', 'q'], ['ps', 'pd']
+#VMOVDQA/VMOVDQU/VMOVAPS/VMOVAPD/VMOVUPS/VMOVUPD
+HEADS_MOV = ['mov' + x for x in (['dqa', 'dqu'] + [y + x for x in SUFF2 for y in ['a', 'u']])]
+#VMOVUPS/VMOVUPD/VMOVDQU
+HEADS_LD = ['mov' + x for x in (['dqu'] + ['u' + x for x in SUFF2])]
+OPS_BASIC = ['and', 'or', 'xor']
+#OPs that apply for all heads
+#[AND/OR/XOR]PS
+OPS_ALL = [x + 'ps' for x in OPS_BASIC]
+#OPs that apply for all MOV heads and LD head 0
+#[AND/OR/XOR]PD, PSADBW, PMULLW, PMADDWD, PADD[USB/SB/B/W/USW/SW/D/Q], PCMPEQ[B/W/D], P[AND/XOR/OR/MINUB/MAXUB/MINSW/MAXSW/AVGB/AVGW]
+OPS_MOV = [x + 'pd' for x in OPS_BASIC] + \
+          ['p' + x for x in (OPS_BASIC + ['sadbw', 'mullw', 'maddwd'] + [y + z for z in ['ub', 'sw'] for y in ['min', 'max']] +
+                             ['add' + y for y in (SUFF1 + ['usb', 'sb', 'usw', 'sw'])] +
+                             ['cmpeq' + y for y in ['b', 'w', 'd']] + ['avg' + y for y in ['b', 'w']])]
+OPS_LD1 = OPS_MOV
+#OPs that apply for all MOV heads
+#PMUL[LW/HUW/UDQ], [ADD/SUB/MIN/MAX/MUL][PS/PD/SS/SD], [DIV/ANDN][PS/PD], ADDSUB[PS/PD], PUNPCK[LBW/LWD/LDQ/HBW/HWD/HDQ/LQDQ/HQDQ],
+#PACK[USWB/SSWB/SSDW], UNPCK[L/H][PS/PD], PSUB[USB/SB/B/W/USW/SW/D/Q], PCMPGT[B/W/D], PANDN, CMPLEPS, [CMP/SHUF]PS
+OPS_MOV += ['p' + x for x in (['mul' + y for y in ['lw', 'huw', 'udq']] +
+                              ['unpck' + y for y in ['lbw', 'lwd', 'ldq', 'hbw', 'hwd', 'hdq', 'lqdq', 'hqdq']] +
+                              ['sub' + y for y in (['usb', 'sb', 'usw', 'sw'] + SUFF1)] + ['cmpgt' + y for y in ['b', 'w', 'd']] +
+                              ['andn'])] + \
+           [x + y for y in (SUFF2 + ['ss', 'sd']) for x in ['add', 'sub', 'min', 'max', 'mul']] + \
+           [x + y for y in SUFF2 for x in ['div', 'andn', 'addsub']] + ['pack' + x for x in ['uswb', 'sswb', 'ssdw']] + \
+           ['unpck' + x for x in [y + z for z in SUFF2 for y in ['l', 'h']]] + [x + 'ps' for x in ['cmple', 'cmp', 'shuf']]
+#OPs that apply for MOV heads 0, 1, 3 and 5
+#BLEND[PS/PD]/PBLENDW
+OPS_MOV2 = ['pblendw'] + ['blend' + x for x in SUFF2]
+#OPs that apply for MOV heads 2 and 4 and LD heads 1 and 2
+#PMULHRSW, PCMPEQQ, P[MIN/MAX][SB/SD/UW/UD], ANDN
+OPS_MOV3 = ['andn'] + ['p' + x for x in (['mulhrsw', 'cmpeqq'] + [y + z for z in ['sb', 'sd', 'uw', 'ud'] for y in ['min', 'max']])]
+OPS_LD2 = OPS_MOV3
+#OPs that apply for MOV heads 2 and 4
+#PMADDUBSW, PMULDQ, PACKUSDW, PCMPGTQ, CMPLE[PD/SS/SD], CMP[SS/SD]/SHUFPD
+OPS_MOV3 += ['p' + x for x in (['maddubsw', 'muldq', 'cmpgtq'])] + ['packusdw', 'shufpd'] + \
+            ['cmple' + x for x in ['pd', 'ss', 'sd']] + ['cmp' + x for x in ['ss', 'sd']]
+#OPs that apply for MOV heads 2 and 4 only with immediate
+#PS[RLW/RLD/RLQ/LLW/LLD/LLQ/RAW/RAD]
+OPS_MOV3_IMM = ['ps' + x for x in ['rlw', 'rld', 'rlq', 'llw', 'lld', 'llq', 'raw', 'rad']]
+
+def is_vec_mov_op_fusion(line1, line2):
+  def check(l, d): return is_memory(l) or not d or not 'xmm' in d
+  if 'lock' in line1 or 'lock' in line2: return False
+  inst1 = get('inst', line1)
+  if not inst1 in HEADS_MOV: return False
+  dst1, dst2 = get('dst', line1), get('dst', line2)
+  # no memory
+  if check(line1, dst1) or check(line2, dst2): return False
+  if dst1 != dst2: return False  # same dest reg
+  inst2 = get('inst', line2)
+  if inst2 in OPS_ALL or inst2 in OPS_MOV: return True
+  head_i = HEADS_MOV.index(inst1)
+  if head_i == 2 or head_i == 4:
+    if inst2 in OPS_MOV3: return True
+    if inst2 in OPS_MOV3_IMM and is_imm(line2): return True
+    return False
+  # head_i is one of 0, 1, 3, 5
+  return inst2 in OPS_MOV2
+
+def is_vec_ld_op_fusion(line1, line2):
+  def check(d): return not d or not 'xmm' in d
+  if 'lock' in line1 or 'lock' in line2: return False
+  inst1 = get('inst', line1)
+  if inst1.endswith('x'): inst1 = inst1[:-1]  # removing potential extension suffix
+  if not inst1 in HEADS_LD: return False
+  if is_memory(line2): return False
+  if '(%rip' in line1: return False  # not RIP relative
+  if re.search(MEM_IDX, line1): return False  # no index register
+  dst1, dst2 = get('dst', line1), get('dst', line2)
+  if check(dst1) or check(dst2): return False
+  if dst1 != dst2: return False  # same dest reg
+  src = get('srcs', line2)
+  if len(src) > 1: return False  # no three operand OPs
+  assert len(src) == 1
+  if src[0] == dst2: return False  # different OP regs
+  inst2 = get('inst', line2)
+  if inst2 in OPS_ALL: return True
+  if HEADS_LD.index(inst1) == 0: return inst2 in OPS_LD1
+  return inst2 in OPS_LD2

@@ -20,7 +20,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__ = 1.00
+__version__ = 1.01
 
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('LBR_DBG')
@@ -75,7 +75,7 @@ Insts_leaf_func = ['-'.join([x, 'leaf', y]) for y in ('dircall', 'indcall') for 
 Insts_global = Insts + is_imix(None) + x86.mem_type() + Insts_leaf_func + ['all']
 Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first'
               ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
-Insts_Fusions = [x + '-OP fusible' for x in ['MOV', 'LD']]
+Insts_Fusions = [x + '-OP fusible' for x in [y + z for z in ['MOV', 'LD'] for y in ['', 'VEC ']]]
 Insts_MRN = ['%s non-MRNable'%x for x in ['INC','DEC','LD-ST']]
 Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_MRN + Insts_global
 

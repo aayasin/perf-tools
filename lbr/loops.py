@@ -17,6 +17,7 @@ from common import inc
 import lbr.common_lbr as LC
 from kernels import x86
 import re, sys, os
+__version__ = 1.01
 
 use_cands = os.getenv('LBR_USE_CANDS')
 
@@ -206,6 +207,8 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         elif x == len(lines) - 2 or not x86.is_jcc_fusion(lines[x + 1], lines[x + 2]):
           if x86.is_ld_op_fusion(lines[x], lines[x + 1]): ld_op_mf += 1
           elif x86.is_mov_op_fusion(lines[x], lines[x + 1]): mov_op_mf += 1
+        if x86.is_vec_ld_op_fusion(lines[x], lines[x + 1]): ld_op_mf += 1
+        elif x86.is_vec_mov_op_fusion(lines[x], lines[x + 1]): mov_op_mf += 1
         # erratum feature disabled if erratum is None, otherwise erratum counts feature cases
         if erratum is not None and LC.is_jcc_erratum(lines[x + 1], lines[x]): erratum += 1
         t = LC.line_inst(lines[x])

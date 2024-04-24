@@ -245,6 +245,8 @@ def edge_stats(line, lines, xip, size):
     x2line = prev_line(-2)
     if x86.is_ld_op_fusion(x2line, xline): inc_pair('LD', 'OP', suffix='fusible')
     elif x86.is_mov_op_fusion(x2line, xline): inc_pair('MOV', 'OP', suffix='fusible')
+    if x86.is_vec_ld_op_fusion(lines[-2], lines[-1]): inc_pair('VEC LD', 'OP', suffix='fusible')
+    elif x86.is_vec_mov_op_fusion(lines[-2], lines[-1]): inc_pair('VEC MOV', 'OP', suffix='fusible')
   if LC.is_type('call', xline): inc(hsts[FUNCI], ip)
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,

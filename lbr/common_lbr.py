@@ -14,13 +14,13 @@ __author__ = 'ayasin'
 
 import sys, os, re
 import common as C, pmu
-from kernels import x86
+import lbr.x86 as x86
+from lbr.x86_fusion import is_jcc_fusion
 try:
   from numpy import average
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__ = 1.00
 
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('LBR_DBG')
@@ -75,7 +75,7 @@ Insts_leaf_func = ['-'.join([x, 'leaf', y]) for y in ('dircall', 'indcall') for 
 Insts_global = Insts + is_imix(None) + x86.mem_type() + Insts_leaf_func + ['all']
 Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fusible', 'taken-not-first'
               ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
-Insts_Fusions = [x + '-OP fusible' for x in ['MOV', 'LD']]
+Insts_Fusions = [x + '-OP fusible' for x in [y + z for z in ['MOV', 'LD'] for y in ['', 'VEC ']]]
 Insts_MRN = ['%s non-MRNable'%x for x in ['INC','DEC','LD-ST']]
 Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_MRN + Insts_global
 
@@ -154,7 +154,7 @@ def is_jcc_erratum(line, previous=None):
   # JCC/CALL/RET/JMP
   if not is_type(x86.COND_BR, line) and not is_type(x86.CALL_RET, line) and not is_type(x86.JMP_RET, line): return False
   ip = line_ip(line)
-  if previous and x86.is_jcc_fusion(previous, line):
+  if previous and is_jcc_fusion(previous, line):
     ip = line_ip(previous)
     length += get_ilen(previous)
   next_ip = ip + length

@@ -23,7 +23,8 @@ __version__ = 3.22
 import argparse, os.path, re, sys
 
 import analyze, common as C, pmu, stats, tma
-from kernels import x86
+from lbr import x86
+from lbr.stats import inst_fusions
 from datetime import datetime
 from getpass import getuser
 from math import log10
@@ -749,6 +750,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       ev = C.flag_value(do['perf-lbr'], '-e')
       print_info('\n%s\n#\n' % lbr_hdr)
       if not isfile(hits) or do['reprocess']:
+        if sys.version_info < (3, 0): C.error('Python 3 or above required')
         lbr_env = "LBR_LOOPS_LOG=%s LBR_FUNCS_LOG=%s" % (loops, funcs)
         cycles = get_stat(pmu.event('cycles')) or get_stat('cycles', 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
@@ -775,7 +777,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         if (do['imix'] & 0x4) == 0:
           cmd += ' > /dev/null'
         perf_script(cmd, msg, data)
-        if args.mode != "profile": stats.inst_fusions(hits, info)
+        if args.mode != "profile": inst_fusions(hits, info)
         if do['imix'] & 0x4: exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
             "@instruction-mix no operands")
         if args.verbose > 0: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)

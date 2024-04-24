@@ -144,7 +144,7 @@ grep Loop#$(1) tripcount-mean-$(TMI)*info.log | awk -F 'tripcount-mean: ' '{prin
 awk -F ',' '{print $$1}' | awk 'BEGIN {lower=$(2); upper=$(3)} {if ($$1 >= lower && $$1 <= upper) exit 0; \
 else exit 1}' || $(FAIL)
 endef
-test-tripcount-mean: lbr/lbr.py do.py kernels/x86.py
+test-tripcount-mean: lbr/lbr.py do.py lbr/x86.py
 	gcc -g -O2 kernels/tripcount-mean.c -o kernels/tripcount-mean > /dev/null 2>&1
 	$(DO) log $(CMD) -a './kernels/tripcount-mean $(TMI)' --perf ../perf -pm 100 > /dev/null 2>&1
 	$(call check_tripcount,1,90,110)

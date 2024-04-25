@@ -557,7 +557,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def toplev_V(v, tag='', nodes=do['nodes'],
                tlargs = toplev_args[1] if toplev_args[1] else args.toplev_args):
     o = '%s.toplev%s%s.log' % (out, v.split()[0]+tag, '-nomux' if 'no-multiplex' in tlargs else '')
-    if pmu.redwoodcove_on():
+    if do['model'] and pmu.redwoodcove_on():
       retlat = '%s/%s-retlat.json' % (C.dirname(), out)
       tlargs += ' --ret-latency %s' % retlat
       if profiling() and not isfile(retlat):

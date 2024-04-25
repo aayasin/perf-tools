@@ -25,7 +25,10 @@ else:
 def sys_devices_cpu(): return '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
 def name(real=False):
   forcecpu = C.env2str('FORCECPU')
-  return C.file2str(sys_devices_cpu() + '/caps/pmu_name') or 'Unknown PMU' if real or not forcecpu else forcecpu.lower()
+  def pmu_name():
+    x = C.file2str(sys_devices_cpu() + '/caps/pmu_name')
+    return "granite_rapids" if x == 'sapphire_rapids' and redwoodcove_on() else x
+  return pmu_name() or 'Unknown PMU' if real or not forcecpu else forcecpu.lower()
 
 # per CPU PMUs
 def skylake():    return name() in ('skylake', 'skl')

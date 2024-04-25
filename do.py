@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.21
+__version__ = 3.22
 
 import argparse, os.path, re, sys
 
@@ -239,7 +239,7 @@ def tools_update(kernels=[], mask=0x7):
   if mask & 0x1: 
     ks = [''] + C.exe2list("git status | grep 'modified.*kernels' | cut -d/ -f2") + kernels
     exe('git checkout HEAD run.sh' + ' kernels/'.join(ks))
-  if mask & 0x2: exe('git pull && cd pmu-tools/ && git pull')
+  if mask & 0x2: exe('git pull && cd pmu-tools/ && git checkout master && git pull origin master')
   if mask & 0x4:
     assert not globs['force-cpu'], 'FORCECPU not supported for tools-update/eventlist-update commands'
     exe(args.pmu_tools + "/event_download.py ")

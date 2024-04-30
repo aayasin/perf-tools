@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.96
+__version__= 0.97
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -113,6 +113,7 @@ def is_metric(s):
 def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
+  histo = None
   for l in C.file2lines(info):
     if 'IPC histogram of' in l: break  # stops upon detailed loops stats
     s = v = None
@@ -123,12 +124,32 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
       s = l[0].strip()#' '.join(l[0].split()) # re.sub('  +', ' ', l[0])
       if sep: s = C.chop(re.sub(r'[\s\-]+', sep, s))
       v = convert(l[1])
+    # extract global histograms
+    if 'histogram:' in l:  # histogram start
+      histo = '%s_' % l.split()[0].replace(C.color.DARKCYAN, '')
+      continue
+    if histo and 'summary:' in l:  # histogram end
+      g += 'Histo'
+      l_list = l.split('{')[1][:-1].split(',')
+      for e in l_list:
+        e_list = e.split(':')
+        value = convert(e_list[1].strip())
+        k = '%s%s%s' % ((g + '.') if not groups else '', histo, e_list[0].strip())
+        d[k] = (value, g) if groups else value
+      histo = None
+      continue
+    if histo:  # histogram line
+      g += 'Histo'
+      l_list = l.split()
+      s = '%s%s[%s]' % ((g + '.') if not groups else '', histo, l_list[0][:-1])
+      v = convert(l_list[1])
     if not v is None:
-      if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
-        g += 'Glob'
-      elif is_metric(s): g += 'Metric'
-      elif s.startswith('proxy count'): g += 'Proxy'
-      else: g += 'Event'
+      if groups and g == 'LBR.':
+        if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
+          g += 'Glob'
+        elif is_metric(s): g += 'Metric'
+        elif s.startswith('proxy count'): g += 'Proxy'
+        else: g += 'Event'
       d[s] = (v, g) if groups else v
   if read_loops: d.update(read_loops_info(info, loop_id, sep=sep, groups=groups))
   return d

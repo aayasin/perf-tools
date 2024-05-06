@@ -14,7 +14,7 @@ __author__ = 'akhalil'
 import common as C
 import lbr.common_lbr as LC
 from lbr.loops import loops
-from kernels import x86
+import lbr.x86_fusion as x86_f, lbr.x86 as x86
 
 user_imix = C.env2list('LBR_FUNC_IMIX', ['zcnt'])
 types = ['lea', 'cmov'] + x86.MEM_INSTS + user_imix
@@ -199,10 +199,12 @@ def process_function(lines, srcline, outer_funcs=[]):
       inner_end = lines.index(resume_line)
       continue
     if index > 1:
-      if x86.is_jcc_fusion(lines[index - 1], line): new_flow.op_jcc_mf += 1
-      elif index == len(lines) - 1 or not x86.is_jcc_fusion(line, lines[index + 1]):
-        if x86.is_mov_op_fusion(lines[index - 1], line): new_flow.mov_op_mf += 1
-        elif x86.is_ld_op_fusion(lines[index - 1], line): new_flow.ld_op_mf += 1
+      if x86_f.is_jcc_fusion(lines[index - 1], line): new_flow.op_jcc_mf += 1
+      elif index == len(lines) - 1 or not x86_f.is_jcc_fusion(line, lines[index + 1]):
+        if x86_f.is_mov_op_fusion(lines[index - 1], line) or x86_f.is_vec_mov_op_fusion(lines[index - 1], line):
+          new_flow.mov_op_mf += 1
+        elif x86_f.is_ld_op_fusion(lines[index - 1], line) or x86_f.is_vec_ld_op_fusion(lines[index - 1], line):
+          new_flow.ld_op_mf += 1
     t = LC.line_inst(line)
     if t and t in types: insts_cnt[t] += 1
     if line_ip in loops and not loop_code:

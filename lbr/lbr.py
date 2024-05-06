@@ -19,13 +19,14 @@ import lbr.loops as loops
 import lbr.funcs as funcs
 import os, re, sys, time
 from lbr.llvm_mca import get_llvm
-from kernels import x86
+from lbr import x86
+import lbr.x86_fusion as x86_f
 try:
   from numpy import average
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.17 # see version line of do.py
+__version__= x86.__version__ + 2.18 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 
@@ -215,7 +216,7 @@ def edge_stats(line, lines, xip, size):
   if LC.is_type(x86.COND_BR, line):
     if LC.is_taken(line): LC.glob['cond_taken-not-first'] += 1
     else: LC.glob['cond_non-taken'] += 1
-    if x86.is_jcc_fusion(xline, line):
+    if x86_f.is_jcc_fusion(xline, line):
       LC.glob['cond_fusible'] += 1
       if size > 1 and LC.is_type(x86.TEST_CMP, xline) and LC.is_type(x86.LOAD, prev_line(-2)):
         inc_pair('LD-CMP', suffix='fusible')
@@ -233,7 +234,7 @@ def edge_stats(line, lines, xip, size):
         if counted: pass
         elif LC.is_type(x86.COND_BR, xline): counted = inc_pair('JCC')
         elif LC.is_type(x86.COMI, xline): counted = inc_pair('COMI')
-        if size > 1 and x86.is_jcc_fusion(prev_line(-2), line):
+        if size > 1 and x86_f.is_jcc_fusion(prev_line(-2), line):
           def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
           if LC.is_type(x86.MOV, xline): inc_pair2('MOV')
           elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
@@ -241,10 +242,12 @@ def edge_stats(line, lines, xip, size):
   if LC.is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
   if LC.verbose & 0x1 and LC.is_type('ret', line): edge_leaf_func_stats(lines, line)
   if size <= 1: return # a sample with >= 2 instructions after this point
-  if not x86.is_jcc_fusion(xline, line):
+  if not x86_f.is_jcc_fusion(xline, line):
     x2line = prev_line(-2)
-    if x86.is_ld_op_fusion(x2line, xline): inc_pair('LD', 'OP', suffix='fusible')
-    elif x86.is_mov_op_fusion(x2line, xline): inc_pair('MOV', 'OP', suffix='fusible')
+    if x86_f.is_ld_op_fusion(x2line, xline): inc_pair('LD', 'OP', suffix='fusible')
+    elif x86_f.is_mov_op_fusion(x2line, xline): inc_pair('MOV', 'OP', suffix='fusible')
+    if x86_f.is_vec_ld_op_fusion(lines[-2], lines[-1]): inc_pair('VEC LD', 'OP', suffix='fusible')
+    elif x86_f.is_vec_mov_op_fusion(lines[-2], lines[-1]): inc_pair('VEC MOV', 'OP', suffix='fusible')
   if LC.is_type('call', xline): inc(hsts[FUNCI], ip)
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,

@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/..')
 import common as C
 
 import jumpy as J, references
-from x86 import *
+from lbr.x86 import x86_asm, INST_1B, INST_UNIQ
 
 ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--unroll-factor', type=int, default=3, help='# times to repeat instruction(s), aka unroll-factor')

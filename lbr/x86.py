@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.43
+__version__ = 0.53
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -37,6 +37,7 @@ LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"v?mov[a-z0-9]*\s+[^,]*\("
 LOAD_ANY  = r"[a-z0-9]+\s+[^,]*\("  # use is_mem_load()
 MOV       = r"v?mov"
+MOVS_ZX     = r"%s(s|zx)" % MOV
 STORE     = r"\s+\S+\s+[^\(\),]+,"  # use is_mem_store()
 TEST_CMP  = r"(test|cmp).?\s"
 
@@ -138,6 +139,11 @@ def get(what, line):
   if is_memory(check) or is_imm(check) or check.startswith('%') or check.startswith('0x'): return res[1]
   return ' '.join(res[1:3])
 
+REGS_32 = ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp', 'esp'] + \
+          ['r' + str(n) + 'd' for n in range(8, 16)]
+REGS_64 = [x.replace('e', 'r') for x in REGS_32 if x.startswith('e')] + \
+          [x.replace('d', '') for x in REGS_32 if x.startswith('r')]
+
 # 64-bit, 32-bit & 16-bit sub regs for 32/64 bit regs
 def sub_regs(reg):
   subs = [reg, reg, None]
@@ -149,72 +155,3 @@ def sub_regs(reg):
     subs[2] = reg.replace('d', 'w') if '1' in reg else reg.replace('e', '')
   return subs
 def is_sub_reg(sub_reg, orig): return sub_reg in sub_regs(orig)
-
-# CMP, TEST, AND, ADD and SUB may be macro-fused if they compare reg-reg, reg-imm, reg-mem, mem-reg,
-# means no mem-imm fusion
-# TEST and AND fuse with all JCCs
-# CMP, ADD and SUB fuse with [JC, JB, JAE/JNB], [JE, JZ, JNE, JNZ], [JNA/JBE, JA/JNBE] and
-# [JL/JNGE, JGE/JNL, JLE/JNG, JG/JNLE]
-# INC and DEC fuse with [JE, JZ, JNE, JNZ] and [JL/JNGE, JGE/JNL, JLE/JNG, JG/JNLE] on reg and not memory
-M_FUSION_INSTS = ['cmp', 'test', 'add', 'sub', 'inc', 'dec', 'and']
-def is_jcc_fusion(line1, line2):
-  match = re.search(COND_BR, line2)
-  if not match: return False
-  inst = get('inst', line1)
-  if not C.any_in(M_FUSION_INSTS, inst): return False
-  if C.any_in(['inc', 'dec'], inst) and is_memory(line1): return False
-  if is_memory(line1) and is_imm(line1): return False
-  if C.any_in(['test', 'add'], inst): return True
-  JCC_GROUP1 = ['je', 'jz', 'jne', 'jnz', 'jl', 'jnge', 'jge', 'jnl', 'jle', 'jng', 'jg', 'jnle']
-  JCC_GROUP2 = ['jc', 'jb', 'jae', 'jnb', 'jna', 'jbe', 'ja', 'jnbe']
-  jcc = match.group(0)
-  if jcc in JCC_GROUP1: return True
-  if jcc in JCC_GROUP2 and C.any_in(['cmp', 'add', 'sub'], inst): return True
-  return False
-
-REGS_32 = ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp', 'esp'] + \
-          ['r' + str(n) + 'd' for n in range(8, 16)]
-REGS_64 = [x.replace('e', 'r') for x in REGS_32 if x.startswith('e')] + \
-          [x.replace('d', '') for x in REGS_32 if x.startswith('r')]
-
-def is_mov_op_fusion(line1, line2):
-  if 'lock' in line1 or 'lock' in line2: return False
-  # MOV reg-reg
-  inst = get('inst', line1)
-  if re.search(CMOV, inst) or 'mov' not in inst: return False
-  if is_memory(line1) or is_imm(line1): return False
-  inst = get('inst', line2)
-  if not C.any_in(['add', 'sub', 'and', 'or', 'xor', 'imul', 'inc', 'dec', 'not',
-                   'neg', 'btc', 'btr', 'bts', 'shl', 'sal', 'sar', 'shr', 'rol', 'ror', 'shrd'], inst):
-    return False
-  # 32 or 64 bit dest
-  dest_reg = get('dst', line1)
-  if dest_reg not in REGS_32 and dest_reg not in REGS_64: return False
-  if is_memory(line2): return False  # no mem in OP
-  if not dest_reg == get('dst', line2): return False  # same dest
-  if len(get('srcs', line2)) > 1: return False  # no three operand OPs
-  # no reg-reg shift or rotate
-  if not is_imm(line2) and C.any_in(['shl', 'sal', 'sar', 'shr', 'rol', 'ror', 'shrd'], inst): return False
-  # no 64-bit fusion in imul
-  if 'imul' in inst and dest_reg in REGS_64: return False
-  return True
-
-def is_ld_op_fusion(line1, line2):
-  if 'lock' in line1 or 'lock' in line2: return False
-  if not re.search(LOAD, line1) or re.search(CMOV, get('inst', line1)): return False
-  if not C.any_in(['add', 'sub', 'and', 'or', 'xor', 'imul'], get('inst', line2)): return False
-  if '(%rip' in line1: return False  # not RIP relative
-  if re.search(MEM_IDX, line1): return False  # no index register
-  # 32 or 64 bit dest
-  dest_reg = get('dst', line1)
-  if dest_reg not in REGS_32 and dest_reg not in REGS_64: return False
-  if is_memory(line2) or is_imm(line2): return False  # reg-reg OP
-  srcs = get('srcs', line2)
-  if len(srcs) > 1: return False  # no three operand OPs
-  assert len(srcs) == 1
-  op_src, op_dest = srcs[0], get('dst', line2)
-  if not dest_reg == op_dest: return False  # same dest
-  if op_src == op_dest: return False  # different OP regs
-  # no 64-bit fusion in imul
-  if 'imul' in line2 and op_dest in REGS_64: return False
-  return True

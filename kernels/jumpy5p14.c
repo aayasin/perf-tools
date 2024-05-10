@@ -4,14 +4,13 @@
 //
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef ITER
+#define ITER 20000
+#endif
 int main(int argc, const char* argv[])
 {
     long i,n;
-    if (argc<2) {
-        printf("%s: missing <num-iterations> arg!\n", argv[0]);
-        exit(-1);
-    }
-    n= atol(argv[1]);
+    n= argv[1] ? atol(argv[1]) : ITER;
     asm("	PAUSE");
     for (i=0; i<n; i++) {
         asm("Lbl000:");

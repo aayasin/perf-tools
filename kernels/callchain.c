@@ -58,13 +58,9 @@ int main(int argc, const char* argv[])
   double r=1;
   long long len;
   
-  if (argc<2) {
-	  printf("error: number of iterations is missing !\n");
-	  return (-1);
-  }
   if (MSG) printf("%s\n", MSG ? MSG : "");
 
-  len = atol(argv[1]);
+  len = argv[1] ? atol(argv[1]) : ITER;
   CO += 1.0f/len;
 
   for (i=0; i<len; i++)

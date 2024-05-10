@@ -5,6 +5,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef ITER
+#define ITER 20000
+#endif
 
 union fool_cpu {
 
@@ -21,12 +24,7 @@ int tab[10];
 
 int main(int argc, char *argv[])
 {
-    if (argc<2) {
-    printf("%s: missing <num-iterations> arg!\n", argv[0]);
-    exit(-1);
-    }
-
-    int nloop = atol(argv[1]);
+    int nloop = argv[1] ? atol(argv[1]) : ITER;
     int idx = 1;
 
     volatile union fool_cpu *tt = (union fool_cpu *)(tab + idx);

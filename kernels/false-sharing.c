@@ -11,11 +11,12 @@ long n;
 void *worker_thread(void *arg)
 {
         struct timeval stop, start;
+	int i;
         gettimeofday(&start, NULL);
 
         long* counter_to_inc = (long*)arg;
 
-        for(int i = 0; i < n; i++){
+        for(i = 0; i < n; i++){
                 (*counter_to_inc)++;
         }
         printf("counter = %ld\n",*counter_to_inc);

@@ -117,8 +117,8 @@ def x86_inst(x):
     if x == a: return aliases[a]
   return x
 
-def x86_asm(x, tabs=1, spaces=8):
-  return ' '*spaces + 'asm("' + '\t'*tabs + x86_inst(x) + '");'
+def x86_asm(x, tabs=1, spaces=8, op=""):
+  return ' '*spaces + 'asm("' + '\t'*tabs + x86_inst(x) + '"' + op + ');'
 
 # get inst name, srcs or dst
 # what = 'inst'/'srcs'/'dst'

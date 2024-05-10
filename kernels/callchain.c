@@ -1,47 +1,54 @@
+#ifndef MSG
 #define MSG "Reference: Establishing a Base of Trust with Performance Counters for Enterprise Workloads. Andrzej Nowak, Ahmad Yasin, Avi Mendelson, Willy Zwaenepoel. In 2015 USENIX Annual Technical Conference, USENIX ATC 2015."
+#endif
+#ifndef ITER
+#define ITER 20000
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 
 #define COO 1.354364576457745
 double CO = COO;
 
-double h0(double a) {
+#define noinline __attribute__((noinline))
+
+noinline double h0(double a) {
     return CO*a;
 }
 
-double f9(double a) {
+noinline double f9(double a) {
     return h0(a*CO);
 }
 
-double f8(double a) {
+noinline double f8(double a) {
     return f9(a*CO);
 }
 
-double f7(double a) {
+noinline double f7(double a) {
     return f8(a*CO);
 }
 
-double f6(double a) {
+noinline double f6(double a) {
     return f7(a*CO);
 }
 
-double f5(double a) {
+noinline double f5(double a) {
     return f6(a*CO);
 }
 
-double f4(double a) {
+noinline double f4(double a) {
     return f5(a*CO);
 }
 
-double f3(double a) {
+noinline double f3(double a) {
     return f4(a*CO);
 }
 
-double f2(double a) {
+noinline double f2(double a) {
     return f3(a*CO);
 }
 
-double f1(double a) {
+noinline double f1(double a) {
     return f2(a*CO);
 }
 

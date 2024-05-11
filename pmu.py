@@ -127,7 +127,8 @@ def default_period(): return 2000003
 # perf_events add-ons
 def perf_format(es):
   rs = []
-  for e in es.split(','):
+  for orig_e in es.split(','):
+    e = orig_e.replace('{', '').replace('}', '')
     if e.startswith('r') and ':' in e and len(e) != len('rUUEE:u'):
       e = e.split(':')
       f, n = None, e[1]
@@ -139,8 +140,8 @@ def perf_format(es):
       if len(e) == 3: f += e[2]
       elif len(e) == 2: pass
       else: C.error("profile:perf-stat: invalid syntax in '%s'" % ':'.join(e))
-      rs += [ f ]
-    else: rs += [ e ]
+      rs += [ '%s%s%s' % ('{' if orig_e.startswith('{') else '', f, '}' if orig_e.endswith('}') else '') ]
+    else: rs += [ orig_e ]
   return ','.join(rs)
 
 Toplev2Intel = {}

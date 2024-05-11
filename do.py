@@ -861,7 +861,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     assert do['msr']
     perf_data = '%s.perf.data' % record_name('-e msr')
     profile_exe('sudo %s record -e msr:* -o %s -- %s' % (perf, perf_data, r), 'tracing MSRs', 18, tune='msr')
-    x = '-i %s | cut -d: -f3-4 | cut -d, -f1 | sort | uniq -c' % perf_data
+    x = '-i %s | cut -d: -f3-4 | cut -d, -f1 | sort | uniq -c | sort -n' % perf_data
     exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None)
 
   if en(20) and do['flameg']:

@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.88
+__version__= 0.91
 
 import common as C, pmu, stats
 import os, sys, time, re
@@ -52,6 +52,8 @@ Conf = {
                   '{instructions,cycles,INT_MISC.CLEARS_COUNT,DSB2MITE_SWITCHES.PENALTY_CYCLES,INT_MISC.CLEAR_RESTEER_CYCLES,ICACHE_DATA.STALLS}',
     'dsb-glc':  '{IDQ.DSB_UOPS,r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r01470261:DSB2MITE_SWITCHES.COUNT,'
                 'FRONTEND_RETIRED.ANY_DSB_MISS,UOPS_ISSUED.ANY,INT_MISC.CLEARS_COUNT,INST_RETIRED.MACRO_FUSED}',
+    'dsb-bw':   '{r010879:IDQ.DSB_UOPS-c1,r020879:IDQ.DSB_UOPS-c2,r030879:IDQ.DSB_UOPS-c3,r0879:IDQ.DSB_UOPS,r010e:UOPS_ISSUED.ANY,r02c2:UOPS_RETIRED.SLOTS},'
+                '{r040879:IDQ.DSB_UOPS-c4,r050879:IDQ.DSB_UOPS-c5,r060879:IDQ.DSB_UOPS-c6,r070879:IDQ.DSB_UOPS-c7}',
     #r02c0:INST_RETIRED.NOP,r10c0:INST_RETIRED.MACRO_FUSED,'\
     #,r01e5:MEM_UOP_RETIRED.LOAD,r02e5:MEM_UOP_RETIRED.STA'
     'cond-misp': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r01c5:BR_MISP_RETIRED.COND_TAKEN'
@@ -61,6 +63,8 @@ Conf = {
   },
   'Pebs': {'all-misp': '-b -e %s/event=0xc5,umask=0,name=BR_MISP_RETIRED/ppp -c 20003' % pmu.pmu(),
     'cond-misp': '-b -e %s/event=0xc5,umask=0x11,name=BR_MISP_RETIRED.COND/ppp -c 20003' % pmu.pmu(),
+    'dsb-bw': '-b -e %s/event=0xc6,umask=0x%s,frontend=0x400206,name=FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4/uppp'
+              ' -c 100003' % (pmu.pmu(), '3' if pmu.redwoodcove_on() else '1'),
   },
   'Toplev': {'imix-loops': ' --frequency --metric-group +Summary',
   },
@@ -309,7 +313,7 @@ def main():
   x = 'tune'
   a = getattr(args, x) or []
   extra = ' :sample:3' if C.any_in(['dsb', 'misp'], args.mode) else ''
-  if 'misp' in args.mode: extra += ' :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode]
+  if args.mode in Conf['Pebs'].keys(): extra += ' :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode]
   if pmu.skylake(): extra += ' :perf-stat-add:-1'
   elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
   a.insert(0, [':batch:1 :help:0 :lbr-verbose:1 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s ' % (
@@ -329,7 +333,7 @@ def main():
       exe('%s disable-smt disable-aslr -v1' % do0)
       enable_it=1
     if args.stages & 0x8: exe(do_cmd('version log'))
-    if args.profile_mask == STUDY_PROF_MASK and C.any_in(('misp', 'dsb-glc'), args.mode): args.profile_mask |= 0x200
+    if args.profile_mask == STUDY_PROF_MASK and C.any_in(('misp', 'dsb'), args.mode): args.profile_mask |= 0x200
     for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
     if enable_it: exe('%s enable-smt -v1' % do0)
 

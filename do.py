@@ -641,7 +641,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       perfmetrics=None, basic_events=False, last_events='', grep="| grep -E 'seconds [st]|inst_retired_any '", warn=False)
     if do['help'] >= 0: stats.perf_log2stat(logs['bott'], 0)
 
-  if en(14) and (pmu.meteorlake() or do['help']<0):
+  if en(14) and (pmu.redwoodcove_on() or do['help']<0):
     flags, raw, events = '-W -c 20011', 'raw' in do['model'], pmu.get_events(do['model'])
     nevents = events.count('/p' if raw else ':p')
     data = '%s_tpebs-perf.data' % record_name('_%s-%d' % (do['model'], nevents))

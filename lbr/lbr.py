@@ -69,6 +69,8 @@ def header_cost(line):
 
 def num_valid_sample(): return LC.stat['total'] - LC.stat['bad'] - LC.stat['bogus']
 
+def info_lines(info, lines1): C.info_p(info, '\t\n'.join(['\t'] + lines1))
+
 LBR_Event = pmu.lbr_event()[:-4]
 LBR_Edge_Events = pmu.lbr_unfiltered_events()
 lbr_events = []
@@ -98,24 +100,63 @@ def inc_stat(stat):
     LC.glob[stat] = 1
     return True
 
+IPTB  = 'inst-per-taken-br--IpTB'
+IPLFC = 'inst-per-leaf-func-call'
+NOLFC = 'inst-per-leaf-func-name' # name-of-leaf-func-call would plot it away from IPFLC!
+IPLFCB0 = 'inst-per-%s' % LC.Insts_leaf_func[0]; IPLFCB1 = 'inst-per-%s' % LC.Insts_leaf_func[1]
+FUNCI = 'Function-invocations'
+FUNCP = 'Params_of_func'
+FUNCR = 'Regs_by_func'
 def count_of(t, lines, x, hist):
   r = 0
   while x < len(lines):
     if LC.is_type(t, lines[x]): r += 1
     x += 1
-  inc(LC.hsts[hist], r)
+  inc(hsts[hist], r)
   return r
 
+hsts, hsts_threshold = {}, {NOLFC: 0.01, IPLFCB0: 0, IPLFCB1: 0}
 def edge_en_init(indirect_en):
-  for x in (LC.FUNCI, 'IPC', LC.IPTB, LC.IPLFC, LC.NOLFC, LC.IPLFCB0, LC.IPLFCB1, LC.FUNCR, LC.FUNCP): LC.hsts[x] = {}
+  for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, IPLFCB0, IPLFCB1, FUNCR, FUNCP): hsts[x] = {}
   if indirect_en:
-    for x in ('', '-misp'): LC.hsts['indirect-x2g%s' % x] = {}
+    for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
     for x in os.getenv('LBR_INDIRECTS').split(','):
       indirects.add(int(x, 16))
-      LC.hsts['indirect_%s_targets' % x] = {}
-      LC.hsts['indirect_%s_paths' % x] = {}
-  if pmu.dsb_msb() and not pmu.cpu('smt-on'): LC.hsts['dsb-heatmap'], LC.hsts_threshold['dsb-heatmap']  = {}, 0
+      hsts['indirect_%s_targets' % x] = {}
+      hsts['indirect_%s_paths' % x] = {}
+  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'], hsts_threshold['dsb-heatmap']  = {}, 0
+
+def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
+  branches, dirjmps, insts_per_call, x = 0, 0, 0, len(lines) - 1
+  while x > 0:
+    if LC.is_type('ret', lines[x]): break # not a leaf function call
+    if LC.is_type('call', lines[x]):
+      inc(hsts[IPLFC], insts_per_call)
+      LC.glob['leaf-call'] += (insts_per_call + 2)
+      d = 'ind' if '%' in lines[x] else 'dir'
+      if branches == 0:
+        if d == 'dir': inc(hsts[IPLFCB0], insts_per_call)
+        LC.glob['branchless-leaf-%scall' % d] += (insts_per_call + 2)
+      elif branches == dirjmps:
+        if d == 'dir': inc(hsts[IPLFCB1], insts_per_call)
+        LC.glob['dirjmponly-leaf-%scall' % d] += (insts_per_call + 2)
+      callder_idx, ok = x, x < len(lines) - 1
+      name = lines[x + 1].strip()[:-1] if ok and LC.is_label(lines[x + 1]) else 'Missing-func-name-%s' % (
+        '0x' + LC.line_ip_hex(lines[x + 1]) if ok else 'unknown')
+      while callder_idx > 0:
+        if LC.is_label(lines[callder_idx]): break
+        callder_idx -= 1
+      name = ' -> '.join((lines[callder_idx].strip()[:-1] if callder_idx > 0 else '?', name))
+      inc(hsts[NOLFC], name + '-%d' % insts_per_call)
+      if LC.verbose & 0x10 and 'IPC' in lines[-(len(lines) - x)]:
+        info_lines('call to leaf-func %s of size %d' % (name, insts_per_call), lines[-(len(lines)-x):] + [line])
+      break
+    elif LC.is_branch(lines[x]):
+      branches += 1
+      if 'jmp' in lines[x] and '%' not in lines[x]: dirjmps += 1
+    if not LC.is_label(lines[x]): insts_per_call += 1
+    x -= 1
 
 def edge_stats(line, lines, xip, size):
   if LC.is_label(line): return
@@ -140,15 +181,15 @@ def edge_stats(line, lines, xip, size):
       i -= 1
     return lines[i]
   xline = prev_line()
-  if 'dsb-heatmap' in LC.hsts and (LC.is_taken(xline) or new_line):
-    inc(LC.hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
-  if 'indirect-x2g' in LC.hsts and LC.is_type(x86.INDIRECT, xline):
+  if 'dsb-heatmap' in hsts and (LC.is_taken(xline) or new_line):
+    inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
+  if 'indirect-x2g' in hsts and LC.is_type(x86.INDIRECT, xline):
     ilen = LC.get_ilen(xline) or 2
     if abs(ip - (xip + ilen)) >= 2 ** 31:
-      inc(LC.hsts['indirect-x2g'], xip)
-      if 'MISP' in xline: inc(LC.hsts['indirect-x2g-misp'], xip)
+      inc(hsts['indirect-x2g'], xip)
+      if 'MISP' in xline: inc(hsts['indirect-x2g-misp'], xip)
   if xip and xip in indirects:
-    inc(LC.hsts['indirect_%s_targets' % LC.hex_ip(xip)], ip)
+    inc(hsts['indirect_%s_targets' % LC.hex_ip(xip)], ip)
     #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
   #MRN with IDXReg detection
   mrn_dst=x86.get("dst",line)
@@ -195,7 +236,7 @@ def edge_stats(line, lines, xip, size):
           elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
   # check erratum for line (with no consideration of macro-fusion with previous line)
   if LC.is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
-  if LC.verbose & 0x1 and LC.is_type('ret', line): funcs.edge_leaf_func_stats(lines, line)
+  if LC.verbose & 0x1 and LC.is_type('ret', line): edge_leaf_func_stats(lines, line)
   if size <= 1: return # a sample with >= 2 instructions after this point
   if not x86_f.is_jcc_fusion(xline, line):
     x2line = prev_line(-2)
@@ -203,7 +244,7 @@ def edge_stats(line, lines, xip, size):
     elif x86_f.is_mov_op_fusion(x2line, xline): inc_pair('MOV', 'OP', suffix='fusible')
     if x86_f.is_vec_ld_op_fusion(lines[-2], lines[-1]): inc_pair('VEC LD', 'OP', suffix='fusible')
     elif x86_f.is_vec_mov_op_fusion(lines[-2], lines[-1]): inc_pair('VEC MOV', 'OP', suffix='fusible')
-  if LC.is_type('call', xline): inc(LC.hsts[LC.FUNCI], ip)
+  if LC.is_type('call', xline): inc(hsts[FUNCI], ip)
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
@@ -360,8 +401,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       elif LC.edge_en: # instructions after 1st taken is observed (none of takens/IPC/IPTB used otherwise)
         insts += 1
         if LC.is_taken(line):
-          inc(LC.hsts[LC.IPTB], insts); size += insts; insts = 0
-          if 'IPC' in line: inc(LC.hsts['IPC'], LC.line_timing(line)[1])
+          inc(hsts[IPTB], insts); size += insts; insts = 0
+          if 'IPC' in line: inc(hsts['IPC'], LC.line_timing(line)[1])
       LC.glob['all'] += 1
       if size > 0:
         loop_srcline = None if ip in loops.loops and 'srcline' in loops.loops[ip] and loops.loops[ip]['srcline'] == srcline else srcline
@@ -374,8 +415,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         if len(takens) and LC.is_taken(line) and LC.verbose & 0x2: #FUNCR
           x = get_taken_idx(lines, -1)
           if x >= 0:
-            if LC.is_type('call', line): count_of('st-stack', lines, x + 1, LC.FUNCP)
-            if LC.is_type('call', lines[x]): count_of('push', lines, x + 1, LC.FUNCR)
+            if LC.is_type('call', line): count_of('st-stack', lines, x + 1, FUNCP)
+            if LC.is_type('call', lines[x]): count_of('push', lines, x + 1, FUNCR)
         edge_stats(line, lines, xip, size)
       if (LC.edge_en or 'DSB_MISS' in event) and LC.is_type('jmp', line):
         ilen = LC.get_ilen(line)
@@ -465,7 +506,7 @@ def get_taken(sample, n):
   return {'from': frm, 'to': to, 'taken': 1}
 
 def print_glob_hist(hist, name, weighted=False, threshold=.03):
-  if name in LC.hsts_threshold: threshold = LC.hsts_threshold[name]
+  if name in hsts_threshold: threshold = hsts_threshold[name]
   d = LC.print_hist((hist, name, None, None, None, weighted), threshold)
   if not type(d) is dict: return d
   if d['type'] == 'hex': d['mode'] = LC.hex_ip(int(d['mode']))
@@ -474,7 +515,7 @@ def print_glob_hist(hist, name, weighted=False, threshold=.03):
   return d['total']
 
 def print_hist_sum(name, h):
-  s = sum(LC.hsts[h].values())
+  s = sum(hsts[h].values())
   print_stat(name, s, comment='histogram' if s else '')
 
 c = lambda x: x.replace(':', '-')
@@ -515,7 +556,7 @@ def print_global_stats():
   for n in (4, 5, 6): print_loops_stat('%dB-unaligned' % 2 ** n, len([l for l in loops.loops.keys() if l & (2 ** n - 1)]))
   print_loops_stat('undetermined size', len([l for l in loops.loops.keys() if loops.loops[l]['size'] is None]))
   if LC.stats.ilen() : print_loops_stat('non-contiguous', len(loops.loops) - len(loops.contigous_loops))
-  print_stat(nc('functions'), len(LC.hsts[LC.FUNCI]), prefix='proxy count', comment=LC.FUNCI)
+  print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
   if LC.stats.size():
     for x in LC.Insts_cond: print_imix_stat(x + ' conditional', LC.glob['cond_' + x])
     print_imix_stat('unaccounted non-fusible conditional', LC.glob['cond_non-fusible'] - LC.glob['counted_non-fusible'])
@@ -525,12 +566,12 @@ def print_global_stats():
     for x in LC.Insts_Fusions: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_MRN: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_global: print_imix_stat(x, LC.glob[x])
-  if 'indirect-x2g' in LC.hsts:
+  if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')
     print_hist_sum('mispredicted indirect of >2GB offset', 'indirect-x2g-misp')
     for x in indirects:
-      if x in LC.hsts['indirect-x2g-misp'] and x in LC.hsts['indirect-x2g']:
-        print_stat('a cross-2GB branch at %s' % LC.hex_ip(x), ratio(LC.hsts['indirect-x2g-misp'][x], LC.hsts['indirect-x2g'][x]),
+      if x in hsts['indirect-x2g-misp'] and x in hsts['indirect-x2g']:
+        print_stat('a cross-2GB branch at %s' % LC.hex_ip(x), ratio(hsts['indirect-x2g-misp'][x], hsts['indirect-x2g'][x]),
                    prefix='misprediction-ratio', comment='paths histogram')
 
 def print_common(total):
@@ -554,7 +595,7 @@ def print_all(nloops=10, loop_ipc=0):
   if total and (LC.stat['bad'] + LC.stat['bogus']) / float(total) > 0.5:
     if LC.verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
     else: C.error('Too many LBR bad/bogus samples in profile')
-  for x in sorted(LC.hsts.keys()): print_glob_hist(LC.hsts[x], x)
+  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x)
   sloops = sorted(loops.loops.items(), key=lambda x: loops.loops[x[0]]['hotness'])
   if loop_ipc:
     if loop_ipc in loops.loops:

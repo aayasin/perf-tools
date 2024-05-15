@@ -81,15 +81,6 @@ Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_MRN + Inst
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}
 
-IPTB  = 'inst-per-taken-br--IpTB'
-IPLFC = 'inst-per-leaf-func-call'
-NOLFC = 'inst-per-leaf-func-name' # name-of-leaf-func-call would plot it away from IPFLC!
-IPLFCB0 = 'inst-per-%s' % Insts_leaf_func[0]; IPLFCB1 = 'inst-per-%s' % Insts_leaf_func[1]
-FUNCI = 'Function-invocations'
-FUNCP = 'Params_of_func'
-FUNCR = 'Regs_by_func'
-hsts, hsts_threshold = {}, {NOLFC: 0.01, IPLFCB0: 0, IPLFCB1: 0}
-
 class stats:
   SIZE, LOOP, ILEN = (2**i for i in range(3))
   enables = 0
@@ -222,5 +213,3 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None):
   if do_tripcount_mean: d['num-buckets'] = '-'
   d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) is str else k) for k in hist.keys()) if weighted else tot
   return d
-
-def info_lines(info, lines1): C.info_p(info, '\t\n'.join(['\t'] + lines1))

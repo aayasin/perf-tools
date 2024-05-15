@@ -244,6 +244,14 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         if LC.stat['size']['max'] < size: LC.stat['size']['max'] = size
       LC.stat['size']['sum'] += size
       inc(LC.stat['takens'], len(takens))
+    # check if len(lines) > min_lines w/ no labels
+    def check_min_lines():
+      if not len(lines): return False
+      i = 0
+      for l in lines[1:]:
+        if not LC.is_label(l): i += 1
+        if i > min_lines: return True
+      return False
     LC.stat['total'] += 1
     if LC.stat['total'] % read_sample.tick == 0: C.printf('.')
     while True:
@@ -255,7 +263,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           print_all()
           C.error('No LBR data in profile')
         if not loop_ipc: C.printf(' .\n')
-        return lines if len(lines) > min_lines and not skip_bad else None
+        return lines if check_min_lines() and not skip_bad else None
       header = is_header(line)
       if header:
         ev = header.group(3)[:-1]
@@ -284,10 +292,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           inc(LC.stat['IPs'], header_ip_str(line))
       # a sample ended
       if re.match(r"^$", line):
-        if not skip_bad and (not min_lines or len(lines) > min_lines): break
-        len_m1 = len(lines)-1 if len(lines) else 0
+        if not skip_bad and (not min_lines or check_min_lines()): break
+        len_m1 = 0
+        if len(lines): len_m1 = len(lines)-1
         if len_m1 < 2 or\
-           min_lines and (len_m1 < min_lines) or\
+           (min_lines and not check_min_lines()) or\
            header_ip(lines[0]) != LC.line_ip(lines[len_m1]):
           valid = 0
           if 'out of order events' in line: invalid('bogus', 'out of order events')

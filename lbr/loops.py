@@ -26,10 +26,11 @@ total_cycles = 0
 def is_loop_by_ip(ip):  return ip in loops
 def is_loop(line):    return is_loop_by_ip(LC.line_ip(line))
 # FIXME: this does not work for non-contigious loops!
-def is_in_loop(ip, loop): return loop <= ip <= loops[loop]['back']
+def is_in_loop(ip, loop): return ip and loop <= ip <= loops[loop]['back']
 def get_loop(ip):     return loops[ip] if ip in loops else None
 def is_loop_line(line):
   ip = LC.line_ip(line)
+  if not ip: return False
   for loop_ipc in loops:
     if loop_ipc <= ip <= loops[loop_ipc]['back']: return True
   return False
@@ -138,10 +139,20 @@ loop_cands = []
 def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
                 MOLD=4e4):  # Max Outer Loop Distance
   global bwd_br_tgts, loop_cands, contigous_loops  # unlike nonlocal, global works in python2 too!
+  # lines[x+1]/lines[x+2] etc w/ no labels
+  def next_line(x, step=1):
+    while x + step < len(lines) and LC.is_label(lines[x+step]):
+      x += 1
+    return lines[x+step] if x + step < len(lines) else None
+  # lines[-1]/lines[-2] etc w/ no labels
+  def prev_line(i=-1):
+    while LC.is_label(lines[i]):
+      i -= 1
+    return lines[i]
   def find_block_ip(x=len(lines) - 2):
     while x >= 0:
       if LC.is_taken(lines[x]):
-        return LC.line_ip(lines[x + 1]), x
+        return LC.line_ip(next_line(x)), x
       x -= 1
     return 0, -1
   def has_ip(at):
@@ -150,6 +161,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       if LC.line_ip(lines[at]) == ip: return True
       at -= 1
     return False
+  prev_l = prev_line()
   def iter_update():
     # inc(loop['BK'], hex(line_ip(lines[-1])))
     assert ip == loop_ipc
@@ -157,15 +169,15 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     for x in LC.paths_range():
       if 'paths-%d' % x not in loop: loop['paths-%d' % x] = {}
       inc(loop['paths-%d' % x], ';'.join([LC.hex_ip(a) for a in lbr_takens[-x:]]))
-    if not LC.has_timing(lines[-1]): return
+    if not LC.has_timing(prev_l): return
     cycles, takens = 0, []
     begin, at = find_block_ip()
     while begin:
       if begin == ip:
-        if cycles == 0: inc(loop['IPC'], LC.line_timing(lines[-1])[1])  # IPC is supported for loops execution w/ no takens
+        if cycles == 0: inc(loop['IPC'], LC.line_timing(prev_l)[1])  # IPC is supported for loops execution w/ no takens
         if 'Conds' in loop and 'Cond_polarity' in loop:
           for c in loop['Cond_polarity'].keys(): loop['Cond_polarity'][c]['tk' if c in takens else 'nt'] += 1
-        cycles += LC.line_timing(lines[-1])[0]
+        cycles += LC.line_timing(prev_l)[0]
         LC.glob['loop_cycles'] += cycles
         LC.glob['loop_iters'] += 1
         break
@@ -176,40 +188,44 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           begin, at = find_block_ip(at - 1)
         else:
           break
-  def ilen_on(): return 'ilen:' in lines[-1]
-  def indirect_jmp_enter(): return 'jmp' in lines[-1] and LC.is_type(x86.INDIRECT, lines[-1])
+  def ilen_on(): return 'ilen:' in prev_l
+  def indirect_jmp_enter(): return 'jmp' in prev_l and LC.is_type(x86.INDIRECT, prev_l)
 
   if ip in loops:
     loop = loops[ip]
     loop['hotness'] += 1
     if srcline and not 'srcline' in loop: loop['srcline'] = srcline
-    if LC.is_taken(lines[-1]):
+    if LC.is_taken(prev_l):
       if indirect_jmp_enter() and 'entered_by_indirect' not in loop['attributes']:
         loop['attributes'] += ';entered_by_indirect'
-      if ip == loop_ipc and LC.line_ip(lines[-1]) == loop['back']: iter_update()
+      if ip == loop_ipc and LC.line_ip(prev_l) == loop['back']: iter_update()
     elif not loop['entry-block']:
       loop['entry-block'] = find_block_ip()[0]
     # Try to fill size & attributes for already detected loops
-    if not loop['size'] and not loop['outer'] and len(lines) > 2 and LC.line_ip(lines[-1]) == loop['back']:
+    if not loop['size'] and not loop['outer'] and len(lines) > 2 and LC.line_ip(prev_l) == loop['back']:
       size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf, erratum = 1, {}, [], 0, 0, 0, 0 if ilen_on() else None
       types = ['lea', 'cmov'] + x86.MEM_INSTS + LC.user_loop_imix
       for i in types: cnt[i] = 0
       x = len(lines) - 2
       while x >= 1:
+        if LC.is_label(lines[x]):
+          x -= 1
+          continue
         size += 1
         inst_ip = LC.line_ip(lines[x])
         if LC.is_taken(lines[x]):
           break  # do not fill loop size/etc unless all in-body branches are non-taken
         if LC.is_type(x86.COND_BR, lines[x]): conds += [inst_ip]
-        if x86_f.is_jcc_fusion(lines[x], lines[x + 1]):
+        next_l = next_line(x)
+        if x86_f.is_jcc_fusion(lines[x], next_l):
           op_jcc_mf += 1
-        elif x == len(lines) - 2 or not x86_f.is_jcc_fusion(lines[x + 1], lines[x + 2]):
-          if x86_f.is_ld_op_fusion(lines[x], lines[x + 1]): ld_op_mf += 1
-          elif x86_f.is_mov_op_fusion(lines[x], lines[x + 1]): mov_op_mf += 1
-        if x86_f.is_vec_ld_op_fusion(lines[x], lines[x + 1]): ld_op_mf += 1
-        elif x86_f.is_vec_mov_op_fusion(lines[x], lines[x + 1]): mov_op_mf += 1
+        elif x == len(lines) - 2 or not x86_f.is_jcc_fusion(next_l, next_line(x, 2)):
+          if x86_f.is_ld_op_fusion(lines[x], next_l): ld_op_mf += 1
+          elif x86_f.is_mov_op_fusion(lines[x], next_l): mov_op_mf += 1
+        if x86_f.is_vec_ld_op_fusion(lines[x], next_l): ld_op_mf += 1
+        elif x86_f.is_vec_mov_op_fusion(lines[x], next_l): mov_op_mf += 1
         # erratum feature disabled if erratum is None, otherwise erratum counts feature cases
-        if erratum is not None and LC.is_jcc_erratum(lines[x + 1], lines[x]): erratum += 1
+        if erratum is not None and LC.is_jcc_erratum(next_l, lines[x]): erratum += 1
         t = LC.line_inst(lines[x])
         if t and t in types: cnt[t] += 1
         if inst_ip == ip:
@@ -222,7 +238,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
             loop['Cond_polarity'] = {}
             for c in conds: loop['Cond_polarity'][c] = {'tk': 0, 'nt': 0}
           break
-        elif inst_ip < ip or inst_ip > loop['back']:
+        elif inst_ip and (inst_ip < ip or inst_ip > loop['back']):
           break
         x -= 1
     return
@@ -231,15 +247,15 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
   # * loop-body is entirely observed in a single sample
   # * a tripcount > 1 is observed
   # * no function calls
-  if LC.is_taken(lines[-1]):
-    xip = LC.line_ip(lines[-1])
+  if LC.is_taken(prev_l):
+    xip = LC.line_ip(prev_l)
     if ilen_on(): detect_jump_to_mid_loop(ip, xip)
     if xip <= ip:
       pass  # not a backward jump
-    elif LC.is_callret(lines[-1]):
+    elif LC.is_callret(prev_l):
       pass  # requires --xed
     elif (xip - ip) >= MOLD:
-      LC.warn(0x200, "too large distance in:\t%s" % lines[-1].split('#')[0].strip())
+      LC.warn(0x200, "too large distance in:\t%s" % prev_l.split('#')[0].strip())
     elif (use_cands and ip in loop_cands) or (not use_cands and ip in bwd_br_tgts):
       if use_cands:
         loop_cands.remove(ip)
@@ -264,7 +280,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
                    'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
                    }
       if srcline: loops[ip]['srcline'] = srcline.replace(':', ';')
-      ilen = LC.get_ilen(lines[-1])
+      ilen = LC.get_ilen(prev_l)
       if ilen:
         loops[ip]['sizeIB'] = int(xip) - ip + ilen  # size In Bytes
         if (ip + loops[ip]['sizeIB'] - ilen) == int(xip): contigous_loops += [ip]

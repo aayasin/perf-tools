@@ -153,7 +153,7 @@ def is_vec_ld_op_fusion(line1, line2):
   inst1 = get('inst', line1)
   if inst1.endswith('x'): inst1 = inst1[:-1]  # removing potential extension suffix
   if not inst1 in HEADS_LD: return False
-  if is_memory(line2): return False
+  if not is_memory(line1) or is_memory(line2): return False
   if '(%rip' in line1: return False  # not RIP relative
   if re.search(MEM_IDX, line1): return False  # no index register
   dst1, dst2 = get('dst', line1), get('dst', line2)

@@ -12,6 +12,7 @@
 __author__ = 'akhalil'
 
 import common as C
+from common import inc
 import lbr.common_lbr as LC
 from lbr.loops import loops
 import lbr.x86_fusion as x86_f, lbr.x86 as x86
@@ -236,3 +237,34 @@ def detect_functions(lines, srcline):
     resume_line = process_function(lines, srcline)[0]
     lines = lines[lines.index(resume_line):]
     lines.pop(0)
+
+def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
+  branches, dirjmps, insts_per_call, x = 0, 0, 0, len(lines) - 1
+  while x > 0:
+    if LC.is_type('ret', lines[x]): break # not a leaf function call
+    if LC.is_type('call', lines[x]):
+      inc(LC.hsts[LC.IPLFC], insts_per_call)
+      LC.glob['leaf-call'] += (insts_per_call + 2)
+      d = 'ind' if '%' in lines[x] else 'dir'
+      if branches == 0:
+        if d == 'dir': inc(LC.hsts[LC.IPLFCB0], insts_per_call)
+        LC.glob['branchless-leaf-%scall' % d] += (insts_per_call + 2)
+      elif branches == dirjmps:
+        if d == 'dir': inc(LC.hsts[LC.IPLFCB1], insts_per_call)
+        LC.glob['dirjmponly-leaf-%scall' % d] += (insts_per_call + 2)
+      callder_idx, ok = x, x < len(lines) - 1
+      name = lines[x + 1].strip()[:-1] if ok and LC.is_label(lines[x + 1]) else 'Missing-func-name-%s' % (
+        '0x' + LC.line_ip_hex(lines[x + 1]) if ok else 'unknown')
+      while callder_idx > 0:
+        if LC.is_label(lines[callder_idx]): break
+        callder_idx -= 1
+      name = ' -> '.join((lines[callder_idx].strip()[:-1] if callder_idx > 0 else '?', name))
+      inc(LC.hsts[LC.NOLFC], name + '-%d' % insts_per_call)
+      if LC.verbose & 0x10 and 'IPC' in lines[-(len(lines) - x)]:
+        LC.info_lines('call to leaf-func %s of size %d' % (name, insts_per_call), lines[-(len(lines)-x):] + [line])
+      break
+    elif LC.is_branch(lines[x]):
+      branches += 1
+      if 'jmp' in lines[x] and '%' not in lines[x]: dirjmps += 1
+    if not LC.is_label(lines[x]): insts_per_call += 1
+    x -= 1

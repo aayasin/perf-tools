@@ -285,8 +285,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       # a sample ended
       if re.match(r"^$", line):
         if not skip_bad and (not min_lines or len(lines) > min_lines): break
-        len_m1 = 0
-        if len(lines): len_m1 = len(lines)-1
+        len_m1 = len(lines)-1 if len(lines) else 0
         if len_m1 < 2 or\
            min_lines and (len_m1 < min_lines) or\
            header_ip(lines[0]) != LC.line_ip(lines[len_m1]):

@@ -14,7 +14,7 @@ __author__ = 'ayasin'
 
 import sys, os, re
 import common as C, pmu
-import lbr.x86 as x86
+from lbr import x86
 from lbr.x86_fusion import is_jcc_fusion
 try:
   from numpy import average
@@ -180,11 +180,12 @@ def line_ip_hex(line):
   # assert x, "expect <address> at left of '%s'" % line
   return x.group(1).lstrip("0")
 def line_ip(line, sample=None):
+  if is_label(line): return None
   try:
     return str2int(line_ip_hex(line), (line, sample))
   except:
     exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line.strip(), stack=True)
-def hex_ip(ip): return '0x%x' % ip if ip > 0 else '-'
+def hex_ip(ip): return '0x%x' % ip if ip and ip > 0 else '-'
 
 def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None):
   if not len(hist_t[0]): return 0

@@ -26,7 +26,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.18 # see version line of do.py
+__version__= x86.__version__ + 2.19 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 
@@ -177,13 +177,9 @@ def edge_stats(line, lines, xip, size):
     pages.add(ip >> 12)
   # lines[-1]/lines[-2] etc w/ no labels
   def prev_line(i=-1):
-    idx = 0
-    while i < 0:
-      idx -= 1
-      while LC.is_label(lines[idx]):
-        idx -= 1
-      i += 1
-    return lines[idx]
+    while LC.is_label(lines[i]):
+      i -= 1
+    return lines[i]
   xline = prev_line()
   if 'dsb-heatmap' in hsts and (LC.is_taken(xline) or new_line):
     inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
@@ -260,8 +256,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
     return 'header-only: ' + (dso if 'kallsyms' in dso else ' '.join((get_field(l, 'sym'), dso)))
   global lbr_events
   valid, lines, loops.bwd_br_tgts = 0, [], []
-  labels = LC.verbose & 0x1 and not loop_ipc
-  assert LC.verbose & 0x1 or not labels, "labels argument must be False!"
   if skip_bad and not loop_ipc: LC.stats.enables |= LC.stats.SIZE
   if lp_stats_en: LC.stats.enables |= LC.stats.LOOP
   LC.glob['ip_filter'] = ip_filter
@@ -291,6 +285,14 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         if LC.stat['size']['max'] < size: LC.stat['size']['max'] = size
       LC.stat['size']['sum'] += size
       inc(LC.stat['takens'], len(takens))
+    # check if len(lines) > min_lines w/ no labels
+    def check_min_lines():
+      if not len(lines): return False
+      i = 0
+      for l in lines[1:]:
+        if not LC.is_label(l): i += 1
+        if i > min_lines: return True
+      return False
     LC.stat['total'] += 1
     if LC.stat['total'] % read_sample.tick == 0: C.printf('.')
     while True:
@@ -302,7 +304,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           print_all()
           C.error('No LBR data in profile')
         if not loop_ipc: C.printf(' .\n')
-        return lines if len(lines) > min_lines and not skip_bad else None
+        return lines if check_min_lines() and not skip_bad else None
       header = is_header(line)
       if header:
         ev = header.group(3)[:-1]
@@ -331,15 +333,15 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           inc(LC.stat['IPs'], header_ip_str(line))
       # a sample ended
       if re.match(r"^$", line):
-        if not skip_bad and (not min_lines or len(lines) > min_lines): break
+        if not skip_bad and (not min_lines or check_min_lines()): break
         len_m1 = 0
         if len(lines): len_m1 = len(lines)-1
-        if len_m1 == 0 or\
-           min_lines and (len_m1 < min_lines) or\
+        if len_m1 < 2 or\
+           (min_lines and not check_min_lines()) or\
            header_ip(lines[0]) != LC.line_ip(lines[len_m1]):
           valid = 0
           if 'out of order events' in line: invalid('bogus', 'out of order events')
-          else: invalid('bogus', 'too short' if len_m1 else (header_only_str(lines[0]) if len(lines) else 'no header'))
+          else: invalid('bogus', 'too short' if len_m1 > 1 else (header_only_str(lines[0]) if len(lines) else 'no header'))
           # apparently there is a perf-script bug (seen with perf tool 6.1)
           update_size_stats()
           if LC.debug and LC.debug == timestamp:
@@ -368,9 +370,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         assert re.match(r"^$", read_line())
         break
       # a line with a label
-      if not labels and LC.is_label(line):
-        srcline = LC.get_srcline(line.strip())
-        continue
+      label = LC.is_label(line)
+      if label: srcline = LC.get_srcline(line.strip())
       # e.g. "        00007ffff7afc6ca        <bad>" then "mismatch of LBR data and executable"
       tag = 'mismatch of LBR data'
       if tag in line:
@@ -378,21 +379,21 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         invalid('bad', tag)
         break
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
-      if skip_bad and len(lines) and not LC.is_label(line) and not line.strip().startswith('0'):
+      if skip_bad and len(lines) and not label and not line.strip().startswith('0'):
         if LC.debug and LC.debug == timestamp:
           exit(line, lines, "bad line")
         valid = skip_sample(lines[0])
         invalid('bogus', 'instruction address missing')
         break
-      if skip_bad and len(lines) and not LC.is_label(line) and LC.is_taken(line) and not LC.is_branch(line):
+      if skip_bad and len(lines) and not label and LC.is_taken(line) and not LC.is_branch(line):
         valid = skip_sample(lines[0])
         invalid('bogus', 'non-branch instruction "%s" marked as taken' % x86.get('inst', line))
         break
-      if (not len(lines) and event in line) or (len(lines) and LC.is_label(line)):
+      if (not len(lines) and event in line) or (len(lines) and label):
         lines += [ line.rstrip('\r\n') ]
         continue
       elif not len(lines): continue
-      ip = None if header or 'not reaching sample' in line else LC.line_ip(line, lines)
+      ip = None if header or label or 'not reaching sample' in line else LC.line_ip(line, lines)
       if LC.is_taken(line): takens += [ip]
       if len(takens) < 2:
         # perf may return subset of LBR-sample with < 32 records
@@ -403,10 +404,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           inc(hsts[IPTB], insts); size += insts; insts = 0
           if 'IPC' in line: inc(hsts['IPC'], LC.line_timing(line)[1])
       LC.glob['all'] += 1
-      if not labels and size > 0:
-        loops.detect_loop(ip, lines, loop_ipc, takens, srcline)
-        if ip in loops.loops and 'srcline' in loops.loops[ip] and loops.loops[ip]['srcline'] == srcline:
-          srcline = None  # srcline <-> loop
+      if size > 0:
+        loop_srcline = None if ip in loops.loops and 'srcline' in loops.loops[ip] and loops.loops[ip]['srcline'] == srcline else srcline
+        loops.detect_loop(ip, lines, loop_ipc, takens, loop_srcline)
       if skip_bad: tc_state = loops.loop_stats(line, loop_ipc, tc_state)
       if LC.edge_en:
         if LC.glob['all'] == 1:  # 1st instruction observed

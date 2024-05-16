@@ -26,7 +26,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.19 # see version line of do.py
+__version__= x86.__version__ + 2.20 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 
@@ -236,7 +236,7 @@ def edge_stats(line, lines, xip, size):
           elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
   # check erratum for line (with no consideration of macro-fusion with previous line)
   if LC.is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
-  if LC.verbose & 0x1 and LC.is_type('ret', line): edge_leaf_func_stats(lines, line)
+  if LC.is_type('ret', line): edge_leaf_func_stats(lines, line)
   if size <= 1: return # a sample with >= 2 instructions after this point
   if not x86_f.is_jcc_fusion(xline, line):
     x2line = prev_line(-2)
@@ -314,7 +314,8 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
             for k in header_field.keys(): header_field[k] += 1
           lbr_events += [ev]
           x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
-          def f2s(x): return C.flag2str(' ', C.env2str(x, prefix=True))
+          def f2s(x):
+            return C.flag2str(' ', C.env2str(x, prefix=True))
           if len(lbr_events) == 1: x += ' primary= %s edge=%d%s%s' % (event, LC.edge_en, f2s('LBR_STOP'), f2s('LBR_IMIX'))
           if ip_filter: x += ' ip_filter= %s' % str(ip_filter)
           if loop_ipc: x += ' loop= %s%s' % (LC.hex_ip(loop_ipc), C.flag2str(' history= ', C.env2int('LBR_PATH_HISTORY')))
@@ -334,8 +335,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       # a sample ended
       if re.match(r"^$", line):
         if not skip_bad and (not min_lines or check_min_lines()): break
-        len_m1 = 0
-        if len(lines): len_m1 = len(lines)-1
+        len_m1 = len(lines)-1 if len(lines) else 0
         if len_m1 < 2 or\
            (min_lines and not check_min_lines()) or\
            header_ip(lines[0]) != LC.line_ip(lines[len_m1]):
@@ -645,7 +645,7 @@ def print_all(nloops=10, loop_ipc=0):
         log = open(os.getenv("LBR_FUNCS_LOG"), 'w')
         for i in range(len(funcs_list) - nfuncs):
           print('Function#%d:' % (len(funcs_list) - i), funcs_list[i].__str__(detailed=True), file=log)
-      C.printc('top %d functions:' % nfuncs)
+      print('');C.printc('top %d functions:' % nfuncs)
       for i in range(nfuncs):
         print('function#%d:' % (nfuncs - i), funcs_list[len(funcs_list) - nfuncs + i])
         print('Function#%d:' % (nfuncs - i), funcs_list[len(funcs_list) - nfuncs + i].__str__(detailed=True), file=log)

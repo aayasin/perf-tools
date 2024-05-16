@@ -24,7 +24,7 @@ except ImportError:
 
 hitcounts = C.envfile('PTOOLS_HITS')
 debug = os.getenv('LBR_DBG')
-verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings
+verbose = C.env2int('LBR_VERBOSE', base=16) # nibble 0: stats, 1: extra info, 2: warnings; verbose=0x1 is free
 user_imix = C.env2list('LBR_IMIX', ['vpmovmskb', 'imul'])
 user_loop_imix = C.env2list('LBR_LOOP_IMIX', ['zcnt'])
 user_jcc_pair = C.env2list('LBR_JCC_PAIR', ['JZ', 'JNZ'])

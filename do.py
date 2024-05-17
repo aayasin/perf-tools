@@ -560,7 +560,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if do['model'] and pmu.redwoodcove_on():
       retlat = '%s/%s-retlat.json' % (C.dirname(), out)
       tlargs += ' --ret-latency %s' % retlat
-      if profiling() and not isfile(retlat):
+      if profiling() and (not isfile(retlat) or os.path.getsize(retlat) < 100):
         exe('%s -q -o %s -- %s' % (genretlat, retlat, r), 'calibrating retire latencies')
     c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, C.toplev_log2csv(o), tlargs, r)
     if ' --global' in c:

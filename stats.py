@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.97
+__version__= 0.98
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -370,7 +370,10 @@ def csv2stat(filename):
     return filename.replace(x.group(1), '')
   d = patch_metrics(d)
   base = basename()
-  if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
+  tl_info = base + 'toplev-mvl2-perf.csv'
+  if not nomux():
+    if not os.path.isfile(tl_info): C.warn('file is missing: ' + tl_info)
+    else: d.update(read_perf_toplev(tl_info))
   # add info.log globals stats
   info = r"%s-janysave_type-er20c4ppp-c([0-9]+)\.perf\.data\.info\.log" % (basename()[:-1])
   info_files = [f for f in os.listdir() if re.match(info, f)]

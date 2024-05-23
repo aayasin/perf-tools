@@ -37,6 +37,7 @@ def alderlake():  return name() in ('alderlake_hybrid', 'adl')
 def sapphire():   return name() in ('sapphire_rapids', 'spr', 'spr-hbm')
 def meteorlake(): return name() in ('meteorlake_hybrid', 'mtl')
 def granite():    return name() in ('granite_rapids', 'gnr')
+def lunarlake():  return name() in ('lunarlake_hybrid', 'lnl')
 # aggregations
 def goldencove():   return alderlake() or sapphire()
 def redwoodcove():  return meteorlake() or granite()
@@ -67,7 +68,8 @@ def event(x):
   e = {'lbr':     'r20c4:Taken-branches:ppp',
     'calls-loop': 'r0bc4:callret_loop-overhead',
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
-    'dsb-miss':   '%s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp' % pmu(),
+    'dsb-miss':   '%s/event=0xc6,umask=0x%x,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp' % (
+                    pmu(), 3 if redwoodcove_on() else 1),
     'sentries':   'r40c4:system-entries:u',
     }[x]
   return perf_format(e)

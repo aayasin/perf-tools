@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.22
+__version__ = 3.23
 
 import argparse, os.path, re, sys
 
@@ -68,6 +68,7 @@ do = {'run':        C.RUN_DEF,
   'interval':       10,
    # bit 0: hitcounts, 1: imix-no, 2: imix, 3: process-all, 4: non-cold takens, 5: misp report, 6: slow-branch
   'imix':           0x3f if pmu.amd() else 0x7f,
+  # bit 0: llvm-mca, 1: uiCA
   'loop-ideal-ipc': 0,
   'loops':          min(pmu.cpu('corecount'), 30),
   'log-stdout':     1,
@@ -232,9 +233,12 @@ def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=
     if 'Red Hat' in C.file2str('/etc/os-release', 1): exe('sudo yum install python3-xlsxwriter.noarch', '@patching xlsx')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
-  if do['loop-ideal-ipc']:
+  if do['loop-ideal-ipc'] & 0x1:
     if isfile(C.Globals['llvm-mca']): exe_v0(msg='llvm is already installed')
     else: exe('./build-llvm.sh', 'installing llvm')
+  if do['loop-ideal-ipc'] & 0x2:
+    if isfile(C.Globals['uica']): exe('./build-uica.sh -u' ,'updating uiCA')
+    else: exe('./build-uica.sh' ,'installing uiCA')
 
 def tools_update(kernels=[], mask=0x7):
   if mask & 0x1: 
@@ -248,6 +252,7 @@ def tools_update(kernels=[], mask=0x7):
       if mask & 0x8: exe('mv ~/.cache/pmu-events /tmp')
       exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs
   if mask & 0x10: exe('git submodule update --remote')
+  if do['loop-ideal-ipc'] & 0x2 and isfile(C.Globals['uica']): exe('./build-uica.sh -u')
 
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
 def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' % (p, C.file2str(p), C.flag2str(' >> ', out)))
@@ -343,7 +348,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   new_line()          #Tools
   C.fappend('python version: ' + python_version(), out)
   for x in (do['compiler'].split()[0], 'as', 'ldd'): version(x)
-  if do['loop-ideal-ipc']: log_patch('%s --version | %s >> %s' % (C.Globals['llvm-mca'], label('version', 'llvm-mca'), out))
+  if do['loop-ideal-ipc'] & 0x1: log_patch('%s --version | %s >> %s' % (C.Globals['llvm-mca'], label('version', 'llvm-mca'), out))
   new_line()          #Memory
   exe('find /sys/devices/system/node > setup-node.log')
   if do['numactl']: exe('numactl -H >> ' + out)
@@ -747,6 +752,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       loops = '%s.loops.log' % data
       funcs = '%s.funcs.log' % data
       llvm_mca = '%s.llvm_mca.log' % data
+      uica = '%s.uica.log' % data
       err = '%s.error.log' % data
       ev = C.flag_value(do['perf-lbr'], '-e')
       print_info('\n%s\n#\n' % lbr_hdr)
@@ -785,7 +791,8 @@ def profile(mask, toplev_args=['mvl6', None]):
         report_info(info, err)
       if do['loops'] and isfile(loops):
         prn_line(info)
-        if do['loop-ideal-ipc']: exe('echo > %s' % llvm_mca)
+        if do['loop-ideal-ipc'] & 0x1: exe('echo > %s' % llvm_mca)
+        if do['loop-ideal-ipc'] & 0x2: exe('echo > %s' % uica)
         cmd, top = '', min(do['loops'], int(exe_1line('wc -l %s' % loops, 0)))
         do['loops'] = top
         while top > 1:
@@ -796,7 +803,8 @@ def profile(mask, toplev_args=['mvl6', None]):
           exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info))
         perf_script("%s %s && %s" % (perf_F(), cmd,
                     C.grep('FL-cycles...[1-9][0-9]?', info, color=1)), "@detailed stats for hot loops", data,
-                    export='PTOOLS_HITS=%s %s' % (hits, ('LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] else ''))
+                    export='PTOOLS_HITS=%s%s%s' % (hits, (' LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] & 0x1 else '',
+                                                   (' UICA_LOG=%s' % uica) if do['loop-ideal-ipc'] & 0x2 else ''))
       else: warn_file(loops)
 
   if en(9) and do['sample'] > 2:

@@ -74,24 +74,23 @@ regs = (('w', ('%ax', '%bx', '%cx', '%dx', '%di', '%si', '%bp', '%sp')),
 
 def run_llvm(hitcounts, llvm_log, loop, loop_ipc):
   if os.path.getsize(hitcounts) == 0: C.error("%s file is empty" % hitcounts)
-  llvm_input_name = ".ipc_%s.txt" % loop_ipc
+  llvm_input_name = ".llvm_in_%s.txt" % loop_ipc
   C.exe_cmd(C.grep('0%x' % int(loop_ipc, 16), hitcounts, '-A%d' % (loop['size'] - 1)),
             redir_out=' | sed -e "s/^[ \t]*//" | cut -d " " -f 2- > %s' % llvm_input_name)
   lbrmca(llvm_input_name, llvm_log=llvm_log, loop_ipc=loop_ipc)
 
 
-def get_llvm(hitcounts, llvm_log, loop, loop_ipc, info='IPC'):
+def get_ipc(hitcounts, llvm_log, loop, loop_ipc):
   output = C.exe_one_line(C.grep(loop_ipc, llvm_log, '-c'))
   if int(output) == 0:
     run_llvm(hitcounts, llvm_log, loop, loop_ipc)
   result = None
   # TODO: think how to change the fixed number of lines (10) for future usages
-  result_str = C.exe_one_line('%s | %s' % (C.grep(loop_ipc, llvm_log, '-A10'), C.grep(info)))
-  if info == 'IPC':
-    try:
-      result = float(result_str.split()[1])
-    except IndexError:
-      C.error("bogus IPC line:\n%s\nat %s for loop %s" % (result_str, llvm_log, loop_ipc))
+  result_str = C.exe_one_line('%s | %s' % (C.grep(loop_ipc, llvm_log, '-A10'), C.grep('IPC')))
+  try:
+    result = float(result_str.split()[1])
+  except IndexError:
+    C.error("bogus IPC line:\n%s\nat %s for loop %s" % (result_str, llvm_log, loop_ipc))
   return result
 
 

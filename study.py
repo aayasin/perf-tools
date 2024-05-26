@@ -62,8 +62,9 @@ Conf = {
               ',syscalls:sys_enter_sched_yield',
   },
   'Pebs': {
-    'dsb-bw': '-b -e %s/event=0xc6,umask=0x%s,frontend=0x400206,name=FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4/uppp'
-              ' -c 100003' % (pmu.pmu(), '3' if pmu.redwoodcove_on() else '1'),
+    'dsb-bw': # not in eventlist pmu.event('FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4', 3),
+              '-b -e %s/event=0xc6,umask=%d,frontend=0x400206,name=FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4/uppp%s'
+              ' -c 100003' % (pmu.pmu(), 3 if pmu.redwoodcove_on() else 1, ' -W' if pmu.retlat() else ''),
   },
   'Toplev': {'imix-loops': ' --frequency --metric-group +Summary',
   },

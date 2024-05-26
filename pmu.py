@@ -66,17 +66,18 @@ def amd():
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 
 def event(x, precise=0):
-  e = {'lbr':     'r20c4:Taken-branches:ppp',
-# TODO: use ocperf --print to get event
-    'all-misp':   '%s/event=0xc5,umask=0,name=BR_MISP_RETIRED/' % pmu(),
+  def misp_event(sub): return perf_event('BR_MISP_RETIRED.%s%s' % (sub, '_COST' if retlat() else ''))
+  aliases = {'lbr':     'r20c4:Taken-branches:ppp',
+    'all-misp':   misp_event('ALL_BRANCHES'),
     'calls-loop': 'r0bc4:callret_loop-overhead',
-    'cond-misp':  '%s/event=0xc5,umask=0x11,name=BR_MISP_RETIRED.COND/' % pmu(),
+    'cond-misp':  misp_event('COND'),
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
-    'dsb-miss':   '%s/event=0xc6,umask=0x%x,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/' % (
-                    pmu(), 3 if redwoodcove_on() else 1),
+    'dsb-miss':   perf_event('FRONTEND_RETIRED.ANY_DSB_MISS'),
     'sentries':   'r40c4:system-entries:u',
-    }[x]
-  return perf_format(e + ('u'+'p'*precise if precise else '')  + ' -W' if retlat() else '')
+  }
+  e = aliases[x] if x in aliases else perf_event(x)
+  if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
+  return perf_format(e)
 
 def find_event_name(x):
   e = C.flag_value(x, '-e')

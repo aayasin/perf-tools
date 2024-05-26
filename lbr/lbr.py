@@ -18,7 +18,8 @@ import lbr.common_lbr as LC
 import lbr.loops as loops
 import lbr.funcs as funcs
 import os, re, sys, time
-from lbr.llvm_mca import get_llvm
+from lbr.llvm_mca import get_ipc as get_ipc_llvm
+from lbr.uiCA import get_ipc as get_ipc_uica
 from lbr import x86
 import lbr.x86_fusion as x86_f
 try:
@@ -26,9 +27,10 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.20 # see version line of do.py
+__version__= x86.__version__ + 2.21 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
+uica_log = C.envfile('UICA_LOG')
 
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 def ratio(a, b): return C.ratio(a, b) if b else '-'
@@ -613,7 +615,8 @@ def print_all(nloops=10, loop_ipc=0):
         if lp['size']:
           C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, LC.hitcounts, '-B1 -A%d' % lp['size'] if LC.verbose & 0x40 else '-A%d' % (lp['size'] - 1)),
             'Hitcounts & ASM of loop %s' % LC.hex_ip(loop_ipc))
-          if llvm_log: lp['IPC-ideal'] = get_llvm(LC.hitcounts, llvm_log, lp, LC.hex_ip(loop_ipc))
+          if llvm_log: lp['IPC-ideal%s' % ('' if not uica_log else '-llvm')] = get_ipc_llvm(LC.hitcounts, llvm_log, lp, LC.hex_ip(loop_ipc))
+          if uica_log: lp['IPC-ideal%s' % ('' if not llvm_log else '-uica')] = get_ipc_uica(LC.hitcounts, uica_log, lp, LC.hex_ip(loop_ipc))
         else:
           if LC.debug: C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, LC.hitcounts), 'Headline of loop %s' % LC.hex_ip(loop_ipc))
           lp['attributes'] += ';likely_non-contiguous'

@@ -61,8 +61,7 @@ Conf = {
     'openmp': 'r0106,r10d1:MEM_LOAD_RETIRED.L2_MISS,r3f24:L2_RQSTS.MISS,r70ec:CPU_CLK_UNHALTED.PAUSE'
               ',syscalls:sys_enter_sched_yield',
   },
-  'Pebs': {'all-misp': '-b -e %s/event=0xc5,umask=0,name=BR_MISP_RETIRED/ppp -c 20003' % pmu.pmu(),
-    'cond-misp': '-b -e %s/event=0xc5,umask=0x11,name=BR_MISP_RETIRED.COND/ppp -c 20003' % pmu.pmu(),
+  'Pebs': {
     'dsb-bw': '-b -e %s/event=0xc6,umask=0x%s,frontend=0x400206,name=FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4/uppp'
               ' -c 100003' % (pmu.pmu(), '3' if pmu.redwoodcove_on() else '1'),
   },
@@ -72,6 +71,9 @@ Conf = {
     'openmp': [[':perf-stat-ipc:"\'stat -e instructions,cycles,r0106\'"']],
   },
 }
+Conf['Events']['all-misp'] = Conf['Events']['cond-misp']
+for x in ('all-misp', 'cond-misp'): Conf['Pebs'][x] = '-b -e %s -c 20003' % pmu.event(x, 3)
+
 def modes_list():
   ms = []
   for x in Conf.keys(): ms += list(Conf[x].keys())
@@ -321,6 +323,7 @@ def main():
   do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
+  elif args.verbose == -1: do += ' --print-only'
   do = do.replace('{', '"{').replace('}', '}"')
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')

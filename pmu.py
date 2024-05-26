@@ -52,6 +52,7 @@ def goldencove_on():  return cpu_has_feature('arch_lbr')
 # Redwood Cove onward PMUs have CPUID.0x23
 def redwoodcove_on(): return cpu_has_feature('CPUID.23H')
 
+def retlat():     return redwoodcove_on()
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
 def intel():      return 'Intel' in cpu('vendor')
@@ -64,15 +65,18 @@ def amd():
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 
-def event(x):
+def event(x, precise=0):
   e = {'lbr':     'r20c4:Taken-branches:ppp',
+# TODO: use ocperf --print to get event
+    'all-misp':   '%s/event=0xc5,umask=0,name=BR_MISP_RETIRED/' % pmu(),
     'calls-loop': 'r0bc4:callret_loop-overhead',
+    'cond-misp':  '%s/event=0xc5,umask=0x11,name=BR_MISP_RETIRED.COND/' % pmu(),
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
-    'dsb-miss':   '%s/event=0xc6,umask=0x%x,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp' % (
+    'dsb-miss':   '%s/event=0xc6,umask=0x%x,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/' % (
                     pmu(), 3 if redwoodcove_on() else 1),
     'sentries':   'r40c4:system-entries:u',
     }[x]
-  return perf_format(e)
+  return perf_format(e + ('u'+'p'*precise if precise else '')  + ' -W' if retlat() else '')
 
 def find_event_name(x):
   e = C.flag_value(x, '-e')
@@ -208,7 +212,7 @@ def force_cpu(cpu):
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
   return event_list
 
-pmutools = perftools + '/pmu-tools'
+pmutools = C.env2str('PMUTOOLS', perftools + '/pmu-tools')
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:

@@ -808,10 +808,10 @@ def profile(mask, toplev_args=['mvl6', None]):
       else: warn_file(loops)
 
   if en(9) and do['sample'] > 2:
-    data = perf_record('pebs', 9, pmu.event_name(do['perf-pebs']))[0]
+    data = perf_record('pebs', 9, pmu.find_event_name(do['perf-pebs']))[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
     if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data),
-                              "@ top-10 IPs, Insts of %s" % pmu.event_name(do['perf-pebs']), data)
+                              "@ top-10 IPs, Insts of %s" % pmu.find_event_name(do['perf-pebs']), data)
     else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:

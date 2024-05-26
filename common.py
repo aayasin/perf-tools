@@ -36,7 +36,7 @@ class color:
 
 Globals = {'llvm-mca': '/usr/local/bin/llvm-mca',
            'uica':     'uiCA/uiCA.py',
-           'xed':      '/usr/local/bin/xed'
+           'xed':      '/usr/local/bin/xed',
 }
 
 # append to a file

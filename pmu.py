@@ -68,7 +68,7 @@ def event(x):
     }[x]
   return perf_format(e)
 
-def event_name(x):
+def find_event_name(x):
   e = C.flag_value(x, '-e')
   if 'name=' in e: return e.split('name=')[1].split('/')[0]
   return e
@@ -153,6 +153,12 @@ def toplev2intel_name(e):
       for event in db:
         Toplev2Intel[event['EventName'].lower().replace('.', '_')] = event['EventName']
   return Toplev2Intel[e]
+
+def perf_event(e):
+  perf_str = C.exe_one_line('%s/ocperf -e %s --print' % (pmutools, e))
+  tl_name = find_event_name(perf_str)
+  return perf_str.replace(tl_name, toplev2intel_name(tl_name)).split()[2]
+
 #
 # CPU, cpu_ prefix
 #

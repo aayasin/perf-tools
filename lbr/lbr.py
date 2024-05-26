@@ -446,7 +446,7 @@ read_sample.stop = os.getenv('LBR_STOP')
 read_sample.tick = C.env2int('LBR_TICK', 1000)
 read_sample.dump = C.env2int('LBR_DUMP', 0)
 
-# TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictiorary if header or None otherwise
+# TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictionary if header or None otherwise
 def is_header(line):
   def patch(x):
     if LC.debug: C.printf("\nhacking '%s' in: %s" % (x, line))
@@ -458,8 +458,8 @@ def is_header(line):
     if '::' in p: pass
     elif ': ' in p: line = patch(': ')
     elif ':' in p: line = patch(':')
+  #    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
   return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
-#    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
 # kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
 #                              re.match(r"(\s?[\S]*)\s+([\d\[\]\.\s]+):\s+\d+\s+(\S*:)\s", line) or
 #AUX data lost 1 times out of 33!

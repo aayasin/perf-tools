@@ -47,7 +47,7 @@ while True:
     if not LC.is_taken(sample[-2]): c['loop_seq'] += 1
     elif LC.is_taken(sample[-2]) and is_jmp_next(get_taken(sample, -1)): c['loop_jmp2head'] += 1
     br = get_taken(sample, -2)
-    if br['to'] > ip and br['to'] <= loops.get_loop(ip)['back']: c['loop_jmp2mid'] += 1
+    if ip < br['to'] <= loops.get_loop(ip)['back']: c['loop_jmp2mid'] += 1
 
 if 1:
   if not loop: print_header()

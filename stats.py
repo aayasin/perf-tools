@@ -123,7 +123,8 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
       if sep: s = C.chop(re.sub(r'[\s\-]+', sep, s))
       v = convert(l[1])
     # extract global histograms
-    if 'histogram:' in l:  # histogram start
+    # TODO: Amiri - handle inst-per-leaf-func-name which fails parsing
+    if 'histogram:' in l and 'inst-per-leaf-func-name' not in l:  # histogram start
       histo = '%s_' % l.split()[0].replace(C.color.DARKCYAN, '')
       continue
     if histo and 'summary:' in l:  # histogram end

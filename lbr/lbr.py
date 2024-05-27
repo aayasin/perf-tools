@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.21 # see version line of do.py
+__version__= x86.__version__ + 2.22 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 uica_log = C.envfile('UICA_LOG')
@@ -504,7 +504,7 @@ def get_taken(sample, n):
   frm, to = -1, -1
   if i >= 0:
     frm = LC.line_ip(sample[i], sample)
-    if i < (len(sample)-1): to = LC.line_ip(sample[i + 1], sample)
+    if i < (len(sample)-1): to = LC.line_ip(sample[i + (2 if LC.is_label(sample[i + 1]) else 1)], sample)
   return {'from': frm, 'to': to, 'taken': 1}
 
 def print_glob_hist(hist, name, weighted=False, threshold=.03):

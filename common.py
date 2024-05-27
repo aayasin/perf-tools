@@ -96,6 +96,11 @@ def annotate(stuff, label='', stack=False):
   for x in xs: printf('%s of %s; '%(str(x), type(x)), flush=False)
   printf('.\n')
 
+def log_callchain():
+  tb=traceback.format_list(traceback.extract_stack())
+  t = [x.split('\n')[1].strip() for x in tb[:-2]]
+  printc('\t==> '.join(t), col=color.GREY)
+
 # system
 #
 # exe_cmd - execute system command(s) with logging support

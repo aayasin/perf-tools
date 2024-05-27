@@ -516,7 +516,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     return record_name(do[x])
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
-  if args.profile_mask & ~0x1 and args.verbose >= 0: C.info('App: ' + r)
+  if args.profile_mask & ~0x1 and not do['batch'] and args.verbose >= 0: C.info('App: ' + r)
   if en(1):
     logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
     if profiling() and (args.sys_wide or '-a' in do['perf-stat']):

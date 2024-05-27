@@ -276,11 +276,10 @@ def dsb_msb():
   return 10 if goldencove() or redwoodcove() else (9 if skylake() or icelake() else None)
 
 def dsb_set_index(ip):
-  left = dsb_msb()
-  if left:
-    mask = 2 ** (left + 1) - 1
-    return ((ip & mask) >> 6)
-  return None
+  if not dsb_set_index.MSB: dsb_set_index.MSB = dsb_msb()
+  mask = 2 ** (dsb_set_index.MSB + 1) - 1
+  return ((ip & mask) >> 6)
+dsb_set_index.MSB = None
 
 def main():
   ALL = len(sys.argv) > 1 and sys.argv[1] == 'ALL'

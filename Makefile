@@ -114,6 +114,10 @@ ifeq ($(TEST_LBR_PERF), 1)
 	info=$(shell ls -1tr *info.log | tail -1); grep '^LBR samples' $$info | awk -F 'samples/s: ' '{print $$2}' | \
 	    awk -F '}' '{print $$1}' | awk '{if ($$1 > 30) exit 0; else exit 1}' || $(FAIL)
 endif
+test-default-non-mux:
+	$(MAKE) test-default PM=313e
+	info=$(shell ls -1tr *info.log | tail -1); grep ^LBR $$info; cp $$info perf-trk/$(shell date +"%Y-%m-%d").$$info
+
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp --tune :forgive:2 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
@@ -172,7 +176,7 @@ pre-push: help
 	$(MAKE) test-bottlenecks AP="./kernels/cpuid $(CPUIDI)" # tests Bottlenecks View
 	$(MAKE) test-build SHOW="grep --color -E '^|build|DSB|Ports'" # tests build command, perf -e, toplev --nodes; Ports_*
 	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'                 # tests load-latency profile-step + verbose:1
-	$(MAKE) test-default PM=313e                            # tests default non-MUX sensitive profile-steps
+	$(MAKE) test-default-non-mux                            # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
 	$(MAKE) test-bc2 CMD='profile analyze' PM=112           # tests analyze module

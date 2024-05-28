@@ -48,7 +48,7 @@ class Function:
   def __str__(self, detailed=False):
     result = f"{{ip: 0x{self.ip}, hotness: {self.hotness}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}, " \
       f"srcline: {self.srcline}, flows-num: {self.flows_num}"
-    if not detailed: result += ", flows: {"
+    if not detailed: result += ", %sflows: {" % ('top-10 ' if len(self.flows) > 10 else '')
     else:
       ipcs = sorted(self.ipc_histo.keys())
       if ipcs:
@@ -57,7 +57,7 @@ class Function:
       result += C.printc(f'flows of function at 0x{self.ip}:', log_only=True)
     for i, f in enumerate(sorted(self.flows)):
       if detailed: result += '\n' + str(f)
-      else:
+      elif i < 10:
         result += f"{', ' if i > 0 else ''}{f.flow}: {f.hotness}"
     if not detailed: result += '}}'
     else:

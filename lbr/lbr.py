@@ -424,7 +424,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       if (LC.edge_en or 'DSB_MISS' in event) and LC.is_type('jmp', line):
         ilen = LC.get_ilen(line)
         if ilen: ips_after_uncond_jmp.add(ip + ilen)
-      # interchanging loops
+      # interleaving loops
       if ip:
         line_loop = loops.loop_by_line(line, body=True)
         if line_loop:
@@ -566,7 +566,7 @@ def print_global_stats():
   print_loops_stat('undetermined size', len([l for l in loops.loops.keys() if loops.loops[l]['size'] is None]))
   if LC.stats.ilen() : print_loops_stat('non-contiguous', len(loops.loops) - len(loops.contigous_loops))
   print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
-  print_loops_stat('interchanging', len(inter_loops))
+  print_loops_stat('interleaving', len(inter_loops))
   print_loops_stat('functions in', len(loops.functions_in_loops))
   if LC.stats.size():
     for x in LC.Insts_cond: print_imix_stat(x + ' conditional', LC.glob['cond_' + x])

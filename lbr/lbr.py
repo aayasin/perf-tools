@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.22 # see version line of do.py
+__version__= x86.__version__ + 2.23 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 uica_log = C.envfile('UICA_LOG')
@@ -248,6 +248,7 @@ def edge_stats(line, lines, xip, size):
     elif x86_f.is_vec_mov_op_fusion(lines[-2], lines[-1]): inc_pair('VEC MOV', 'OP', suffix='fusible')
   if LC.is_type('call', xline): inc(hsts[FUNCI], ip)
 
+inter_loops = set()
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
   def invalid(bad, msg):
@@ -256,7 +257,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
   def header_only_str(l):
     dso = get_field(l, 'dso').replace('(','').replace(')','')
     return 'header-only: ' + (dso if 'kallsyms' in dso else ' '.join((get_field(l, 'sym'), dso)))
-  global lbr_events
+  global lbr_events, inter_loops
   valid, lines, loops.bwd_br_tgts = 0, [], []
   if skip_bad and not loop_ipc: LC.stats.enables |= LC.stats.SIZE
   if lp_stats_en: LC.stats.enables |= LC.stats.LOOP
@@ -423,6 +424,12 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       if (LC.edge_en or 'DSB_MISS' in event) and LC.is_type('jmp', line):
         ilen = LC.get_ilen(line)
         if ilen: ips_after_uncond_jmp.add(ip + ilen)
+      # interleaving loops
+      if ip:
+        line_loop = loops.loop_by_line(line, body=True)
+        if line_loop:
+          for l in loops.loops:
+            if ip == loops.loops[l]['back'] and ip < loops.loops[line_loop]['back'] and l < line_loop: inter_loops.add(ip)
       if 'call' in line and not func:
         func = len(lines)
         func_srcline = srcline
@@ -431,7 +438,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       if LC.has_timing(line):
         cycles = LC.line_timing(line)[0]
         LC.stat['total_cycles'] += cycles
-        if LC.edge_en and loops.is_loop_line(line):
+        if LC.edge_en and loops.loop_by_line(line):
           loops.total_cycles += cycles
       if mispred_ip and LC.is_taken(line) and mispred_ip == LC.line_ip(line) and 'MISPRED' in line: valid += 1
       lines += [ line ]
@@ -559,6 +566,8 @@ def print_global_stats():
   print_loops_stat('undetermined size', len([l for l in loops.loops.keys() if loops.loops[l]['size'] is None]))
   if LC.stats.ilen() : print_loops_stat('non-contiguous', len(loops.loops) - len(loops.contigous_loops))
   print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
+  print_loops_stat('interleaving', len(inter_loops))
+  print_loops_stat('functions in', len(loops.functions_in_loops))
   if LC.stats.size():
     for x in LC.Insts_cond: print_imix_stat(x + ' conditional', LC.glob['cond_' + x])
     print_imix_stat('unaccounted non-fusible conditional', LC.glob['cond_non-fusible'] - LC.glob['counted_non-fusible'])

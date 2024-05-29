@@ -28,12 +28,14 @@ def is_loop(line):    return is_loop_by_ip(LC.line_ip(line))
 # FIXME: this does not work for non-contigious loops!
 def is_in_loop(ip, loop): return ip and loop <= ip <= loops[loop]['back']
 def get_loop(ip):     return loops[ip] if ip in loops else None
-def is_loop_line(line):
+def loop_by_line(line, body=False):
   ip = LC.line_ip(line)
   if not ip: return False
   for loop_ipc in loops:
-    if loop_ipc <= ip <= loops[loop_ipc]['back']: return True
-  return False
+    if (body and loop_ipc < ip < loops[loop_ipc]['back']) or \
+            (not body and loop_ipc <= ip <= loops[loop_ipc]['back']):
+      return loop_ipc
+  return None
 
 def tripcount(ip, loop_ipc, state):
   if state == 'new' and loop_ipc in loops:
@@ -136,9 +138,10 @@ loop_stats_atts = ''
 
 bwd_br_tgts = []
 loop_cands = []
+functions_in_loops = set()
 def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
                 MOLD=4e4):  # Max Outer Loop Distance
-  global bwd_br_tgts, loop_cands, contigous_loops  # unlike nonlocal, global works in python2 too!
+  global bwd_br_tgts, loop_cands, contigous_loops, functions_in_loops  # unlike nonlocal, global works in python2 too!
   # lines[x+1]/lines[x+2] etc w/ no labels
   def next_line(x, step=1):
     while x + step < len(lines) and LC.is_label(lines[x+step]):
@@ -156,9 +159,13 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       x -= 1
     return 0, -1
   def has_ip(at):
+    call_ret, call_ip = False, None
     while at > 0:
-      if LC.is_callret(lines[at]): return False
-      if LC.line_ip(lines[at]) == ip: return True
+      if LC.is_callret(lines[at]): call_ret = True
+      if 'call' in lines[at]: call_ip = LC.line_ip(lines[at])
+      if LC.line_ip(lines[at]) == ip:
+        if call_ip and (call_ip - ip < MOLD): functions_in_loops.add(call_ip)
+        return not call_ret
       at -= 1
     return False
   prev_l = prev_line()

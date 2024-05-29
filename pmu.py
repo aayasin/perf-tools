@@ -50,7 +50,7 @@ def v5p(): return perfmetrics()
 # Golden Cove onward PMUs have Arch LBR
 def goldencove_on():  return cpu_has_feature('arch_lbr')
 # Redwood Cove onward PMUs have CPUID.0x23
-def redwoodcove_on(): return cpu_has_feature('CPUID.23H')
+def redwoodcove_on(): return cpu('CPUID.23H')
 
 def retlat():     return redwoodcove_on()
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
@@ -242,6 +242,7 @@ def cpu(what, default=None):
     cs = tl_cpu.CPU(known_cpus=((forcecpu, ()),) if forcecpu else ()) # cpu.state
     if what == 'get-cs': return cs
     cpu.state = {
+      'CPUID.23H':    cpu_has_feature('CPUID.23H'),
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
       'eventlist':    force_cpu(forcecpu) if forcecpu else event_download.eventlist_name(),
@@ -279,20 +280,21 @@ def cpu_msrs():
     if v5p(): msrs += [0x06d]
   return msrs
 
-def cpu_peak_kernels(widths=range(4, 7)):
+def cpu_peak_kernels(widths=(4, 5, 6, 8)):
   return ['peak%dwide' % x for x in widths]
 
 def cpu_pipeline_width():
   width = 4
   if icelake(): width = 5
   elif goldencove() or redwoodcove(): width = 6
+  elif lunarlake(): width = 8
   return width
 
 # deeper uarch stuff
 
 # returns MSB bit of DSB's set-index, if uarch is supported
 def dsb_msb():
-  return 10 if goldencove() or redwoodcove() else (9 if skylake() or icelake() else None)
+  return 11 if lunarlake() else 10 if goldencove() or redwoodcove() else (9 if skylake() or icelake() else None)
 
 def dsb_set_index(ip):
   if not dsb_set_index.MSB: dsb_set_index.MSB = dsb_msb()

@@ -133,7 +133,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=Fa
   if msg and do['batch']: msg += " for '%s'" % args.app
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee']: x = x.split('|')[0]
-  x = x.replace(' ./', ' %s/' % C.dirname())
+  x = x.replace('| ./', '| %s/' % C.dirname())
   if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
   profiling = C.any_in([' stat', ' record', 'toplev.py', 'genretlat'], x)
   if export: pass
@@ -726,8 +726,8 @@ def profile(mask, toplev_args=['mvl6', None]):
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, r" grep -E -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      slow_cmd = "| tee >(sed -E 's/\[[0-9]+\]//' | %s | ./slow-branch | sort -n | PTAGE_R=2 ./ptage > %s.slow.log)" % (
-        sort2u, data) if mask_eq(0x48, do['imix']) else ''
+      slow_cmd = "| tee >(sed -E 's/\[[0-9]+\]//' | %s | ./slow-branch | sort -n | PTAGE_R=2 %s/ptage > %s.slow.log)" % (
+        sort2u, C.dirname(), data) if mask_eq(0x48, do['imix']) else ''
       perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data, log_br_count('sampled taken',
         'samples').replace('Count', '\\nCount')), '@processing %d samples' % nsamples, data, fail=0)
       if do['xed']:

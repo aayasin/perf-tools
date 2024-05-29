@@ -201,7 +201,7 @@ def cpu(what, default=None):
   if cpu.state:
     if what == 'all':
       s = cpu.state.copy()
-      for x in ('eventlist', 'model', 'x86'): del s[x]
+      for x in ('cpucount', 'eventlist', 'forcecpu', 'kernel-version', 'model', 'x86'): del s[x]
       return s
     return cpu.state if what == 'ALL' else (cpu.state[what] if what in cpu.state else warn())
   if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
@@ -227,13 +227,14 @@ def cpu(what, default=None):
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
       'eventlist':    force_cpu(forcecpu) if forcecpu else event_download.eventlist_name(),
+      'forcecpu':     int(True if forcecpu else False),
+      'kernel-version': tuple(map(int, platform.release().split('.')[0:2])),
       'model':        cs.model,
       #'name':         cs.true_name,
       'smt-on':       cs.ht,
       'socketcount':  cs.sockets,
       'vendor':       cs.vendor,
       'x86':          int(platform.machine().startswith('x86')),
-      'forcecpu':     int(True if forcecpu else False)
     }
     cpu.state.update(versions())
     return cpu(what, default)
@@ -282,9 +283,7 @@ def dsb_set_index(ip):
 dsb_set_index.MSB = None
 
 def main():
-  ALL = len(sys.argv) > 1 and sys.argv[1] == 'ALL'
-  if len(sys.argv) > 1 and not ALL: return print(cpu(sys.argv[1]))
-  print(cpu('ALL' if ALL else 'all'))
+  print(cpu(sys.argv[1] if len(sys.argv) > 1 else 'all'))
 
 if __name__ == "__main__":
   main()

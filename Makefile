@@ -111,11 +111,13 @@ test-build:
 test-default:
 	$(DO1) -pm $(PM) $(DO_SUFF)
 ifeq ($(TEST_LBR_PERF), 1)
+	@sleep 3
 	info=$(shell ls -1tr *info.log | tail -1); grep '^LBR samples' $$info | awk -F 'samples/s: ' '{print $$2}' | \
 	    awk -F '}' '{print $$1}' | awk '{if ($$1 > 30) exit 0; else exit 1}' || $(FAIL)
 endif
 test-default-non-mux:
 	$(MAKE) test-default PM=313e
+	@mkdir -p perf-trk
 	info=$(shell ls -1tr *info.log | tail -1); grep ^LBR $$info; cp $$info perf-trk/$(shell date +"%Y-%m-%d").$$info
 
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)

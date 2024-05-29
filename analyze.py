@@ -34,6 +34,7 @@ def analyze(app, args, do=None):
       if 'az-%s' % x in do: threshold[x] = do['az-%s' % x]
   threshold['IpTB'] = 3 * pmu.cpu_pipeline_width()
   def exe(x): return C.exe_cmd(x, debug = args.verbose > 1)
+  # TODO: move this function to lbr/loops.py
   def loop_code(loop): exe(C.grep(loop['ip'].replace('x', ''), hits, '--color -B1 -A%d' % loop['size']))
   def loop_uops(loop, loop_size): return loop_size - sum(loop[x] for x in loop.keys() if x.endswith('-mf'))
   def l2s(l): return ', '.join(l)
@@ -76,5 +77,5 @@ def analyze(app, args, do=None):
       if args.verbose > 0: print(loops[l])
       advise('Hot %s is %s (%s of time, size= ~%d uops, %s); try to %s it' % (l,
         l2s(issues), percent(cycles), loop_uops(loops[l], loop_size), l2s(extra), l2s(hints)))
-      if loop_size > 0 and loops[l]['taken'] == 0: loop_code(loops[l])
-
+      #if loop_size > 0 and loops[l]['taken'] == 0: loop_code(loops[l])
+      if loop_size > 0: loop_code(loops[l])

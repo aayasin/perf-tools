@@ -125,3 +125,4 @@ def gen_misp_report(data, header='Branch Misprediction Report (taken-only)'):
     f.write('%s:\n' % header + '\t'.join(('significance', '%7s' % 'ratio', 'instruction addr & ASM'))+'\n')
     for b in C.hist2slist(mispreds):
       if b[1] > 1: f.write('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0]))+'\n')
+

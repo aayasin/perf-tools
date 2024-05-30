@@ -804,10 +804,11 @@ def profile(mask, toplev_args=['mvl6', None]):
       error('Linux kernel version is too old for GNR: %s' % str(pmu.cpu('kernel-version')))
     data = perf_record('pebs', 9, pmu.find_event_name(do['perf-pebs']))[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
-    if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data),
+    if '_COST' in do['perf-pebs']: pass
+    elif do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data),
                               "@ top-10 IPs, Insts of %s" % pmu.find_event_name(do['perf-pebs']), data)
     else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
-    if pmu.retlat():
+    if pmu.retlat() and ' -W' in do['perf-pebs']:
       perf_script("-F retire_lat,ip | sort | uniq -c | awk '{print $1*$2 \"\\t\" $2 \"\\t\" $3 }' | grep -v ^0"
         " | tee >(sort -k3 | awk 'BEGIN {ip=0; sum=0} {if ($3 != ip) {if (ip) printf \"%%8d %%18s\\n\", sum, ip; ip=$3; sum=$1} else {sum += $1}}"
                 " END {printf \"%%8d %%18s\\n\", sum, ip}' | sort -n | ./ptage > %s.ips-retlat.log)"

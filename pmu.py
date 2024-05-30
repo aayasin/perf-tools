@@ -233,7 +233,7 @@ def cpu(what, default=None):
       #'name':         cs.true_name,
       'smt-on':       cs.ht,
       'socketcount':  cs.sockets,
-      'vendor':       cs.vendor,
+      'vendor':       C.exe_one_line("lscpu | grep 'Vendor'").split(':')[1].strip(), #cs.vendor,
       'x86':          int(platform.machine().startswith('x86')),
     }
     cpu.state.update(versions())

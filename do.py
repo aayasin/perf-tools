@@ -62,7 +62,7 @@ do = {'run':        C.RUN_DEF,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
   'flameg':         0,
-  'forgive':        1,
+  'forgive':        1, # set it to 2 to convert error to warning
   'gen-kernel':     1,
   'help':           1,
   'interval':       10,
@@ -174,7 +174,7 @@ def exe_1line(x, f=None, heavy=True):
   return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(bash(x), f, args.verbose > 1)
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
 
-def error(x): C.warn(x) if do['forgive'] else C.error(x)
+def error(x): C.warn(x) if do['forgive'] > 1 else C.error(x)
 def warn_file(x):
   if not args.mode == 'profile' and not args.print_only and not isfile(x): C.warn('file does not exist: %s' % x)
 
@@ -527,11 +527,11 @@ def profile(mask, toplev_args=['mvl6', None]):
     data = '%s.perf.data' % record_name(do['perf-record'])
     profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.default_period(), data, do['perf-record'], r),
                 'sampling %s' % do['perf-record'].replace(' -g ', 'w/ stacks'), 3, tune='sample')
-    if do['log-stdout'] and profiling() and do['forgive'] < 2:
+    if do['log-stdout'] and profiling():
       record_out = C.file2lines(C.log_stdio)
       for l in reversed(record_out):
         if 'sampling ' in l: break
-        if 'WARNING: Kernel address maps' in l: C.error("perf tool is missing permissions. Try './do.py setup-perf'")
+        if 'WARNING: Kernel address maps' in l: error("perf tool is missing permissions. Try './do.py setup-perf'")
     exe(perf_report + " --header-only -i %s | grep duration" % data)
     print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_view(), data))
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
@@ -687,7 +687,7 @@ def profile(mask, toplev_args=['mvl6', None]):
       bin=bins[-1]
       if isfile(bin):
         print_info('\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n' % bin)
-        exe("strings %s | %s >> %s" % (bin, C.grep('^(GCC:|clang [bv])'), info))
+        exe("strings %s | %s >> %s" % (bin, C.grep('^((GCC|GNU):|clang [bv])'), info))
       prn_line(info)
     def log_count(x, l): return "printf 'Count of unique %s%s: ' >> %s && wc -l < %s >> %s" % (
       'non-cold ' if do['imix'] & 0x10 else '', x, info, l, info)

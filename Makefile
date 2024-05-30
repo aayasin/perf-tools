@@ -91,7 +91,7 @@ list:
 
 lspmu:
 	@python -c 'import pmu; print(pmu.name())'
-	@lscpu | grep 'Model name'
+	@lscpu | grep -E 'Model name|Vendor'
 
 help: do-help.txt
 do-help.txt: do.py common.py pmu.py tma.py

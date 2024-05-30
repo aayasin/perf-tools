@@ -47,7 +47,7 @@ class Function:
 
   def __str__(self, detailed=False):
     result = f"{{ip: 0x{self.ip}, hotness: {self.hotness}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}, " \
-      f"srcline: {self.srcline}, flows-num: {self.flows_num}"
+      f"{f'srcline: {self.srcline}, ' if self.srcline else ''}flows-num: {self.flows_num}"
     if not detailed: result += ", %sflows: {" % ('top-10 ' if len(self.flows) > 10 else '')
     else:
       ipcs = sorted(self.ipc_histo.keys())
@@ -109,7 +109,7 @@ class Flow:
     return result
 
 funcs = set()
-#funcs_cands = set()
+partial_funcs = set()
 total_cycles = 0
 
 def get_func(func, funcs_set):
@@ -151,9 +151,8 @@ def process_function(lines, srcline, outer_funcs=[]):
     new_flow.back = back
     if new_flow.flow.endswith('_'): new_flow.flow = new_flow.flow[:-1]
     if new_flow.flow == '': new_flow.flow = '<serial>'
-    # funcs_set = funcs if back else funcs_cands
-    # func = get_func(new_func, funcs_set) if new_func in funcs_set else new_func
-    func = get_func(new_func, funcs) if new_func in funcs else new_func
+    funcs_set = funcs if back else partial_funcs
+    func = get_func(new_func, funcs_set) if new_func in funcs_set else new_func
     if new_flow in func.flows: flow = get_flow(new_flow, func)
     else:
       flow = new_flow
@@ -170,8 +169,7 @@ def process_function(lines, srcline, outer_funcs=[]):
       func.ipc_total += 1
       func.ipc_sum += ipc
     func.flows.add(flow)
-    # funcs_set.add(func)
-    funcs.add(func)
+    funcs_set.add(func)
 
   global total_cycles
   inner_end = None

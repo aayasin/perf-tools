@@ -800,6 +800,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     elif ':' in do['perf-pebs']: assert 'pp' in do['perf-pebs'].split(':')[1], "Expect a precise event:"
     else: assert 0, "Expect a precise event in '%s'" % do['perf-pebs']
     if pmu.retlat(): assert ' -W' in do['perf-pebs'] or do['forgive'] > 1, "Expect use of Timed PEBS"
+    if 'frontend' in do['perf-pebs'] and pmu.granite() and pmu.cpu('kernel-version') < (6, 4):
+      error('Linux kernel version is too old for GNR: %s' % str(pmu.cpu('kernel-version')))
     data = perf_record('pebs', 9, pmu.find_event_name(do['perf-pebs']))[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
     if do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data),

@@ -98,9 +98,9 @@ def line_inst(line):
   if 'nop' in line: return 'nop'
   if '(' in line:  # load/store take priority in CISC insts
     if 'lea' in line: return 'lea'
-    if is_branch(line): return 'mem_indir-branch'
+    if x86.is_branch(line): return 'mem_indir-branch'
     return x86.get_mem_inst(line)
-  if is_branch(line): return 'nonmem-branch'
+  if x86.is_branch(line): return 'nonmem-branch'
   for x in pInsts: # skip non-vector p/v-prefixed insts
     if x in line: return x
   r = re.match(r"\s+\S+\s+(\S+)", line)
@@ -115,7 +115,6 @@ def line_inst(line):
 
 def is_type(t, l):    return x86.is_type(inst2pred(t), l)
 def is_callret(l):    return is_type(x86.CALL_RET, l)
-def is_branch(l):     return is_type(x86.JUMP, l)
 def is_taken(line):   return '# ' in line
 def has_timing(line): return line.endswith('IPC')
 

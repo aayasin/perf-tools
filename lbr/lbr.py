@@ -154,7 +154,7 @@ def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
       if LC.verbose & 0x10 and 'IPC' in lines[-(len(lines) - x)]:
         info_lines('call to leaf-func %s of size %d' % (name, insts_per_call), lines[-(len(lines)-x):] + [line])
       break
-    elif LC.is_branch(lines[x]):
+    elif x86.is_branch(lines[x]):
       branches += 1
       if 'jmp' in lines[x] and '%' not in lines[x]: dirjmps += 1
     if not LC.is_label(lines[x]): insts_per_call += 1
@@ -388,7 +388,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         valid = skip_sample(lines[0])
         invalid('bogus', 'instruction address missing')
         break
-      if skip_bad and len(lines) and not label and LC.is_taken(line) and not LC.is_branch(line):
+      if skip_bad and len(lines) and not label and LC.is_taken(line) and not x86.is_branch(line):
         valid = skip_sample(lines[0])
         invalid('bogus', 'non-branch instruction "%s" marked as taken' % x86.get('inst', line))
         break

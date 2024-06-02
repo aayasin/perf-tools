@@ -145,14 +145,15 @@ def exe2list(x, sep=' ', debug=False):
   if debug: printc('exe2list(%s) = %s' % (x, str(res).replace(', u', ', ')), color.BLUE)
   return res
 
-def exe_one_line(x, field=None, debug=False):
+# @fail:  1: exit with error if command fails; 0: warn
+def exe_one_line(x, field=None, debug=False, fail=0):
   def print1(x): printf(x, std=sys.stdout, col=color.BLUE) if debug else None
   x_str = 'exe_one_line(%s, f=%s)' % (x, str(field))
   print1('%s = ' % x_str)
   try:
     res = exe_output(x, '')
   except subprocess.CalledProcessError:
-    warn('%s failed!' % x_str)
+    (error if fail else warn)('%s failed!' % x_str)
     res = 'N/A'
   if field is not None: res = str2list(res)[field]
   print1('%s\n' % res)

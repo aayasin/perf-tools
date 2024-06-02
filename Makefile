@@ -167,7 +167,8 @@ test-edge-inst:
 	$(DO) $(CMD) -a './pmu-tools/workloads/CLTRAMP3D' --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 
 clean:
-	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} test-{dir,study} .CLTRAMP3D*cmd .ipc_*.txt
+	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \
+	    setup-system-* test-{dir,study} .CLTRAMP3D*cmd .ipc_*.txt
 pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5

@@ -316,7 +316,7 @@ def main():
   if args.mode in Conf['Pebs'].keys(): extra += ' :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode]
   if pmu.skylake(): extra += ' :perf-stat-add:-1'
   elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
-  a.insert(0, [':batch:1 :help:0 :lbr-verbose:1 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s ' % (
+  a.insert(0, [':batch:1 :help:0 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s ' % (
     int(pmu.cpu('corecount')/2), extra)])
   do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 

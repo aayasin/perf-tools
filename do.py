@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.23
+__version__ = 3.24
 
 import argparse, os.path, re, sys
 
@@ -50,7 +50,6 @@ if not pmu.intel(): C.warn('Non-Intel platform detected: ' + pmu.cpu('vendor'))
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'az-hot-loop':    .05,
-  'az-Instruction_Fetch_BW': tma.threshold_of('Instruction_Fetch_BW'),
   'batch':          0,
   'calibrate':      0,
   'comm':           None,
@@ -117,6 +116,8 @@ do = {'run':        C.RUN_DEF,
   'tma-group':      None,
   'xed':            1 if pmu.cpu('x86', 0) else 0,
 }
+for b in tma.get('bottlenecks-list-2'):
+  do['az-%s' % b] = tma.threshold_of(b);
 args = argparse.Namespace()
 
 def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=False, export=None):
@@ -133,8 +134,6 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=Fa
   if msg and do['batch']: msg += " for '%s'" % args.app
   if redir_out: redir_out=' %s' % redir_out
   if not do['tee']: x = x.split('|')[0]
-  x = x.replace('| ./', '| %s/' % C.dirname())
-  if x.startswith('./'): x.replace('./', '%s/' % C.dirname(), 1)
   profiling = C.any_in([' stat', ' record', 'toplev.py', 'genretlat'], x)
   if export: pass
   elif (args.verbose > globs['V_timing'] and re.match(r'perf (script|annotate)', x)) or (
@@ -703,21 +702,6 @@ def profile(mask, toplev_args=['mvl6', None]):
       for h in hists: hist_cmd += " && %s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % h, info, '-A33'), h)
       exe("%s && tail %s | grep -v '[cC]ount of' %s" % (C.grep('code footprint', info), info, hist_cmd),
           "@top loops & more in " + info)
-    # TODO: move this code to a seperate 'analyze' module!
-    def calc_misp_ratio():
-      misp_file, header, takens_freq, mispreds = data + '.mispreds.log', 'Branch Misprediction Report (taken-only)', {}, {}
-      exe_v0(msg='@'+header.lower())
-      assert isfile(misp_file) and isfile(data+'.takens.log')
-      for l in C.file2lines(data+'.takens.log')[:-1]:
-        b = C.str2list(l)
-        takens_freq[ b[2] ] = int(b[1])
-      for l in C.file2lines(misp_file)[:-1]:
-        b = C.str2list(l)
-        m = int(b[1])
-        mispreds[ (' '.join(b[2:]), C.ratio(m, takens_freq[b[2]])) ] = m * takens_freq[b[2]]
-      # significance := hitcounts x mispredicts (based on taken-branch IP)
-      C.fappend('\n%s:\n' % header + '\t'.join(('significance', '%7s' % 'ratio', 'instruction addr & ASM')), misp_file)
-      for b in C.hist2slist(mispreds): C.fappend('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0])), misp_file) if b[1] > 1 else None
     lbr_hdr = '# LBR-based Statistics:'
     if not isfile(info) or do['reprocess'] > 1 or do['reprocess'] < 0:
       if do['size']: static_stats()
@@ -732,19 +716,21 @@ def profile(mask, toplev_args=['mvl6', None]):
         'samples').replace('Count', '\\nCount')), '@processing %d samples' % nsamples, data, fail=0)
       if do['xed']:
         if (do['imix'] & 0x8) == 0:
-          perf_script("-F +brstackinsn --xed | GREP_INST| grep MISPRED | %s | %s > %s.mispreds.log" %
+          perf_script("-F +brstackinsn --xed | GREP_INST| grep MISPRED | %s | %s > %s.tk-mispreds.log" %
                       (clean, sort2uf, data), '@processing mispredicts', data)
         else:
           perf_script("-F +brstackinsn --xed | GREP_INST"
-            "| tee >(grep MISPRED | %s | tee >(grep -E -v 'call|jmp|ret' | %s > %s.misp_tk_conds.log) | %s > %s.mispreds.log) "
+            "| tee >(grep MISPRED | %s | tee >(grep -E -v 'call|jmp|ret' | %s > %s.cond-tk-mispreds.log) | %s > %s.tk-mispreds.log) "
             "%s| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
             (clean, sort2uf, data, sort2uf, data, slow_cmd, clean, sort2uf, data, sort2uf, data, sort2uf, data),
             '@processing taken branches', data)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
-          exe(log_br_count('mispredicted conditional taken', 'misp_tk_conds'))
-          if do['imix'] & 0x20 and args.mode != 'profile': calc_misp_ratio()
+          exe(log_br_count('mispredicted conditional taken', 'cond-tk-mispreds'))
+          if do['imix'] & 0x20 and args.mode != 'profile':
+            exe_v0(msg='@' + analyze.gen_misp_report(None))
+            analyze.gen_misp_report(data)
           if len(slow_cmd): exe('tail -6 %s.slow.log | grep -v ===total' % data, '@Top-5 slow sequences end with branch:')
-        exe(log_br_count('mispredicted taken', 'mispreds'))
+        exe(log_br_count('mispredicted taken', 'tk-mispreds'))
     elif do['reprocess'] != 0: exe("sed -n '/%s/q;p' %s > .1.log && mv .1.log %s" % (lbr_hdr, info, info), '@reuse of stats log files')
     if do['xed']:
       ips = '%s.ips.log'%data

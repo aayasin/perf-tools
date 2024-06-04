@@ -821,25 +821,27 @@ def profile(mask, toplev_args=['mvl6', None]):
         is_dsb = 1
         perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
                     (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
-    top = do['perf-pebs-top']
-    top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
-    if top < 0 and isfile(logs['code']):
-      exe("grep -w -5 '%s:' %s" % (top_ip, logs['code']), '@code around IP: %s' % top_ip)
-    elif not is_dsb: pass
-    elif top == 1:
-      # asserts in skip_sample() only if piped!!
-      perf_script("%s | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
-        perf_F(ilen=True), C.realpath('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
-    else:
-      perf_script("%s | ./lbr_stats %s | tee -a %s.ips.log" % (perf_F(ilen=True), do['lbr-stats'], data),
+    def handle_top():
+      top = do['perf-pebs-top']
+      top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
+      if top < 0 and isfile(logs['code']):
+        exe("grep -w -5 '%s:' %s" % (top_ip, logs['code']), '@code around IP: %s' % top_ip)
+      elif not is_dsb: pass
+      elif top == 1:
+        # asserts in skip_sample() only if piped!!
+        perf_script("%s | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
+          perf_F(ilen=True), C.realpath('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
+      else:
+        perf_script("%s | ./lbr_stats %s | tee -a %s.ips.log" % (perf_F(ilen=True), do['lbr-stats'], data),
                   "@ stats on PEBS event", data)
-    if top > 1:
-      cmd = ''
-      while top > 0:
-        top_ip = exe_1line("grep -E '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
-        cmd += ' | tee >(%s %s >> %s.ctxt.log) ' % (C.realpath('lbr_stats'), top_ip, data)
-        top -= 1
-      perf_script("%s %s > /dev/null" % (perf_F(ilen=True), cmd), "@ stats on PEBS", data)
+      if top > 1:
+        cmd = ''
+        while top > 0:
+          top_ip = exe_1line("grep -E '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
+          cmd += ' | tee >(%s %s >> %s.ctxt.log) ' % (C.realpath('lbr_stats'), top_ip, data)
+          top -= 1
+        perf_script("%s %s > /dev/null" % (perf_F(ilen=True), cmd), "@ stats on PEBS", data)
+    if '_COST' not in do['perf-pebs']: handle_top()
 
   if en(10):
     data = perf_record('ldlat', 10, record='record' if pmu.goldencove() else 'mem record')[0]

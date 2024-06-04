@@ -11,17 +11,16 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.30 # see version line of do.py
+__version__ = 0.32 # see version line of do.py
 
-import common as C, pmu, stats
+import common as C, pmu, stats, tma
 from lbr import x86
 
 threshold = {
-  'Instruction_Fetch_BW': 20,
-  'Mispredictions': 15,
   'hot-loop': 0.05,
   'misp-sig': 5,
 }
+for b in tma.get('bottlenecks-list-2'): threshold[b] = tma.threshold_of(b);
 
 def advise(m, prefix='Advise'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
 def hint(m): advise(m, '\tHint')
@@ -36,6 +35,11 @@ def analyze(app, args, do=None):
       if 'az-%s' % x in do: threshold[x] = do['az-%s' % x]
   threshold['IpTB'] = 3 * pmu.cpu_pipeline_width()
   def exe(x, msg=None): return C.exe_cmd(x, msg=msg, debug = args.verbose > 1)
+  def verbose(tag, x):
+    if not args.verbose: return
+    if type(x) is list:
+      x = x[0] if args.verbose == 1 else ','.join(x)
+    C.printc('\t%s:: %s' % (tag, str(x)))
   def lookup(x, f=hits): return C.exe_one_line("grep %s %s" % (x, f), fail=1)
   # TODO: move loop_code, loop_uops to lbr/loops.py
   def loop_code(loop): exe(C.grep(loop['ip'].replace('x', ''), hits, '--color -B1 -A%d' % loop['size']))
@@ -53,20 +57,25 @@ def analyze(app, args, do=None):
   if examine('Mispredictions'):
     mispreds = stats.get_file(app, 'mispreds')
     misp1 = mispreds.replace('.log', '-ptage.log')
-    exe("grep -A9999 'Branch Misprediction Report' %s | ./ptage | tee %s | tail | grep -E -v '=total|^\s+0'" % (mispreds, misp1),
+    exe("cat %s | ./ptage | tee %s | tail | grep -E -v '=total|^\s+0'" % (mispreds, misp1),
         '@ top significant (== # executions * # mispredicts) branches')
     misp = C.file2lines(misp1); misp.pop()
     while 1:
       b = C.str2list(misp.pop())
+      verbose('misp', b)
       if float(b[0][:-1]) < threshold['misp-sig']: break
-      line = lookup(b[3]).split()
-      src, tgt = line[1], line[3].replace('0x', '0')
-      forward = int(tgt, 16) > int(src, 16)
-      advise('branch at %s has significance of %s, misp-ratio %s, forward=%d' % (b[3].lstrip('0'), b[0], b[2], int(forward)))
+      line, forward, src, tgt = lookup(b[3]), -1, None, None # forward < 0 denotes unknown
+      if x86.is_branch(hits2line(line), x86.COND_BR):
+        line = line.split()
+        src, tgt = line[1], line[3].replace('0x', '0')
+        forward = int(tgt, 16) > int(src, 16)
+      advise('branch at %s has significance of %s, misp-ratio %s, forward=%s' % (b[3].lstrip('0'), b[0], b[2],
+              '?' if forward < 0 else int(forward)))
+      if forward < 0: continue
       code = code_between(src, tgt) if forward else code_between(tgt, src)
       print(code)
       code = code.split('\n')
-      if forward and x86.is_branch(hits2line(code[0]), x86.COND_BR):
+      if forward > 0:
         easy = True
         for h in code[1:-1]:
           line = hits2line(h)
@@ -78,7 +87,7 @@ def analyze(app, args, do=None):
   if not examine('Instruction_Fetch_BW'): return
   loops = stats.read_loops_info(info, as_loops=True)
   for l in sorted(loops.keys()):
-    if args.verbose > 1: print(l)
+    verbose('loop', (l, loops[l]))
     if 'FL-cycles%' not in loops[l]: continue
     cycles, issues, extra, hints = loops[l]['FL-cycles%'], [], [], set()
     if cycles <= threshold['hot-loop']: continue
@@ -94,8 +103,25 @@ def analyze(app, args, do=None):
       issues += ['32-byte unaligned']
       hints.add('align')
     if len(issues) == 0: continue
-    if args.verbose > 0: print(loops[l])
     advise('Hot %s is %s (%s of time, size= ~%d uops, %s); try to %s it' % (l,
       l2s(issues), percent(cycles), loop_uops(loops[l], loop_size), l2s(extra), l2s(hints)))
     #if loop_size > 0 and loops[l]['taken'] == 0: loop_code(loops[l])
     if loop_size > 0: loop_code(loops[l])
+
+def gen_misp_report(data, header='Branch Misprediction Report (taken-only)'):
+  if not data: return header.lower()
+  def filename(ext): return '%s.%s.log' % (data, ext)
+  def file2lines(ext): return C.file2lines(filename(ext), fail=True)
+  takens_freq, mispreds = {}, {}
+  for l in file2lines('takens')[:-1]:
+    b = C.str2list(l)
+    takens_freq[ b[2] ] = int(b[1])
+  for l in file2lines('tk-mispreds')[:-1]:
+    b = C.str2list(l)
+    m = int(b[1])
+    mispreds[ (' '.join(b[2:]), C.ratio(m, takens_freq[b[2]])) ] = m * takens_freq[b[2]]
+  # significance := takens x mispredicts (based on taken-branch IP)
+  with open(filename('mispreds'), 'w') as f:
+    f.write('%s:\n' % header + '\t'.join(('significance', '%7s' % 'ratio', 'instruction addr & ASM'))+'\n')
+    for b in C.hist2slist(mispreds):
+      if b[1] > 1: f.write('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0]))+'\n')

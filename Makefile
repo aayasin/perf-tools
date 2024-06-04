@@ -102,6 +102,10 @@ do-help.txt: do.py common.py pmu.py tma.py
 
 update:
 	$(DO) tools-update -v1
+AZ_PM = '112 --tune :az-Mispredictions:5 :az-Instruction_Fetch_BW:5' # stress for testing
+test-analyze:
+	$(MAKE) test-bc2     CMD='profile analyze' PM=$(AZ_PM)
+	$(MAKE) test-default CMD=analyze PM=$(AZ_PM) TEST_LBR_PERF=0
 test-build:
 	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS -n '+Core_Bound*' -pm 22 | $(SHOW)
 	grep -q 'Backend_Bound.Core_Bound.Ports_Utilization.Ports_Utilized_1' datadep-20e6.toplev-vl2.log
@@ -111,7 +115,7 @@ test-build:
 test-default:
 	$(DO1) -pm $(PM) $(DO_SUFF)
 ifeq ($(TEST_LBR_PERF), 1)
-	@sleep 3
+	sync; echo 3 | sudo tee /proc/sys/vm/drop_caches; sleep 3
 	info=$(shell ls -1tr *info.log | tail -1); grep '^LBR samples' $$info | awk -F 'samples/s: ' '{print $$2}' | \
 	    awk -F '}' '{print $$1}' | awk '{if ($$1 > 30) exit 0; else exit 1}' || $(FAIL)
 endif
@@ -182,7 +186,7 @@ pre-push: help
 	$(MAKE) test-default-non-mux                            # tests default non-MUX sensitive profile-steps
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
-	$(MAKE) test-bc2 CMD='profile analyze' PM=112           # tests analyze module
+	$(MAKE) test-analyze                                    # tests analyze module
 	$(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL) # tests --delay
 	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
 	$(MAKE) test-default DO_SUFF="--tune :calibrate:1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1\

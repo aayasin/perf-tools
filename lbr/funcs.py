@@ -45,29 +45,33 @@ class Function:
   def __lt__(self, other):
     return self.hotness > other.hotness
 
-  def __str__(self, detailed=False):
-    result = f"{{ip: 0x{self.ip}, hotness: {self.hotness}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}, " \
-      f"{f'srcline: {self.srcline}, ' if self.srcline else ''}flows-num: {self.flows_num}"
-    if not detailed: result += ", %sflows: {" % ('top-10 ' if len(self.flows) > 10 else '')
-    else:
-      ipcs = sorted(self.ipc_histo.keys())
-      if ipcs:
-        result += f", IPC-mode: {ipcs[-1]}, IPC-mean: {round(self.ipc_sum / self.ipc_total, 1)}, IPC-num-buckets: {len(ipcs)}"
-      result += '}\n\n'
-      result += C.printc(f'flows of function at 0x{self.ip}:', log_only=True)
-    for i, f in enumerate(sorted(self.flows)):
-      if detailed: result += '\n' + str(f)
-      elif i < 10:
-        result += f"{', ' if i > 0 else ''}{f.flow}: {f.hotness}"
-    if not detailed: result += '}}'
-    else:
+  def __str__(self, detailed=False, index=None):
+    ipcs = sorted(self.ipc_histo.keys())
+    summ = f"{{ip: 0x{self.ip}, hotness: {self.hotness}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}, " \
+      f"{f'srcline: {self.srcline}, ' if self.srcline else ''}" \
+      f"{f'IPC-mode: {max(self.ipc_histo, key=self.ipc_histo.get)}, IPC-mean: {round(self.ipc_sum / self.ipc_total, 1)}, IPC-num-buckets: {len(ipcs)}, ' if ipcs else ''}" \
+      f"flows-num: {self.flows_num}"
+    flows = sorted(self.flows)
+    if detailed:
+      result = C.printc(f'flows of function at 0x{self.ip}:', log_only=True)
+      for i, f in enumerate(reversed(flows)): result += '\n' + str(f)
       if ipcs:
         result += '\n\n'
         result += C.printc(f'IPC histogram of function at 0x{self.ip}:', log_only=True)
+        other, thresh = 0, 0.05 * self.ipc_total
         for ipc in ipcs:
           v = self.ipc_histo[ipc]
-          result += "\n{:>5}: {:>6} {:>5}%".format(ipc, v, round(v / self.ipc_total * 100, 1))
-      result += '\n'
+          p = round(v / self.ipc_total * 100, 1)
+          if v >= thresh: result += "\n{:>5}: {:>6} {:>5}%".format(ipc, v, p)
+          else: other += v
+        if other > 0:
+          result += "\nother: {:>6} {:>5}%\t//  buckets > 1, < 5.0%".format(other, round(other / self.ipc_total * 100, 1))
+      result += f'\n\nFunction#{index}: {summ}}}\n\n'
+    else:
+      result = summ + ", %sflows: {" % ('top-10 ' if len(self.flows) > 10 else '')
+      for i, f in enumerate(flows):
+        if i < 10: result += f"{', ' if i > 0 else ''}{f.flow}: {f.hotness}"
+      result += '}}'
     return result
 
 class Flow:
@@ -85,6 +89,10 @@ class Flow:
     self.inner_funcs = self.outer_funcs = None
     self.conds = 0
     self.op_jcc_mf = self.mov_op_mf = self.ld_op_mf = 0
+    self.ipc_histo = dict()
+    self.ipc_total = 0
+    self.ipc_sum = 0
+    self.code = ''
 
   def __eq__(self, other):
     if isinstance(other, Flow):
@@ -98,11 +106,14 @@ class Flow:
     return self.hotness > other.hotness
 
   def __str__(self):
-    result = f"flow {self.flow}: [hotness: {self.hotness}, func-ip: 0x{self.func_ip}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}, " \
+    ipcs = self.ipc_histo.keys()
+    result = '' if self.code == '' else f'\n{self.code}\n'
+    result += f"flow {self.flow}: [hotness: {self.hotness}, func-ip: 0x{self.func_ip}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}, " \
       f"size: {self.size}, imix-ID: {self.imix_ID}, back: {self.back}, inner: {self.inner},{f' inner-functions: {self.inner_funcs},' if self.inner > 0 else ''}" \
       f" outer: {self.outer},{f' outer-functions: {self.outer_funcs},' if self.outer > 0 else ''} Conds: {self.conds}, " \
       f"op-jcc-mf: {self.op_jcc_mf}, mov-op-mf: {self.mov_op_mf}, ld-op-mf: {self.ld_op_mf}, taken: {self.taken}" \
-      f"{f', takens: {self.takens}' if self.taken > 0 else ''}"
+      f"{f', takens: {self.takens}' if self.taken > 0 else ''}" \
+      f"{f', IPC-mode: {max(self.ipc_histo, key=self.ipc_histo.get)}, IPC-mean: {round(self.ipc_sum / self.ipc_total, 1)}, IPC-num-buckets: {len(ipcs)}' if ipcs else ''}"
     for i in types:
       result += f", {i}: {getattr(self, i)}"
     result += ']'
@@ -162,12 +173,15 @@ def process_function(lines, srcline, outer_funcs=[]):
     func.FF_cycles += cycles
     flow.FF_cycles += cycles
     ipc = round(flow.size / cycles, 1) if cycles > 0 else None
+    def add_ipc(obj):
+      if not k in obj.ipc_histo: obj.ipc_histo[k] = 0
+      obj.ipc_histo[k] += 1
+      obj.ipc_total += 1
+      obj.ipc_sum += ipc
     if ipc:
       k = str(ipc)
-      if not k in func.ipc_histo: func.ipc_histo[k] = 0
-      func.ipc_histo[k] += 1
-      func.ipc_total += 1
-      func.ipc_sum += ipc
+      add_ipc(func)
+      add_ipc(flow)
     func.flows.add(flow)
     funcs_set.add(func)
 
@@ -180,6 +194,7 @@ def process_function(lines, srcline, outer_funcs=[]):
       srcline = LC.get_srcline(line)
       continue
     new_flow.size += 1
+    new_flow.code += line.strip() + '\n'
     line_ip = LC.line_ip(line)
     hex_ip = LC.hex_ip(line_ip)
     if LC.is_taken(line):

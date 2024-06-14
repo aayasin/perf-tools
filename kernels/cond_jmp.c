@@ -8,20 +8,25 @@
 
 #define N 20000
 
-static int *m_s1;
+static int m_s1[N];
 
 void init(void) {
-    m_s1 = malloc(sizeof(int)*N);
-    srand(42);
+    int i;
+    unsigned state = 42;
 
-    for (int i = 0; i < N; i++) {
-        m_s1[i] = rand() % N;
+    for (i = 0; i < N; i++) {
+	unsigned x = state;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	state = x;
+        m_s1[i] = x % N;
     }
 }
 
 void sel_arr(int *s1) {
-
-  for (int i = 0; i < N; i++) {
+  int i;
+  for (i = 0; i < N; i++) {
     if(s1[i] < 10035)
     {
 	asm("   inc %rcx");
@@ -114,18 +119,14 @@ void sel_arr(int *s1) {
 }
 
 void run(int iter) {
-  for(int i=0; i<iter; ++i)
+  int i;
+  for(i=0; i<iter; ++i)
     sel_arr(m_s1);
 }
 
 int main(int argc, char *argv[])
 {
-  if (argc<2) {
-      printf("%s: missing <num-iterations> arg!\n", argv[0]);
-      exit(-1);
-  }
-
-  int iter = atol(argv[1]);
+  int iter = argv[1] ? atoi(argv[1]) : 10000;
 
   init();
   run(iter);

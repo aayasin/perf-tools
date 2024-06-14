@@ -47,7 +47,8 @@ char* alloc(U64 s, U64 a, char i)
 }
 void freeall()
 {
-    for(int i=0; i<buffers_idx; i++) {
+    int i;
+    for(i=0; i<buffers_idx; i++) {
         if (DBG) printf("free: %p\n", buffers[i]);
         free(buffers[i]);
     }

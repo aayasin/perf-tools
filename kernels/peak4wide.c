@@ -13,6 +13,7 @@ int main(int argc, const char* argv[])
     }
     n= atol(argv[1]);
     asm("	PAUSE");
+    asm("       mov $10,%rax");
         asm(".align 64");
     for (i=0; i<n; i++) {
         asm("	NOP");

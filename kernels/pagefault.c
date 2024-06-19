@@ -45,7 +45,7 @@ int main(int argc, const char* argv[])
         }
         if (y) free(B);
     }
-    asm(".align 512; Lbl_end:");
+    asm(".align 512");//; Lbl_end:");
     tsc2 = _rdtsc();
     if (!y) free(B);
     printf("%s: average TSC of %.1f ticks/page for %.2f MB buffer. re-alloc=%ld\n",

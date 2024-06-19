@@ -656,11 +656,11 @@ def print_all(nloops=10, loop_ipc=0):
       if os.getenv("LBR_FUNCS_LOG"):
         log = open(os.getenv("LBR_FUNCS_LOG"), 'w')
         for i in range(len(funcs_list) - nfuncs):
-          print('Function#%d:' % (len(funcs_list) - i), funcs_list[i].__str__(detailed=True), file=log)
+          print(funcs_list[i].__str__(detailed=True, index=len(funcs_list) - i), file=log)
       print('');C.printc('top %d functions:' % nfuncs)
       for i in range(nfuncs):
         print('function#%d:' % (nfuncs - i), funcs_list[len(funcs_list) - nfuncs + i])
-        print('Function#%d:' % (nfuncs - i), funcs_list[len(funcs_list) - nfuncs + i].__str__(detailed=True), file=log)
+        print(funcs_list[len(funcs_list) - nfuncs + i].__str__(detailed=True, index=nfuncs - i), file=log)
 
 def print_br(br):
   print('[from: %s, to: %s, taken: %d]' % (LC.hex_ip(br['from']), LC.hex_ip(br['to']), br['taken']))

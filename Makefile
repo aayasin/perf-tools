@@ -1,6 +1,7 @@
 .PHONY: clean clean-all help
 AP = CLTRAMP3D
 APP = taskset 0x4 ./$(AP)
+CC = clang
 CMD = profile
 CPU = $(shell ./pmu.py CPU)
 DO = ./do.py # Use e.g. DO="do.py --perf /my/perf" to init things, or DO_SUFF to override things
@@ -13,7 +14,7 @@ MGR = sudo $(shell python -c 'import common; print(common.os_installer())') -y -
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
 PM = $(shell python -c 'import common; print("0x%x" % common.PROF_MASK_DEF)')
 PY2 = python2.7
-PY3 = python3.6
+PY3 = python3
 RERUN = -pm 0x80
 SHELL := /bin/bash
 SHOW = tee
@@ -65,9 +66,9 @@ test-mt: run-mt
 	sleep 2s
 	set -o pipefail; $(DO) profile -s1 $(RERUN) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
-CPUIDI = 90000000
+CPUIDI = 200000000
 test-bottlenecks: kernels/cpuid
-	$(DO1) -pm 10 --tune :help:0
+	$(DO1) -pm 10 --tune :help:0 :forgive:2
 	grep Bottleneck cpuid-$(CPUIDI).toplev-vl6.log | sort -n -k4 | tail -1 | grep --color Irregular_Overhead
 test-bc2:
 	$(DO2) -pm $(PM) | $(SHOW)
@@ -135,8 +136,8 @@ test-study: study.py stats.py run.sh do.py
 	test -f run-cfg1-t1_run-cfg2-t1.stats.log
 	@echo $(TS_B) >> $@
 	$(TS_B) >> $@ 2>&1
-	test -f BC2s-cfg1-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
-	test -f BC2s-cfg2-t1-b-eevent0xc5umask0nameBR_MISP_RETIREDppp-c20003.perf.data.ips.log
+	test -f BC2s-cfg1-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips*.log
+	test -f BC2s-cfg2-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips*.log
 	test -f BC2s-cfg1-t1_BC2s-cfg2-t1.stats.log
 test-stats: stats.py
 	@$(MAKE) test-default APP="$(APP) s" PM=1012 > /dev/null 2>&1
@@ -144,10 +145,11 @@ test-stats: stats.py
 ../perf:
 	$(DO) build-perf
 SLI = 1000000
+CCB = $(shell echo $(CC) | rev | cut -d/ -f1 | rev)
 test-srcline: lbr/lbr.py do.py common.py
-	cd kernels && clang -g -O2 pagefault.c -o pagefault-clang > /dev/null 2>&1
-	$(DO) $(CMD) -a './kernels/pagefault-clang $(SLI)' --perf ../perf -pm 100 --tune :srcline:1 > /dev/null 2>&1
-	grep -q 'srcline: pagefault.c;43' pagefault-clang-$(SLI)*info.log || $(FAIL)
+	cd kernels && $(CC) -g -O2 pagefault.c -o pagefault-$(CCB)
+	$(DO) $(CMD) -a './kernels/pagefault-$(CCB) $(SLI)' -pm 100 --tune :srcline:1 $(DO_SUFF) > /dev/null 2>&1
+	grep -q 'srcline: pagefault.c;43' pagefault-$(CCB)-$(SLI)*info.log || $(FAIL)
 TMI = 80000000
 define check_tripcount
 grep Loop#$(1) tripcount-mean-$(TMI)*info.log | awk -F 'tripcount-mean: ' '{print $$2}' | \
@@ -155,8 +157,8 @@ awk -F ',' '{print $$1}' | awk 'BEGIN {lower=$(2); upper=$(3)} {if ($$1 >= lower
 else exit 1}' || $(FAIL)
 endef
 test-tripcount-mean: lbr/lbr.py do.py lbr/x86.py
-	gcc -g -O2 kernels/tripcount-mean.c -o kernels/tripcount-mean > /dev/null 2>&1
-	$(DO) log $(CMD) -a './kernels/tripcount-mean $(TMI)' --perf ../perf -pm 100 > /dev/null 2>&1
+	gcc -g -O2 kernels/tripcount-mean.c -o kernels/tripcount-mean
+	$(DO) log $(CMD) -a './kernels/tripcount-mean $(TMI)' -pm 100 $(DO_SUFF) > /dev/null 2>&1
 	$(call check_tripcount,1,90,110)
 	$(call check_tripcount,2,60,80)
 CPUS = ICX SPR SPR-HBM TGL ADL
@@ -168,7 +170,7 @@ test-forcecpu:
 	$$passed || $(FAIL)
 	FORCECPU=SPR $(DO) $(CMD) -a "./workloads/BC.sh 7 SPR-slow0" -pm 100 --tune :imix:0x3f :loops:0 :help:0 $(DO_SUFF)
 test-edge-inst:
-	$(DO) $(CMD) -a './pmu-tools/workloads/CLTRAMP3D' --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
+	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \
@@ -208,5 +210,5 @@ pre-push: help
 	$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1
 	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
 	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
-	$(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL) # tests default w/ python2 (errors only)
 	time $(DO) profile -a "openssl speed rsa2048" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)
+	$(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL) # tests default w/ python2 (errors only)

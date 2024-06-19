@@ -25,7 +25,10 @@ else:
 def sys_devices_cpu(): return '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
 def name(real=False):
   forcecpu = C.env2str('FORCECPU')
-  return C.file2str(sys_devices_cpu() + '/caps/pmu_name') or 'Unknown PMU' if real or not forcecpu else forcecpu.lower()
+  def pmu_name():
+    x = C.file2str(sys_devices_cpu() + '/caps/pmu_name')
+    return "granite_rapids" if x == 'sapphire_rapids' and redwoodcove_on() else x
+  return pmu_name() or 'Unknown PMU' if real or not forcecpu else forcecpu.lower()
 
 # per CPU PMUs
 def skylake():    return name() in ('skylake', 'skl')
@@ -33,9 +36,11 @@ def icelake():    return name() in ('icelake', 'icl', 'icx', 'tgl')
 def alderlake():  return name() in ('alderlake_hybrid', 'adl')
 def sapphire():   return name() in ('sapphire_rapids', 'spr', 'spr-hbm')
 def meteorlake(): return name() in ('meteorlake_hybrid', 'mtl')
+def granite():    return name() in ('granite_rapids', 'gnr')
+def lunarlake():  return name() in ('lunarlake_hybrid', 'lnl')
 # aggregations
 def goldencove():   return alderlake() or sapphire()
-def redwoodcove():  return meteorlake()
+def redwoodcove():  return meteorlake() or granite()
 def perfmetrics():  return icelake() or goldencove() or goldencove_on()
 # Skylake onwards
 def v4p(): return os.path.exists(sys_devices_cpu() + '/format/frontend') # PEBS_FRONTEND introduced by Skylake (& no root needed)
@@ -45,8 +50,9 @@ def v5p(): return perfmetrics()
 # Golden Cove onward PMUs have Arch LBR
 def goldencove_on():  return cpu_has_feature('arch_lbr')
 # Redwood Cove onward PMUs have CPUID.0x23
-def redwoodcove_on(): return cpu_has_feature('CPUID.23H')
+def redwoodcove_on(): return cpu('CPUID.23H')
 
+def retlat():     return redwoodcove_on()
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
 def intel():      return 'Intel' in cpu('vendor')
@@ -59,13 +65,18 @@ def amd():
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 
-def event(x):
-  e = {'lbr':     'r20c4:Taken-branches:ppp',
+def event(x, precise=0):
+  def misp_event(sub): return perf_event('BR_MISP_RETIRED.%s%s' % (sub, '_COST' if retlat() else ''))
+  aliases = {'lbr':     'r20c4:Taken-branches:ppp',
+    'all-misp':   misp_event('ALL_BRANCHES'),
     'calls-loop': 'r0bc4:callret_loop-overhead',
+    'cond-misp':  misp_event('COND'),
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
-    'dsb-miss':   '%s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp' % pmu(),
+    'dsb-miss':   perf_event('FRONTEND_RETIRED.ANY_DSB_MISS'),
     'sentries':   'r40c4:system-entries:u',
-    }[x]
+  }
+  e = aliases[x] if x in aliases else perf_event(x)
+  if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
   return perf_format(e)
 
 def find_event_name(x):
@@ -110,6 +121,13 @@ TPEBS = {'MTL':
   "FRONTEND_RETIRED.STLB_MISS,BR_MISP_RETIRED.INDIRECT_COST,BR_MISP_RETIRED.INDIRECT_CALL_COST,"
   "MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.SPLIT_LOADS,MEM_INST_RETIRED.LOCK_LOADS,FRONTEND_RETIRED.ANY_DSB_MISS,"
   "FRONTEND_RETIRED.ITLB_MISS,FRONTEND_RETIRED.L1I_MISS,FRONTEND_RETIRED.MS_FLOWS,FRONTEND_RETIRED.UNKNOWN_BRANCH",
+
+  'GNR': "BR_MISP_RETIRED.COND_NTAKEN_COST,BR_MISP_RETIRED.COND_TAKEN_COST,BR_MISP_RETIRED.INDIRECT_CALL_COST,BR_MISP_RETIRED.INDIRECT_COST,"
+    "BR_MISP_RETIRED.RET_COST,FRONTEND_RETIRED.ANY_DSB_MISS,FRONTEND_RETIRED.ITLB_MISS,FRONTEND_RETIRED.L1I_MISS,"
+    "FRONTEND_RETIRED.MS_FLOWS,FRONTEND_RETIRED.UNKNOWN_BRANCH,MEM_INST_RETIRED.LOCK_LOADS,MEM_INST_RETIRED.SPLIT_LOADS,"
+    "MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.STLB_HIT_LOADS,MEM_INST_RETIRED.STLB_HIT_STORES,MEM_LOAD_RETIRED.L2_HIT,"
+    "MEM_LOAD_RETIRED.L3_HIT,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS,MEM_LOAD_L3_HIT_RETIRED.XSNP_NO_FWD,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD,"
+    "MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM,MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM,MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD,MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM",
 }
 # TODO: move this code to tma module
 def get_events(tag='MTL'):
@@ -195,7 +213,7 @@ def force_cpu(cpu):
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
   return event_list
 
-pmutools = perftools + '/pmu-tools'
+pmutools = C.env2str('PMUTOOLS', perftools + '/pmu-tools')
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:
@@ -224,6 +242,7 @@ def cpu(what, default=None):
     cs = tl_cpu.CPU(known_cpus=((forcecpu, ()),) if forcecpu else ()) # cpu.state
     if what == 'get-cs': return cs
     cpu.state = {
+      'CPUID.23H':    cpu_has_feature('CPUID.23H'),
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
       'eventlist':    force_cpu(forcecpu) if forcecpu else event_download.eventlist_name(),
@@ -261,20 +280,21 @@ def cpu_msrs():
     if v5p(): msrs += [0x06d]
   return msrs
 
-def cpu_peak_kernels(widths=range(4, 7)):
+def cpu_peak_kernels(widths=(4, 5, 6, 8)):
   return ['peak%dwide' % x for x in widths]
 
 def cpu_pipeline_width():
   width = 4
   if icelake(): width = 5
   elif goldencove() or redwoodcove(): width = 6
+  elif lunarlake(): width = 8
   return width
 
 # deeper uarch stuff
 
 # returns MSB bit of DSB's set-index, if uarch is supported
 def dsb_msb():
-  return 10 if goldencove() or redwoodcove() else (9 if skylake() or icelake() else None)
+  return 11 if lunarlake() else 10 if goldencove() or redwoodcove() else (9 if skylake() or icelake() else None)
 
 def dsb_set_index(ip):
   if not dsb_set_index.MSB: dsb_set_index.MSB = dsb_msb()

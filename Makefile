@@ -14,7 +14,7 @@ MGR = sudo $(shell python -c 'import common; print(common.os_installer())') -y -
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
 PM = $(shell python -c 'import common; print("0x%x" % common.PROF_MASK_DEF)')
 PY2 = python2.7
-PY3 = python3.6
+PY3 = python3
 RERUN = -pm 0x80
 SHELL := /bin/bash
 SHOW = tee
@@ -66,9 +66,9 @@ test-mt: run-mt
 	sleep 2s
 	set -o pipefail; $(DO) profile -s1 $(RERUN) | $(SHOW)
 	kill -9 `pidof m9b8IZ-x256-n8448-u01.llv`
-CPUIDI = 90000000
+CPUIDI = 200000000
 test-bottlenecks: kernels/cpuid
-	$(DO1) -pm 10 --tune :help:0
+	$(DO1) -pm 10 --tune :help:0 :forgive:2
 	grep Bottleneck cpuid-$(CPUIDI).toplev-vl6.log | sort -n -k4 | tail -1 | grep --color Irregular_Overhead
 test-bc2:
 	$(DO2) -pm $(PM) | $(SHOW)
@@ -136,8 +136,8 @@ test-study: study.py stats.py run.sh do.py
 	test -f run-cfg1-t1_run-cfg2-t1.stats.log
 	@echo $(TS_B) >> $@
 	$(TS_B) >> $@ 2>&1
-	test -f BC2s-cfg1-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips.log
-	test -f BC2s-cfg2-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips.log
+	test -f BC2s-cfg1-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips*.log
+	test -f BC2s-cfg2-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips*.log
 	test -f BC2s-cfg1-t1_BC2s-cfg2-t1.stats.log
 test-stats: stats.py
 	@$(MAKE) test-default APP="$(APP) s" PM=1012 > /dev/null 2>&1

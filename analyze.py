@@ -122,7 +122,7 @@ def gen_misp_report(data, header='Branch Misprediction Report (taken-only)'):
     mispreds[ (' '.join(b[2:]), C.ratio(m, takens_freq[b[2]])) ] = m * takens_freq[b[2]]
   # significance := takens x mispredicts (based on taken-branch IP)
   with open(filename('mispreds'), 'w') as f:
-    f.write('%s:\n' % header + '\t'.join(('significance', '%7s' % 'ratio', 'instruction addr & ASM'))+'\n')
+    f.write('%s:\n' % header + ' '.join(('significance', '%7s' % 'misp-ratio', 'instruction address & ASM')) + '\n')
     for b in C.hist2slist(mispreds):
       if b[1] > 1: f.write('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0]))+'\n')
 

@@ -2,6 +2,7 @@
 AP = CLTRAMP3D
 APP = taskset 0x4 ./$(AP)
 CC = clang
+CLONE = git clone --recurse-submodules https://github.com/aayasin/perf-tools
 CMD = profile
 CPU = $(shell ./pmu.py CPU)
 DO = ./do.py # Use e.g. DO="do.py --perf /my/perf" to init things, or DO_SUFF to override things
@@ -171,10 +172,12 @@ test-forcecpu:
 	FORCECPU=SPR $(DO) $(CMD) -a "./workloads/BC.sh 7 SPR-slow0" -pm 100 --tune :imix:0x3f :loops:0 :help:0 $(DO_SUFF)
 test-edge-inst:
 	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
-
+PT=perf-tools.1
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \
-	    setup-system-* test-{dir,study} .CLTRAMP3D*cmd .ipc_*.txt
+	    $(PT) setup-system-* test-{dir,study} .CLTRAMP3D*cmd .ipc_*.txt
+post-push:
+	$(CLONE) $(PT) && cd $(PT) && ./do.py setup-perf log && cd .. && rm -rf $(PT)   # tests a fresh clone
 pre-push: help
 	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
 	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5

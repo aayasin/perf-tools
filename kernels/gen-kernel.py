@@ -38,7 +38,7 @@ ap.add_argument('--label-prefix', default='Lbl', help="Starting '@' implies loca
 ap.add_argument('mode', nargs='?', choices=['basicblock']+J.jumpy_modes, default='basicblock')
 ap.add_argument('--mode-args', default='', help="args to pass-through to mode's sub-module")
 ap.add_argument('--reference', default=None, help="ID of a reference paper (prints a message)")
-ap.add_argument('--init-regs', nargs='+', default=[], help='registers to initialize to non-zero before primary loop e.g. %rax')
+ap.add_argument('--init-regs', nargs='+', default=[], help='registers to initialize to non-zero before primary loop e.g. rax')
 args = ap.parse_args()
 
 def jumpy(): return args.mode in J.jumpy_modes
@@ -119,7 +119,15 @@ int main(int argc, const char* argv[])
 for x in vars(args).keys():
   if 'instructions' in x:
     setattr(args, x, itemize(getattr(args, x)))
-for reg in args.init_regs: args.prolog_instructions.append('mov $10,%s' % reg)
+vec = False
+for reg in args.init_regs:
+  reg = reg.lower()
+  if C.any_in(['xmm', 'ymm', 'zmm'], reg):
+    if not vec:
+      args.prolog_instructions.append('mov $10,%r11d')
+      vec = True
+    args.prolog_instructions.append('%s %%r11d,%%%s' % ('movd' if 'xmm' in reg else 'vpbroadcastd', reg))
+  else: args.prolog_instructions.append('mov $10,%%%s' % reg)
 for inst in [INST_UNIQ] + args.prolog_instructions: asm(inst, spaces=4)
 
 #kernel's Body

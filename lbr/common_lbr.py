@@ -186,29 +186,60 @@ def line_ip(line, sample=None):
     exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line.strip(), stack=True)
 def hex_ip(ip): return '0x%x' % ip if ip and ip > 0 else '-'
 
-def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None):
+def print_ipc_hist(hist, keys, threshold=0.05):
+  r = lambda x: round(x, 1)
+  tot = sum(hist.values())
+  left, limit = 0, int(threshold * tot)
+  total_eff, left_eff = 0, []
+  # calculate efficiencies
+  for k in keys:
+    fk = float(k)
+    eff = hist[k] / fk if fk else 0
+    if limit and (hist[k] < limit or not hist[k] > 1): left_eff.append(eff)
+    else: total_eff += eff
+  left_eff = sum(left_eff) / len(left_eff) if len(left_eff) else 0
+  total_eff += left_eff
+  # print histogram
+  result = "{:>6} {:>8} {:>14} {:>12} {:>17}\n".format('IPC', 'Samples', '% of samples', 'Efficiency', '% of efficiency')
+  for k in keys:
+    if not limit or hist[k] >= limit and hist[k] > 1:
+      fk = float(k)
+      eff = hist[k] / fk if fk else 0
+      result += "{:>5}: {:>8} {:>13}% {:>12} {:>16}%\n".\
+        format(k, hist[k], r(100.0 * hist[k] / tot), r(eff), r(100.0 * eff / total_eff))
+    else: left += hist[k]
+  if left:
+    result += "other: {:>8} {:>13}% {:>12} {:>16}%\t//  buckets > 1, < {}%".\
+      format(left, r(100.0 * left / tot), r(left_eff), r(100.0 * left_eff / total_eff), 100.0 * threshold)
+  return result
+
+def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True):
   if not len(hist_t[0]): return 0
   hist, name, loop, loop_ipc, sorter, weighted = hist_t[0:]
   tot = sum(hist.values())
   d = {}
   d['type'] = 'str' if C.any_in(('name', 'paths'), name) else 'hex' if C.any_in(('indir', 'Function'), name) else 'number'
   d['mode'] = str(C.hist2slist(hist)[-1][0])
-  keys = [sorter(x) for x in hist.keys()] if sorter else list(hist.keys())
+  keys = [sorter(x) for x in hist.keys()] if sorter else [float(x) for x in list(hist.keys())] if name == 'IPC' else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
   do_tripcount_mean = name == 'tripcount' and d['mode'] == '32+'
   if do_tripcount_mean and tripcount_mean_func:
     mean = tripcount_mean_func(loop, loop_ipc)
     if mean: d['mean'] = mean
   d['num-buckets'] = len(hist)
+  if not print_hist: return d
   if d['num-buckets'] > 1:
     C.printc('%s histogram%s:' % (name, ' of loop %s' % hex_ip(loop_ipc) if loop_ipc else ''))
-    left, limit = 0, int(threshold * tot)
-    for k in sorted(hist.keys(), key=sorter):
-      if not limit or hist[k] >= limit and hist[k] > 1:
-        bucket = ('%70s' % k) if d['type'] == 'str' else '%5s' % (hex_ip(k) if d['type'] == 'hex' else k)
-        print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
-      else: left += hist[k]
-    if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * threshold))
+    sorted_keys = sorted(hist.keys(), key=sorter)
+    if name == 'IPC': print(print_ipc_hist(hist, sorted_keys, threshold))
+    else:
+      left, limit = 0, int(threshold * tot)
+      for k in sorted_keys:
+        if not limit or hist[k] >= limit and hist[k] > 1:
+          bucket = ('%70s' % k) if d['type'] == 'str' else '%5s' % (hex_ip(k) if d['type'] == 'hex' else k)
+          print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
+        else: left += hist[k]
+      if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * threshold))
   if do_tripcount_mean: d['num-buckets'] = '-'
   d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) is str else k) for k in hist.keys()) if weighted else tot
   return d

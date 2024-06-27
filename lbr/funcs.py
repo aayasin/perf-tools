@@ -22,6 +22,10 @@ types = ['lea', 'cmov'] + x86.MEM_INSTS + user_imix
 # TODO:
 # update detect_function() to consider TCO case
 
+def ipc_values(histo):
+  d = LC.print_hist([histo, 'IPC', None, None, None, False], print_hist=False)
+  return f', IPC-mode: {d["mode"]}, IPC-mean: {d["mean"]}, IPC-num-buckets: {d["num-buckets"]}'
+
 class Function:
   def __init__(self, ip):
     self.ip = ip
@@ -47,25 +51,18 @@ class Function:
 
   def __str__(self, detailed=False, index=None):
     ipcs = sorted(self.ipc_histo.keys())
-    summ = f"{{ip: 0x{self.ip}, hotness: {self.hotness}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}, " \
-      f"{f'srcline: {self.srcline}, ' if self.srcline else ''}" \
-      f"{f'IPC-mode: {max(self.ipc_histo, key=self.ipc_histo.get)}, IPC-mean: {round(self.ipc_sum / self.ipc_total, 1)}, IPC-num-buckets: {len(ipcs)}, ' if ipcs else ''}" \
-      f"flows-num: {self.flows_num}"
+    summ = f"{{ip: 0x{self.ip}, hotness: {self.hotness}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}" \
+      f"{f', srcline: {self.srcline}' if self.srcline else ''}" \
+      f"{ipc_values(self.ipc_histo) if ipcs else ''}" \
+      f", flows-num: {self.flows_num}"
     flows = sorted(self.flows)
     if detailed:
       result = C.printc(f'flows of function at 0x{self.ip}:', log_only=True)
       for i, f in enumerate(reversed(flows)): result += '\n' + str(f)
       if ipcs:
         result += '\n\n'
-        result += C.printc(f'IPC histogram of function at 0x{self.ip}:', log_only=True)
-        other, thresh = 0, 0.05 * self.ipc_total
-        for ipc in ipcs:
-          v = self.ipc_histo[ipc]
-          p = round(v / self.ipc_total * 100, 1)
-          if v >= thresh: result += "\n{:>5}: {:>6} {:>5}%".format(ipc, v, p)
-          else: other += v
-        if other > 0:
-          result += "\nother: {:>6} {:>5}%\t//  buckets > 1, < 5.0%".format(other, round(other / self.ipc_total * 100, 1))
+        result += C.printc(f'IPC histogram of function at 0x{self.ip}:\n', log_only=True)
+        result += LC.print_ipc_hist(self.ipc_histo, ipcs)
       result += f'\n\nFunction#{index}: {summ}}}\n\n'
     else:
       result = summ + ", %sflows: {" % ('top-10 ' if len(self.flows) > 10 else '')
@@ -113,7 +110,7 @@ class Flow:
       f" outer: {self.outer},{f' outer-functions: {self.outer_funcs},' if self.outer > 0 else ''} Conds: {self.conds}, " \
       f"op-jcc-mf: {self.op_jcc_mf}, mov-op-mf: {self.mov_op_mf}, ld-op-mf: {self.ld_op_mf}, taken: {self.taken}" \
       f"{f', takens: {self.takens}' if self.taken > 0 else ''}" \
-      f"{f', IPC-mode: {max(self.ipc_histo, key=self.ipc_histo.get)}, IPC-mean: {round(self.ipc_sum / self.ipc_total, 1)}, IPC-num-buckets: {len(ipcs)}' if ipcs else ''}"
+      f"{ipc_values(self.ipc_histo) if ipcs else ''}"
     for i in types:
       result += f", {i}: {getattr(self, i)}"
     result += ']'

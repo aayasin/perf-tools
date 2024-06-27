@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.83
+__version__ = 0.84
 # TODO:
 # - functions/calls support
 

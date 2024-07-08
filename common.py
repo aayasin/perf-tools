@@ -35,7 +35,8 @@ class color:
   END = '\033[0m'
 
 Globals = {'llvm-mca': '/usr/local/bin/llvm-mca',
-  'xed':           '/usr/local/bin/xed'
+           'uica':     'uiCA/uiCA.py',
+           'xed':      '/usr/local/bin/xed',
 }
 
 # append to a file
@@ -48,6 +49,7 @@ def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   if not log_only: print(msg)
   if not outfile: outfile = log_stdio
   if outfile: fappend(msg, outfile)
+  return msg
 log_stdio=None
 
 log_db = {'info': {}, 'warn': {}}
@@ -94,6 +96,11 @@ def annotate(stuff, label='', stack=False):
   for x in xs: printf('%s of %s; '%(str(x), type(x)), flush=False)
   printf('.\n')
 
+def log_callchain():
+  tb=traceback.format_list(traceback.extract_stack())
+  t = [x.split('\n')[1].strip() for x in tb[:-2]]
+  printc('\t==> '.join(t), col=color.GREY)
+
 # system
 #
 # exe_cmd - execute system command(s) with logging support
@@ -107,6 +114,8 @@ def annotate(stuff, label='', stack=False):
 # @background: run the specified command in background (do not block)
 def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=1, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
+  x = x.replace('| ./', '| %s/' % dirname())
+  if x.startswith('./'): x.replace('./', '%s/' % dirname(), 1)
   if msg:
     if '@' in msg: msg='\t' + msg.replace('@', '')
     else: msg = msg + ' ..'
@@ -138,14 +147,15 @@ def exe2list(x, sep=' ', debug=False):
   if debug: printc('exe2list(%s) = %s' % (x, str(res).replace(', u', ', ')), color.BLUE)
   return res
 
-def exe_one_line(x, field=None, debug=False):
+# @fail:  1: exit with error if command fails; 0: warn
+def exe_one_line(x, field=None, debug=False, fail=0):
   def print1(x): printf(x, std=sys.stdout, col=color.BLUE) if debug else None
   x_str = 'exe_one_line(%s, f=%s)' % (x, str(field))
   print1('%s = ' % x_str)
   try:
     res = exe_output(x, '')
   except subprocess.CalledProcessError:
-    warn('%s failed!' % x_str)
+    (error if fail else warn)('%s failed!' % x_str)
     res = 'N/A'
   if field is not None: res = str2list(res)[field]
   print1('%s\n' % res)
@@ -268,6 +278,14 @@ def startswith(l, s):
   for i in l:
     if s.startswith(i): return 1
   return 0
+
+# 0-9 -> 0-9
+# 10-35 -> a-z
+# 36-63 -> A-Z
+def num2char(n):
+  if n < 10: return str(n)
+  if n < 36: return chr(ord('a') + n - 10)
+  return chr(ord('A') + n - 36)
 
 def is_num(x, hex=False):
   try:

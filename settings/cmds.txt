@@ -1,4 +1,6 @@
 strace -o strace.log -s999 my-command
+
+sed 's/^[[:space:]]*//'
 sed -E 's/\[[0-9]+\]//'
 
 git fetch origin && git rebase origin/master

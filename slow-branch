@@ -16,7 +16,11 @@ while True:
   if not line: break
   r = re.match(r'^\s+(\d+)[^#]+# \S+ (\d+) cycles (?: ([0-9\.]+) IPC)?', line)
   if 0: print('DEBUG', r.groups(), line)
-  assert r, 'Line does not conform to expected syntax in: %s' % line.rstrip()
+  if not r:
+    #       2    ffffffff8daaa59c                        jmp 0xffffffff8e9e9484                  # PRED
+    # keep line first to get it reported if piped to ptage
+    print('%s ## Line does not conform to expected syntax by slow-branch' % line.rstrip())
+    continue
   ipc = float(r.group(3)) if r.group(3) and r.group(3) != '0.00' else None
   cost = int(r.group(1)) * ((1 / ipc) if ipc else (float(r.group(2)) if r.group(2) else 99))
   print('%7.1f\t' % round(cost, 1), line, end='')

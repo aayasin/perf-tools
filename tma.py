@@ -45,13 +45,18 @@ metrics = {
 }
 
 def get(tag):
-  combo_tags = '[fe-]bottlenecks[-only] zero-ok '
+  combo_tags = '[fe-]bottlenecks[-only|-as-list] zero-ok '
   def prepend_info(x): return ','.join((metrics['fixed'], x))
   def settings_file(x): return '/'.join((C.dirname(), 'settings', x))
   if tag =='bottlenecks': return prepend_info(','.join((metrics['bot-fe'], metrics['bot-rest'])))
   if tag =='bottlenecks-only': return ','.join((metrics['bot-fe'], metrics['bot-rest']))
   if tag =='fe-bottlenecks': return prepend_info(metrics['bot-fe'])
-  model = pmu.cpu('CPU') or C.env2str('TMA_CPU', 'SPR')
+  if tag =='bottlenecks-list':
+    return get('bottlenecks-only').replace(',+DSB_Misses', '').replace('+', '').split(',')
+  if tag =='bottlenecks-list-2':
+    all = get('bottlenecks-list')
+    return [all[i] for i in (0, 2)]
+  model = 'GNR' if pmu.granite() else pmu.cpu('CPU') or C.env2str('TMA_CPU', 'SPR')
   if tag == 'zero-ok':
     ZeroOk = C.csv2dict(settings_file('tma-zero-ok.csv'))
     return ZeroOk[model].split(';')
@@ -68,6 +73,6 @@ def get(tag):
   assert tag in metrics, "Unsupported tma.get(%s)! Supported tags: %s" % (tag, combo_tags + ' '.join(metrics.keys()))
   return metrics[tag]
 
-# TODO: grep it from toplev's ratio file
+# TODO: import the model's ratios.py file under pmu-tools/ to look it up per metric
 def threshold_of(metric):
   return 20

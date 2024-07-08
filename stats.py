@@ -12,12 +12,10 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.96
+__version__= 0.98
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
-from lbr import print_stat
-from kernels import x86
 
 def get_file(app, ext):
   for filename in os.listdir(os.getcwd()):
@@ -113,6 +111,7 @@ def is_metric(s):
 def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
+  histo = None
   for l in C.file2lines(info):
     if 'IPC histogram of' in l: break  # stops upon detailed loops stats
     s = v = None
@@ -123,12 +122,33 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
       s = l[0].strip()#' '.join(l[0].split()) # re.sub('  +', ' ', l[0])
       if sep: s = C.chop(re.sub(r'[\s\-]+', sep, s))
       v = convert(l[1])
+    # extract global histograms
+    # TODO: Amiri - handle inst-per-leaf-func-name which fails parsing
+    if 'histogram:' in l and 'inst-per-leaf-func-name' not in l:  # histogram start
+      histo = '%s_' % l.split()[0].replace(C.color.DARKCYAN, '')
+      continue
+    if histo and 'summary:' in l:  # histogram end
+      g += 'Histo'
+      l_list = l.split('{')[1][:-1].split(',')
+      for e in l_list:
+        e_list = e.split(':')
+        value = convert(e_list[1].strip())
+        k = '%s%s%s' % ((g + '.') if not groups else '', histo, e_list[0].strip())
+        d[k] = (value, g) if groups else value
+      histo = None
+      continue
+    if histo:  # histogram line
+      g += 'Histo'
+      l_list = l.split()
+      s = '%s%s[%s]' % ((g + '.') if not groups else '', histo, l_list[0][:-1])
+      v = convert(l_list[1])
     if not v is None:
-      if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
-        g += 'Glob'
-      elif is_metric(s): g += 'Metric'
-      elif s.startswith('proxy count'): g += 'Proxy'
-      else: g += 'Event'
+      if groups and g == 'LBR.':
+        if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
+          g += 'Glob'
+        elif is_metric(s): g += 'Metric'
+        elif s.startswith('proxy count'): g += 'Proxy'
+        else: g += 'Event'
       d[s] = (v, g) if groups else v
   if read_loops: d.update(read_loops_info(info, loop_id, sep=sep, groups=groups))
   return d
@@ -351,7 +371,10 @@ def csv2stat(filename):
     return filename.replace(x.group(1), '')
   d = patch_metrics(d)
   base = basename()
-  if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
+  tl_info = base + 'toplev-mvl2-perf.csv'
+  if not nomux():
+    if not os.path.isfile(tl_info): C.warn('file is missing: ' + tl_info)
+    else: d.update(read_perf_toplev(tl_info))
   # add info.log globals stats
   info = r"%s-janysave_type-er20c4ppp-c([0-9]+)\.perf\.data\.info\.log" % (basename()[:-1])
   info_files = [f for f in os.listdir() if re.match(info, f)]
@@ -395,73 +418,6 @@ def perf_log2stat(log, smt_on, d={}):
       out.write('%s %s\n' % (x, str(d[x])))
   print('wrote:', stat)
   return stat
-
-def inst_fusions(hitcounts, info):
-  stats_data = {'LD-OP': 0,
-                'MOV-OP': 0}
-  def calc_stats():
-    block = hotness_key = None
-    hotness = lambda s: C.str2list(s)[0]
-    is_mov = lambda l: 'mov' in l and not x86.is_mem_store(l)
-    cands_log = hitcounts.replace("hitcounts", "fusion-candidates")
-    def find_cand(lines):
-      patch = lambda s: s.replace(s.split()[0], '')
-      if len(lines) < 3: return None  # need 3 insts at least
-      mov_line = patch(lines[0])
-      dest_reg = x86.get('dst', mov_line)
-      dest_subs = x86.sub_regs(dest_reg)
-      # dest reg in 2nd line -> no candidate
-      # a. if dest reg is dest in 2nd line and fusion occurs -> not candidate
-      # b. if dest reg is dest in 2nd line and no fusion ->
-      # no candidate and disables next OPs to be candidates because dest reg got modified
-      # c. if dest reg is src in 2nd line -> dest reg value is used before OP, cancels candidate
-      if C.any_in(dest_subs, lines[1]): return None
-      to_check = lines[2:]
-      for i, line in enumerate(to_check):
-        line = patch(line)
-        if x86.get('dst', line) == dest_reg:  # same dest reg
-          # jcc macro-fusion disables candidate
-          if i < len(to_check) - 1 and x86.is_jcc_fusion(line, patch(to_check[i+1])): return None
-          ld_fusion, mov_fusion = x86.is_ld_op_fusion(mov_line, line), x86.is_mov_op_fusion(mov_line, line)
-          if not ld_fusion and not mov_fusion: return None
-          # check if dest reg was used as src before OP or OP src reg was ever modified
-          srcs = x86.get('srcs', line)
-          assert len(srcs) == 1
-          src_reg = srcs[0]
-          for x in range(1, i + 2):
-            if re.search(x86.CMOV, x86.get('inst', lines[x])): return None  # CMOV will use wrongly modified RFLAGS
-            if x86.is_sub_reg(x86.get('dst', lines[x]), src_reg): return None  # OP src reg was modified before OP
-            if C.any_in(dest_subs, lines[x]): return None  # dest reg used before OP
-          # candidate found
-          new_hotness = int(hotness(lines[0]))
-          if ld_fusion: stats_data['LD-OP'] += new_hotness
-          else: stats_data['MOV-OP'] += new_hotness
-          # append candidate block to log
-          header, tail = lines[0][:25] + "\n", lines[i+2][:25] + "zz - block end\n"  # headers to differentiate blocks
-          block_list = [header] + lines[0:i+3] + [tail]
-          C.fappend(''.join(block_list), cands_log, end='')
-      return None
-    if os.path.exists(cands_log): os.remove(cands_log)
-    # for each hotness block, create a list of the lines then check
-    with open(hitcounts, "r") as hits:
-      for line in hits:
-        def restart(): return [[line], hotness(line)] if is_mov(line) else [None, None]
-        # check blocks starting with not store MOV
-        if not is_mov(line) and not block: continue
-        if not block:  # new block first line found
-          block, hotness_key = restart()
-          continue
-        # append lines from the same basic block (by hotness)
-        if hotness(line) == hotness_key: block.append(line)
-        else:  # basic block end, check candidates
-          for i, block_line in enumerate(block):
-            if is_mov(block_line): find_cand(block[i:])
-          hotness_key, block = restart()  # restart for next block
-  assert C.exe_one_line(C.grep(' ALL instructions:', info)), 'invalid %s' % info
-  total = int(C.exe_one_line(C.grep(' ALL instructions:', info)).split(':')[1].strip())
-  calc_stats()
-  for stat, value in stats_data.items():
-    print_stat('%s fusible-candidate' % stat, value, ratio_of=('ALL', total), log=info)
 
 def main():
   a1 = C.arg(1)

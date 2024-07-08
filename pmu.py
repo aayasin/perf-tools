@@ -25,7 +25,10 @@ else:
 def sys_devices_cpu(): return '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
 def name(real=False):
   forcecpu = C.env2str('FORCECPU')
-  return C.file2str(sys_devices_cpu() + '/caps/pmu_name') or 'Unknown PMU' if real or not forcecpu else forcecpu.lower()
+  def pmu_name():
+    x = C.file2str(sys_devices_cpu() + '/caps/pmu_name')
+    return "granite_rapids" if x == 'sapphire_rapids' and redwoodcove_on() else x
+  return pmu_name() or 'Unknown PMU' if real or not forcecpu else forcecpu.lower()
 
 # per CPU PMUs
 def skylake():    return name() in ('skylake', 'skl')
@@ -33,9 +36,11 @@ def icelake():    return name() in ('icelake', 'icl', 'icx', 'tgl')
 def alderlake():  return name() in ('alderlake_hybrid', 'adl')
 def sapphire():   return name() in ('sapphire_rapids', 'spr', 'spr-hbm')
 def meteorlake(): return name() in ('meteorlake_hybrid', 'mtl')
+def granite():    return name() in ('granite_rapids', 'gnr')
+def lunarlake():  return name() in ('lunarlake_hybrid', 'lnl')
 # aggregations
 def goldencove():   return alderlake() or sapphire()
-def redwoodcove():  return meteorlake()
+def redwoodcove():  return meteorlake() or granite()
 def perfmetrics():  return icelake() or goldencove() or goldencove_on()
 # Skylake onwards
 def v4p(): return os.path.exists(sys_devices_cpu() + '/format/frontend') # PEBS_FRONTEND introduced by Skylake (& no root needed)
@@ -45,8 +50,9 @@ def v5p(): return perfmetrics()
 # Golden Cove onward PMUs have Arch LBR
 def goldencove_on():  return cpu_has_feature('arch_lbr')
 # Redwood Cove onward PMUs have CPUID.0x23
-def redwoodcove_on(): return cpu_has_feature('CPUID.23H')
+def redwoodcove_on(): return cpu('CPUID.23H')
 
+def retlat():     return redwoodcove_on()
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
 def intel():      return 'Intel' in cpu('vendor')
@@ -59,16 +65,21 @@ def amd():
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 
-def event(x):
-  e = {'lbr':     'r20c4:Taken-branches:ppp',
+def event(x, precise=0):
+  def misp_event(sub): return perf_event('BR_MISP_RETIRED.%s%s' % (sub, '_COST' if retlat() else ''))
+  aliases = {'lbr':     'r20c4:Taken-branches:ppp',
+    'all-misp':   misp_event('ALL_BRANCHES'),
     'calls-loop': 'r0bc4:callret_loop-overhead',
+    'cond-misp':  misp_event('COND'),
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
-    'dsb-miss':   '%s/event=0xc6,umask=0x1,frontend=0x1,name=FRONTEND_RETIRED.ANY_DSB_MISS/uppp' % pmu(),
+    'dsb-miss':   perf_event('FRONTEND_RETIRED.ANY_DSB_MISS'),
     'sentries':   'r40c4:system-entries:u',
-    }[x]
+  }
+  e = aliases[x] if x in aliases else perf_event(x)
+  if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
   return perf_format(e)
 
-def event_name(x):
+def find_event_name(x):
   e = C.flag_value(x, '-e')
   if 'name=' in e: return e.split('name=')[1].split('/')[0]
   return e
@@ -110,7 +121,15 @@ TPEBS = {'MTL':
   "FRONTEND_RETIRED.STLB_MISS,BR_MISP_RETIRED.INDIRECT_COST,BR_MISP_RETIRED.INDIRECT_CALL_COST,"
   "MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.SPLIT_LOADS,MEM_INST_RETIRED.LOCK_LOADS,FRONTEND_RETIRED.ANY_DSB_MISS,"
   "FRONTEND_RETIRED.ITLB_MISS,FRONTEND_RETIRED.L1I_MISS,FRONTEND_RETIRED.MS_FLOWS,FRONTEND_RETIRED.UNKNOWN_BRANCH",
+
+  'GNR': "BR_MISP_RETIRED.COND_NTAKEN_COST,BR_MISP_RETIRED.COND_TAKEN_COST,BR_MISP_RETIRED.INDIRECT_CALL_COST,BR_MISP_RETIRED.INDIRECT_COST,"
+    "BR_MISP_RETIRED.RET_COST,FRONTEND_RETIRED.ANY_DSB_MISS,FRONTEND_RETIRED.ITLB_MISS,FRONTEND_RETIRED.L1I_MISS,"
+    "FRONTEND_RETIRED.MS_FLOWS,FRONTEND_RETIRED.UNKNOWN_BRANCH,MEM_INST_RETIRED.LOCK_LOADS,MEM_INST_RETIRED.SPLIT_LOADS,"
+    "MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.STLB_HIT_LOADS,MEM_INST_RETIRED.STLB_HIT_STORES,MEM_LOAD_RETIRED.L2_HIT,"
+    "MEM_LOAD_RETIRED.L3_HIT,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS,MEM_LOAD_L3_HIT_RETIRED.XSNP_NO_FWD,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD,"
+    "MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM,MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM,MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD,MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM",
 }
+# TODO: move this code to tma module
 def get_events(tag='MTL'):
   MTLraw = "cpu_core/event=0xd1,umask=0x4,name=mem_load_retired_l3_hit,period=100021/p,cpu_core/event=0xd2,umask=0x2,name=mem_load_l3_hit_retired_xsnp_no_fwd,period=20011/p,cpu_core/event=0xd2,umask=0x1,name=mem_load_l3_hit_retired_xsnp_miss,period=20011/p,cpu_core/event=0xd2,umask=0x4,name=mem_load_l3_hit_retired_xsnp_fwd,period=20011/p,cpu_core/event=0xc6,umask=0x3,frontend=0x13,name=frontend_retired_l2_miss,period=100007/p,cpu_core/event=0xc5,umask=0x48,name=br_misp_retired_ret_cost,period=100007/p,cpu_core/event=0xc5,umask=0x41,name=br_misp_retired_cond_taken_cost,period=400009/p,cpu_core/event=0xc5,umask=0x50,name=br_misp_retired_cond_ntaken_cost,period=400009/p,cpu_core/event=0xd0,umask=0x12,name=mem_inst_retired_stlb_miss_stores,period=100003/p,cpu_core/event=0xd0,umask=0x11,name=mem_inst_retired_stlb_miss_loads,period=100003/p,cpu_core/event=0xd0,umask=0xa,name=mem_inst_retired_stlb_hit_stores,period=100003/p,cpu_core/event=0xd0,umask=0x9,name=mem_inst_retired_stlb_hit_loads,period=100003/p,cpu_core/event=0xc6,umask=0x3,frontend=0x15,name=frontend_retired_stlb_miss,period=100007/p,cpu_core/event=0xc5,umask=0xc0,name=br_misp_retired_indirect_cost,period=100003/p,cpu_core/event=0xc5,umask=0x42,name=br_misp_retired_indirect_call_cost,period=400009/p,cpu_core/event=0xd0,umask=0x42,name=mem_inst_retired_split_stores,period=100003/p,cpu_core/event=0xd0,umask=0x41,name=mem_inst_retired_split_loads,period=100003/p,cpu_core/event=0xd0,umask=0x21,name=mem_inst_retired_lock_loads,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x1,name=frontend_retired_any_dsb_miss,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x14,name=frontend_retired_itlb_miss,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x12,name=frontend_retired_l1i_miss,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x8,name=frontend_retired_ms_flows,period=100007/p,cpu_core/event=0xc6,umask=0x3,frontend=0x17,name=frontend_retired_unknown_branch,period=100007/p"
   if tag.startswith('MTL-raw'):
@@ -127,7 +146,8 @@ def default_period(): return 2000003
 # perf_events add-ons
 def perf_format(es):
   rs = []
-  for e in es.split(','):
+  for orig_e in es.split(','):
+    e = orig_e.replace('{', '').replace('}', '')
     if e.startswith('r') and ':' in e and len(e) != len('rUUEE:u'):
       e = e.split(':')
       f, n = None, e[1]
@@ -139,8 +159,8 @@ def perf_format(es):
       if len(e) == 3: f += e[2]
       elif len(e) == 2: pass
       else: C.error("profile:perf-stat: invalid syntax in '%s'" % ':'.join(e))
-      rs += [ f ]
-    else: rs += [ e ]
+      rs += [ '%s%s%s' % ('{' if orig_e.startswith('{') else '', f, '}' if orig_e.endswith('}') else '') ]
+    else: rs += [ orig_e ]
   return ','.join(rs)
 
 Toplev2Intel = {}
@@ -151,6 +171,12 @@ def toplev2intel_name(e):
       for event in db:
         Toplev2Intel[event['EventName'].lower().replace('.', '_')] = event['EventName']
   return Toplev2Intel[e]
+
+def perf_event(e):
+  perf_str = C.exe_one_line('%s/ocperf -e %s --print' % (pmutools, e))
+  tl_name = find_event_name(perf_str)
+  return perf_str.replace(tl_name, toplev2intel_name(tl_name)).split()[2]
+
 #
 # CPU, cpu_ prefix
 #
@@ -158,7 +184,9 @@ perftools = os.path.dirname(os.path.realpath(__file__))
 def cpu_has_feature(feature):
   if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
     cpuid_f = '%s/setup-cpuid.log' % perftools
-    if not os.path.exists(cpuid_f): C.exe_cmd('cd %s && ./do.py log --tune :cpuid:1' % perftools, debug=1)
+    if not os.path.exists(cpuid_f):
+      C.warn("Missing file: %s" % cpuid_f)
+      C.exe_cmd('cpuid -1 > ' + cpuid_f, debug=1)
     return not C.exe_cmd(r"grep -E -q '\s+0x00000023 0x00: eax=0x000000.[^0] ' " + cpuid_f, fail=-1)
   if cpu_has_feature.flags: return feature in cpu_has_feature.flags
   def get_flags():
@@ -187,13 +215,13 @@ def force_cpu(cpu):
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
   return event_list
 
-pmutools = perftools + '/pmu-tools'
+pmutools = C.env2str('PMUTOOLS', perftools + '/pmu-tools')
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:
     if what == 'all':
       s = cpu.state.copy()
-      for x in ('eventlist', 'model', 'x86'): del s[x]
+      for x in ('cpucount', 'eventlist', 'forcecpu', 'kernel-version', 'model', 'x86'): del s[x]
       return s
     return cpu.state if what == 'ALL' else (cpu.state[what] if what in cpu.state else warn())
   if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
@@ -216,16 +244,18 @@ def cpu(what, default=None):
     cs = tl_cpu.CPU(known_cpus=((forcecpu, ()),) if forcecpu else ()) # cpu.state
     if what == 'get-cs': return cs
     cpu.state = {
+      'CPUID.23H':    cpu_has_feature('CPUID.23H'),
       'corecount':    int(len(cs.allcpus) / cs.threads),
       'cpucount':     cpu_count(),
       'eventlist':    force_cpu(forcecpu) if forcecpu else event_download.eventlist_name(),
+      'forcecpu':     int(True if forcecpu else False),
+      'kernel-version': tuple(map(int, platform.release().split('.')[0:2])),
       'model':        cs.model,
       #'name':         cs.true_name,
       'smt-on':       cs.ht,
       'socketcount':  cs.sockets,
-      'vendor':       cs.vendor,
+      'vendor':       C.exe_one_line("lscpu | grep 'Vendor'").split(':')[1].strip(), #cs.vendor,
       'x86':          int(platform.machine().startswith('x86')),
-      'forcecpu':     int(True if forcecpu else False)
     }
     cpu.state.update(versions())
     return cpu(what, default)
@@ -252,32 +282,30 @@ def cpu_msrs():
     if v5p(): msrs += [0x06d]
   return msrs
 
-def cpu_peak_kernels(widths=range(4, 7)):
+def cpu_peak_kernels(widths=(4, 5, 6, 8)):
   return ['peak%dwide' % x for x in widths]
 
 def cpu_pipeline_width():
   width = 4
   if icelake(): width = 5
   elif goldencove() or redwoodcove(): width = 6
+  elif lunarlake(): width = 8
   return width
 
 # deeper uarch stuff
 
 # returns MSB bit of DSB's set-index, if uarch is supported
 def dsb_msb():
-  return 10 if goldencove() or redwoodcove() else (9 if skylake() or icelake() else None)
+  return 11 if lunarlake() else 10 if goldencove() or redwoodcove() else (9 if skylake() or icelake() else None)
 
 def dsb_set_index(ip):
-  left = dsb_msb()
-  if left:
-    mask = 2 ** (left + 1) - 1
-    return ((ip & mask) >> 6)
-  return None
+  if not dsb_set_index.MSB: dsb_set_index.MSB = dsb_msb()
+  mask = 2 ** (dsb_set_index.MSB + 1) - 1
+  return ((ip & mask) >> 6)
+dsb_set_index.MSB = None
 
 def main():
-  ALL = len(sys.argv) > 1 and sys.argv[1] == 'ALL'
-  if len(sys.argv) > 1 and not ALL: return print(cpu(sys.argv[1]))
-  print(cpu('ALL' if ALL else 'all'))
+  print(cpu(sys.argv[1] if len(sys.argv) > 1 else 'all'))
 
 if __name__ == "__main__":
   main()

@@ -155,17 +155,21 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
   def find_block_ip(x=len(lines) - 2):
     while x >= 0:
       if LC.is_taken(lines[x]):
-        return LC.line_ip(next_line(x)), x
+        n = next_line(x)
+        if n is None: return 0, -1
+        return LC.line_ip(n), x
       x -= 1
     return 0, -1
   def has_ip(at):
-    call_ret, call_ip = False, None
     while at > 0:
-      if LC.is_callret(lines[at]): call_ret = True
-      if 'call' in lines[at]: call_ip = LC.line_ip(lines[at])
-      if LC.line_ip(lines[at]) == ip:
-        if call_ip and (call_ip - ip < MOLD): functions_in_loops.add(call_ip)
-        return not call_ret
+      if LC.line_ip(lines[at]) == ip: return True
+      at -= 1
+    return False
+  def has_call(at):
+    res = False
+    while at > 0:
+      if 'call' in lines[at]: res = True
+      if LC.line_ip(lines[at]) == ip: return res
       at -= 1
     return False
   prev_l = prev_line()
@@ -253,7 +257,6 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
   # only simple loops, of these attributes, are supported:
   # * loop-body is entirely observed in a single sample
   # * a tripcount > 1 is observed
-  # * no function calls
   if LC.is_taken(prev_l):
     xip = LC.line_ip(prev_l)
     if ilen_on(): detect_jump_to_mid_loop(ip, xip)
@@ -291,6 +294,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       if ilen:
         loops[ip]['sizeIB'] = int(xip) - ip + ilen  # size In Bytes
         if (ip + loops[ip]['sizeIB'] - ilen) == int(xip): contigous_loops += [ip]
+      if has_call(len(lines) - 2): functions_in_loops.add(ip)
       return
     elif use_cands and len(lines) > 2 and ip in bwd_br_tgts and has_ip(len(lines) - 2):
       bwd_br_tgts.remove(ip)

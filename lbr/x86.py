@@ -40,8 +40,7 @@ MOV       = r"v?mov"
 MOVS_ZX   = r"%s(s|zx)" % MOV
 STORE     = r"\s+\S+\s+[^\(\),]+,"  # use is_mem_store()
 TEST_CMP  = r"(test|cmp).?\s" 
-cvt_suff  = ['sd2si', 'si2sd', 'si2ss', 'ss2si', 'tss2si']
-suff      = ['b', 'd', 'q', 'w']
+
 MEM_IDX   = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
 
 def inst_patch(i='JMP'):
@@ -158,6 +157,8 @@ def sub_regs(reg):
   return subs
 def is_sub_reg(sub_reg, orig): return sub_reg in sub_regs(orig)
 
+cvt_suff  = ['sd2si', 'si2sd', 'si2ss', 'ss2si', 'tss2si']
+suff      = ['b', 'd', 'q', 'w']
 V2II2V    = [x + y for y in ['', 'x'] for x in ['aeskeygenassist', 'lock cmpxchg16b']] + \
             ['comis' + x for x in ['d', 'dq', 's', 'sl']] + \
             ['cvt' + x for x in (['sd2siq', 'ss2sil', 'tsd2siq', 'tss2sil'] + cvt_suff)] + \

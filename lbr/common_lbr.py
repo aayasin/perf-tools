@@ -77,6 +77,7 @@ Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fu
               ] + ['%s-JCC non-fusible'%x for x in user_jcc_pair]
 Insts_Fusions = [x + '-OP fusible' for x in [y + z for z in ['MOV', 'LD'] for y in ['', 'VEC ']]]
 Insts_MRN = ['%s non-MRNable'%x for x in ['INC','DEC','LD-ST']]
+Insts_V2II2V = ['%s transition-Penalty'%x for x in ['V2I','I2V']]
 Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_MRN + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}

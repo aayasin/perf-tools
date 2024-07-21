@@ -92,7 +92,8 @@ if args.GEN:
     gen_kernel("-i 'movdqa %xmm1,%xmm2' 'andps %xmm3, %xmm2' NOP -n 14", 'v-mov-op-nop')
     gen_kernel("-i 'movups (%rsp),%xmm1' NOP 'andps %xmm2, %xmm1' -n 14", 'v-ld-nop-op')
     gen_kernel("-i 'movdqa %xmm1,%xmm2' NOP 'andps %xmm3, %xmm2' -n 14", 'v-mov-nop-op')
-
+    gen_kernel("-i 'cvtsd2si %xmm0,%r8d' -n64 ",'v2i')
+    gen_kernel("-i 'comiss 0x100(%rsp),%xmm0' -n64 ",'i2v')
     kernels.append("memcpy")
     kernels.append("pagefault")
     kernels.append("tripcount-mean")

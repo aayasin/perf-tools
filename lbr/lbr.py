@@ -208,6 +208,17 @@ def edge_stats(line, lines, xip, size):
           inc_pair('LD','ST',suffix='non-MRNable')
           break
       x-=1 
+  if x86.get('inst',line) in x86.V2II2V:
+    vecs=['xmm','ymm','zmm']
+    v2ii2v_srcs=x86.get('srcs',line)
+    v2ii2v_dst=x86.get('dst',line)
+    if v2ii2v_srcs:
+      if C.any_in(vecs,''.join(v2ii2v_srcs)):
+        inc_stat('V2I transition-Penalty')
+      elif C.any_in(vecs,v2ii2v_dst):
+        inc_stat('I2V transition-Penalty')
+    elif v2ii2v_dst:
+        inc_stat('V2I transition-Penalty')
   if LC.is_type(x86.COND_BR, xline) and LC.is_taken(xline):
     LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
   # checks all lines but first
@@ -576,6 +587,7 @@ def print_global_stats():
       print_imix_stat('jump-into-mid-loop', sum(loops.jump_to_mid_loop.values()))
     for x in LC.Insts_Fusions: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_MRN: print_imix_stat(x, LC.glob[x])
+    for x in LC.Insts_V2II2V: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_global: print_imix_stat(x, LC.glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

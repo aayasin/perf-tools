@@ -37,11 +37,11 @@ LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"v?mov[a-z0-9]*\s+[^,]*\("
 LOAD_ANY  = r"[a-z0-9]+\s+[^,]*\("  # use is_mem_load()
 MOV       = r"v?mov"
-MOVS_ZX     = r"%s(s|zx)" % MOV
+MOVS_ZX   = r"%s(s|zx)" % MOV
 STORE     = r"\s+\S+\s+[^\(\),]+,"  # use is_mem_store()
-TEST_CMP  = r"(test|cmp).?\s"
+TEST_CMP  = r"(test|cmp).?\s" 
 
-MEM_IDX = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
+MEM_IDX   = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
 
 def inst_patch(i='JMP'):
   assert i == 'JMP'
@@ -156,3 +156,27 @@ def sub_regs(reg):
     subs[2] = reg.replace('d', 'w') if '1' in reg else reg.replace('e', '')
   return subs
 def is_sub_reg(sub_reg, orig): return sub_reg in sub_regs(orig)
+
+cvt_suff  = ['sd2si', 'si2sd', 'si2ss', 'ss2si', 'tss2si']
+suff      = ['b', 'd', 'q', 'w']
+V2II2V    = [x + y for y in ['', 'x'] for x in ['aeskeygenassist', 'lock cmpxchg16b']] + \
+            ['comis' + x for x in ['d', 'dq', 's', 'sl']] + \
+            ['cvt' + x for x in (['sd2siq', 'ss2sil', 'tsd2siq', 'tss2sil'] + cvt_suff)] + \
+            ['fcmov' + x for x in ['b', 'be', 'e', 'nb', 'nbe', 'ne', 'nu', 'u']] + \
+            ['fld' + x for x in ['cw', 'env']] + ['fn' + x for x in ['init', 'stcw', 'stenv', 'stsw']] + \
+            ['fp' + x for x in ['atan', 'rem', 'rem1', 'tan']] + ['fsin' + x for x in ['', 'cos']] + \
+            ['fyl2x' + x for x in ['', 'p1']] + ['kmov' + x for x in (suff + ['bb', 'dl', 'qq', 'ww'])] + \
+            ['mov' + x for x in ['d', 'mskpd', 'mskps', 'q']] + \
+            ['pcmp' + x + 'str' + y for y in ['i', 'ix', 'm', 'mx'] for x in ['e', 'i']] + \
+            [x + y for y in suff for x in ['pextr', 'pinsr']] + ['ucomis' + x for x in ['d', 's']] + \
+            ['vcomis' + x for x in ['d','h','s']] + \
+            ['vcvt' + x for x in (['sd2usi', 'sh2si', 'sh2usi', 'si2sh', 'ss2usi', 'tsd2si', 'tsd2usi', 'tsh2si',
+                                   'tsh2usi', 'tss2usi', 'usi2sd', 'usi2sh', 'usi2ss'] + cvt_suff)] + \
+            ['vgather' + x for x in ['dps', 'qpd']] + ['vmov' + x for x in ['d', 'mskpd', 'mskps', 'q', 'w']] + \
+            ['vpcmp' + x + 'str' + y for y in ['i', 'm'] for x in ['e', 'i']] + \
+            [y + x for x in suff for y in ['vpinsr', 'vpextr']] + \
+            ['vpgather' + x for x in ['dd','dq','qd']] + ['vpscatter' + x for x in ['dd', 'qd', 'qq']] + \
+            ['vscatter' + x for x in ['dpd', 'dps', 'qpd']] + ['vtest' + x for x in ['pd', 'ps']] + \
+            ['vucomis' + x for x in ['d', 'h', 's']] + [y + x for x in ['', '64', 's'] for y in ['xrstor', 'xsave']] + \
+            ['emms', 'enqcmd', 'extractps', 'f2xm1', 'fbld', 'fbstp', 'fcos', 'frstor', 'fscale', 'ldmxcsr', 'maskmovq', \
+             'pmovmskb', 'ptest', 'rep', 'stmxcsr', 'sttilecfg', 'vextractps', 'vldmxcsr', 'vpmovmskb', 'vptest', 'vstmxcsr']

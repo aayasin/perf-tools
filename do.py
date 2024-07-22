@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.31
+__version__ = 3.32
 
 import argparse, os.path, re, sys
 
@@ -108,7 +108,7 @@ do = {'run':        C.RUN_DEF,
   'python-pkgs':    ['numpy', 'pandas', 'xlsxwriter'],
   'reprocess':      2, # for LBR profile-step: -1: append, 0: lazy, 1: reuse header, 2: process anew
   'sample':         2,
-  'size':           0,
+  'size':           1,
   'srcline':        0,
   'super':          0,
   'tee':            1,
@@ -681,7 +681,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     print_info.first = True
     def static_stats():
       if args.mode == 'profile': return
-      bins = exe2list(perf + r" script -i %s | cut -d\( -f2 | cut -d\) -f1 | grep -E -v '^\[|anonymous' | %s | tail -5" %
+      bins = exe2list(perf + r" script -i %s | awk -F'\\(' '{print $NF}' | cut -d\) -f1 | grep -E -v '^\[|anonymous' | %s | tail -5" %
                         (data, sort2u))[1:][::2]
       assert len(bins)
       print_info('# %s:\n#\n' % 'Static Statistics')

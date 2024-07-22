@@ -542,7 +542,7 @@ c = lambda x: x.replace(':', '-')
 def stat_name(name, prefix='count', ratio_of=None):
   def nm(x):
     if not ratio_of or ratio_of[0] != 'ALL': return x
-    n = (x if 'cond' in name or 'fusible' in name or 'MRN' in name else x.upper()) + ' '
+    n = (x if C.any_in(['cond', 'fusible', 'MRN', 'Penalty'], name) else x.upper()) + ' '
     if x.startswith('vec'): n += 'comp '
     if x in LC.is_imix(None):  n += 'insts-class'
     elif x in x86.mem_type(None):  n += 'insts-subclass'

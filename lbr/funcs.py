@@ -131,13 +131,13 @@ def get_flow(flow, func):
 
 # considers CALL -> RET case only with inner functions support
 # returns last processed function line and inner functions IPs (for recursive calling)
-def process_function(lines, srcline, outer_funcs=[]):
+def process_function(lines, outer_funcs=[]):
   assert 'call' in lines[0], C.error(f'wrong function detected with no call {lines[0]}')
   if len(lines) == 1: return lines[0], []  # corner case of last line being a CALL
+  srcline = LC.get_srcline(lines[0]) if LC.is_srcline(lines[0]) else None
   lines.pop(0)
-  if LC.is_label(lines[0]):
-    srcline = LC.get_srcline(lines[0])
-    lines.pop(0)
+  if LC.is_srcline(lines[0]): srcline = LC.get_srcline(lines[0])
+  if LC.is_label(lines[0]): lines.pop(0)
   ip = LC.line_ip_hex(lines[0])
   new_func = Function(ip)
   new_func.srcline = srcline
@@ -186,10 +186,7 @@ def process_function(lines, srcline, outer_funcs=[]):
   inner_end = None
   for index, line in enumerate(lines):
     if inner_end and index <= inner_end: continue  # bypass lines of inner function
-    # update srcline for next functions and ignore labels
-    if LC.is_label(line):
-      srcline = LC.get_srcline(line)
-      continue
+    if LC.is_label(line): continue
     new_flow.size += 1
     new_flow.code += line.strip() + '\n'
     line_ip = LC.line_ip(line)
@@ -205,7 +202,7 @@ def process_function(lines, srcline, outer_funcs=[]):
       add_func(hex_ip)
       return line, [ip] + inner_funcs  # return last processed line & inner functions
     if 'call' in line:  # inner function
-      resume_line, inner_funcs = process_function(lines[index:], srcline, outer_funcs=outer_funcs + [ip])
+      resume_line, inner_funcs = process_function(lines[index:], outer_funcs=outer_funcs + [ip])
       inner_end = lines.index(resume_line)
       continue
     if index > 1:
@@ -234,15 +231,14 @@ def process_function(lines, srcline, outer_funcs=[]):
   return lines[-1], [ip] + inner_funcs  # return last processed line & inner functions
 
 # supports functions observed in a single sample
-def detect_functions(lines, srcline):
+def detect_functions(lines):
   while len(lines):
     line = lines[0]
     while not 'call' in line:
-      if LC.is_label(line): srcline = LC.get_srcline(line)
       lines.pop(0)
       if not len(lines): return
       line = lines[0]
     # call found, process function and restart for next functions
-    resume_line = process_function(lines, srcline)[0]
+    resume_line = process_function(lines)[0]
     lines = lines[lines.index(resume_line):]
     lines.pop(0)

@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.25 # see version line of do.py
+__version__= x86.__version__ + 2.26 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 uica_log = C.envfile('UICA_LOG')
@@ -49,7 +49,7 @@ header_field = {
   'dso': 7,
 }
 def header_ip_str(line):
-  x = is_header(line)
+  x = LC.is_header(line)
   assert x, "Not a head of sample: " + line
   #           clang 155371 [062] 1286179.977117:      70001 r20c4:ppp:      7ffff7de04c2 _dl_relocate_object+0xbc2 (/lib/x86_64-linux-gnu/ld-2.27.so)
   if 0:
@@ -65,7 +65,7 @@ header_ip_str.position = 5
 def header_ip(line): return LC.str2int(header_ip_str(line), (line, None))
 
 def header_cost(line):
-  x = is_header(line)
+  x = LC.is_header(line)
   assert x, "Not a head of sample: " + line
   return LC.str2int(C.str2list(line.split(':')[2])[2], (line, None))
 
@@ -319,7 +319,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           C.error('No LBR data in profile')
         if not loop_ipc: C.printf(' .\n')
         return lines if check_min_lines() and not skip_bad else None
-      header = is_header(line)
+      header = LC.is_header(line)
       if header:
         ev = header.group(3)[:-1]
         # first sample here (of a given event)
@@ -337,7 +337,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           if not header.group(2).isdigit(): C.printf(line)
           C.printf(x+'\n')
         inc(LC.stat['events'], ev)
-        func = func_srcline = None
+        func = None
         if LC.debug: timestamp = header.group(1).split()[-1]
       # a new sample started
       # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
@@ -366,7 +366,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
             if loops.loop_stats_id: loops.loop_stats(None, 0, 0)
           # else: note a truncated tripcount, i.e. unknown in 1..31, is not accounted for by default.
         if mispred_ip and valid < 2: valid = 0
-        if func: funcs.detect_functions(lines[func:], func_srcline)
+        if func: funcs.detect_functions(lines[func:])
         if LC.debug and LC.debug == timestamp:
           exit((line.strip(), len(lines)), lines, 'sample-of-interest ended')
         break
@@ -465,29 +465,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
 read_sample.stop = os.getenv('LBR_STOP')
 read_sample.tick = C.env2int('LBR_TICK', 1000)
 read_sample.dump = C.env2int('LBR_DUMP', 0)
-
-# TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictionary if header or None otherwise
-def is_header(line):
-  def patch(x):
-    if LC.debug: C.printf("\nhacking '%s' in: %s" % (x, line))
-    return line.replace(x, '-', 1)
-  if '\tilen:' in line: return False
-  if '[' in line[:50]:
-    p = line.split('[')[0]
-    assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()
-    if '::' in p: pass
-    elif ': ' in p: line = patch(': ')
-    elif ':' in p: line = patch(':')
-  #    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
-  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
-# kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
-#                              re.match(r"(\s?[\S]*)\s+([\d\[\]\.\s]+):\s+\d+\s+(\S*:)\s", line) or
-#AUX data lost 1 times out of 33!
-                              re.match(r"(\w)([\w\s]+)(.)", line) or
-#         python3 105303 [000] 1021657.227299:          cbr:  cbr: 11 freq: 1100 MHz ( 55%)               55e235 PyObject_GetAttr+0x415 (/usr/bin/python3.6)
-                              re.match(r"([^:]*):(\s+)(\w+:)\s", line) or
-# instruction trace error type 1 time 1021983.206228655 cpu 1 pid 105468 tid 105468 ip 0 code 8: Lost trace data
-                              re.match(r"(\s)(\w[\w\s]+\d) time ([\d\.]+)", line))
 
 def is_jmp_next(br, # a hacky implementation for now
   JS=2,             # short direct Jump Size

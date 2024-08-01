@@ -127,6 +127,29 @@ def line_timing(line):
   cycles = int(x.group(2))
   return cycles, ipc
 
+# TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictionary if header or None otherwise
+def is_header(line):
+  def patch(x):
+    if debug: C.printf("\nhacking '%s' in: %s" % (x, line))
+    return line.replace(x, '-', 1)
+  if '\tilen:' in line: return False
+  if '[' in line[:50]:
+    p = line.split('[')[0]
+    assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()
+    if '::' in p: pass
+    elif ': ' in p: line = patch(': ')
+    elif ':' in p: line = patch(':')
+  #    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
+  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
+# kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
+#                              re.match(r"(\s?[\S]*)\s+([\d\[\]\.\s]+):\s+\d+\s+(\S*:)\s", line) or
+#AUX data lost 1 times out of 33!
+                              re.match(r"(\w)([\w\s]+)(.)", line) or
+#         python3 105303 [000] 1021657.227299:          cbr:  cbr: 11 freq: 1100 MHz ( 55%)               55e235 PyObject_GetAttr+0x415 (/usr/bin/python3.6)
+                              re.match(r"([^:]*):(\s+)(\w+:)\s", line) or
+# instruction trace error type 1 time 1021983.206228655 cpu 1 pid 105468 tid 105468 ip 0 code 8: Lost trace data
+                              re.match(r"(\s)(\w[\w\s]+\d) time ([\d\.]+)", line))
+
 def is_label(line):
   line = line.strip()
   if 'ilen:' in line: return False
@@ -134,7 +157,11 @@ def is_label(line):
       (len(line.split()) > 1 and line.split()[-2].endswith(':')) or \
       (':' in line and line.split(':')[-1].isdigit())
 
+def is_srcline(line): return 'srcline:' in line or is_label(line)
 def get_srcline(line):
+  if 'srcline:' in line:
+    srcline = re.search(r"srcline:\s+(\S+)", line)
+    return srcline.group(1) if srcline else None
   if line.endswith(':') or line.startswith('['): return None
   if line.endswith(']'):
     label_split = line.split()[-1].split('[')
@@ -180,7 +207,7 @@ def line_ip_hex(line):
   # assert x, "expect <address> at left of '%s'" % line
   return x.group(1).lstrip("0")
 def line_ip(line, sample=None):
-  if is_label(line): return None
+  if is_label(line) or is_header(line): return None
   try:
     return str2int(line_ip_hex(line), (line, sample))
   except:

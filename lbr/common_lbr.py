@@ -217,25 +217,25 @@ def hex_ip(ip): return '0x%x' % ip if ip and ip > 0 else '-'
 def print_ipc_hist(hist, keys, threshold=0.05):
   r = lambda x: round(x, 1)
   tot = sum(hist.values())
-  left, limit = 0, int(threshold * tot)
-  total_eff, left_eff = 0, []
+  left, total_eff, left_eff = 0, 0, 0
+  all_eff = {}
   # calculate efficiencies
   for k in keys:
     fk = float(k)
     eff = hist[k] / fk if fk else 0
-    if limit and (hist[k] < limit or not hist[k] > 1): left_eff.append(eff)
-    else: total_eff += eff
-  left_eff = sum(left_eff) / len(left_eff) if len(left_eff) else 0
-  total_eff += left_eff
+    all_eff[k] = eff
+    total_eff += eff
+  limit = int(threshold * total_eff)
   # print histogram
   result = "{:>6} {:>8} {:>14} {:>12} {:>17}\n".format('IPC', 'Samples', '% of samples', 'Efficiency', '% of efficiency')
   for k in keys:
-    if not limit or hist[k] >= limit and hist[k] > 1:
-      fk = float(k)
-      eff = hist[k] / fk if fk else 0
+    eff = all_eff[k]
+    if limit and (eff < limit or not hist[k] > 1):
+      left += hist[k]
+      left_eff += eff
+    else:
       result += "{:>5}: {:>8} {:>13}% {:>12} {:>16}%\n".\
         format(k, hist[k], r(100.0 * hist[k] / tot), r(eff), r(100.0 * eff / total_eff))
-    else: left += hist[k]
   if left:
     result += "other: {:>8} {:>13}% {:>12} {:>16}%\t//  buckets > 1, < {}%".\
       format(left, r(100.0 * left / tot), r(left_eff), r(100.0 * left_eff / total_eff), 100.0 * threshold)

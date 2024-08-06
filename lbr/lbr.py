@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.27 # see version line of do.py
+__version__= x86.__version__ + 2.28 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 uica_log = C.envfile('UICA_LOG')
@@ -286,7 +286,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       LC.stat['samples/s'] = time.time()
 
   while not valid:
-    valid, lines, loops.bwd_br_tgts = 1, [], []
+    valid, lines, loops.bwd_br_tgts, inter_loops_dict = 1, [], [], dict()
     # size is # instructions in sample while insts is # instruction since last taken
     insts, size, takens, xip, timestamp, srcline = 0, 0, [], None, None, None
     tc_state = 'new'
@@ -307,6 +307,18 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         if not LC.is_label(l): i += 1
         if i > min_lines: return True
       return False
+    def check_inter_loops(ip, prev_line):
+      k = str(ip)
+      prev_ip = LC.line_ip(prev_line)
+      if k in inter_loops_dict:
+        if not (loops.is_in_loop(prev_ip, inter_loops_dict[k][1]) or loops.is_in_loop(prev_ip, ip)):
+          del inter_loops_dict[k]
+        elif prev_line != inter_loops_dict[k][0]: inter_loops.add((inter_loops_dict[k][1], ip))
+      else:
+        for l in loops.loops:
+          if l < ip < loops.loops[l]['back'] < loops.loops[ip]['back'] and \
+                  (loops.is_in_loop(prev_ip, l) or loops.is_in_loop(prev_ip, ip)):
+            inter_loops_dict[k] = [prev_ip, l]
     LC.stat['total'] += 1
     if LC.stat['total'] % read_sample.tick == 0: C.printf('.')
     while True:
@@ -436,11 +448,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         ilen = LC.get_ilen(line)
         if ilen: ips_after_uncond_jmp.add(ip + ilen)
       # interleaving loops
-      if ip:
-        line_loop = loops.loop_by_line(line, body=True)
-        if line_loop:
-          for l in loops.loops:
-            if ip == loops.loops[l]['back'] and ip < loops.loops[line_loop]['back'] and l < line_loop: inter_loops.add(ip)
+      if ip in loops.loops: check_inter_loops(ip, lines[-1])
       if 'call' in line and not func:
         func = len(lines)
         func_srcline = srcline

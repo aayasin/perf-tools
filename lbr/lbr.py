@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.28 # see version line of do.py
+__version__= x86.__version__ + 2.29 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 uica_log = C.envfile('UICA_LOG')
@@ -259,7 +259,6 @@ def edge_stats(line, lines, xip, size):
     elif x86_f.is_vec_mov_op_fusion(lines[-2], lines[-1]): inc_pair('VEC MOV', 'OP', suffix='fusible')
   if LC.is_type('call', xline): inc(hsts[FUNCI], ip)
 
-inter_loops = set()
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
   def invalid(bad, msg):
@@ -268,7 +267,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
   def header_only_str(l):
     dso = get_field(l, 'dso').replace('(','').replace(')','')
     return 'header-only: ' + (dso if 'kallsyms' in dso else ' '.join((get_field(l, 'sym'), dso)))
-  global lbr_events, inter_loops
+  global lbr_events
   valid, lines, loops.bwd_br_tgts = 0, [], []
   if skip_bad and not loop_ipc: LC.stats.enables |= LC.stats.SIZE
   if lp_stats_en: LC.stats.enables |= LC.stats.LOOP
@@ -286,7 +285,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       LC.stat['samples/s'] = time.time()
 
   while not valid:
-    valid, lines, loops.bwd_br_tgts, inter_loops_dict = 1, [], [], dict()
+    valid, lines, loops.bwd_br_tgts = 1, [], []
     # size is # instructions in sample while insts is # instruction since last taken
     insts, size, takens, xip, timestamp, srcline = 0, 0, [], None, None, None
     tc_state = 'new'
@@ -307,18 +306,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         if not LC.is_label(l): i += 1
         if i > min_lines: return True
       return False
-    def check_inter_loops(ip, prev_line):
-      k = str(ip)
-      prev_ip = LC.line_ip(prev_line)
-      if k in inter_loops_dict:
-        if not (loops.is_in_loop(prev_ip, inter_loops_dict[k][1]) or loops.is_in_loop(prev_ip, ip)):
-          del inter_loops_dict[k]
-        elif prev_line != inter_loops_dict[k][0]: inter_loops.add((inter_loops_dict[k][1], ip))
-      else:
-        for l in loops.loops:
-          if l < ip < loops.loops[l]['back'] < loops.loops[ip]['back'] and \
-                  (loops.is_in_loop(prev_ip, l) or loops.is_in_loop(prev_ip, ip)):
-            inter_loops_dict[k] = [prev_ip, l]
     LC.stat['total'] += 1
     if LC.stat['total'] % read_sample.tick == 0: C.printf('.')
     while True:
@@ -447,8 +434,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       if (LC.edge_en or 'DSB_MISS' in event) and LC.is_type('jmp', line):
         ilen = LC.get_ilen(line)
         if ilen: ips_after_uncond_jmp.add(ip + ilen)
-      # interleaving loops
-      if ip in loops.loops: check_inter_loops(ip, lines[-1])
       if 'call' in line and not func:
         func = len(lines)
         func_srcline = srcline
@@ -562,7 +547,7 @@ def print_global_stats():
   print_loops_stat('undetermined size', len([l for l in loops.loops.keys() if loops.loops[l]['size'] is None]))
   if LC.stats.ilen() : print_loops_stat('non-contiguous', len(loops.loops) - len(loops.contigous_loops))
   print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
-  print_loops_stat('interleaving', len(inter_loops))
+  print_loops_stat('interleaving', 2 * len(loops.inter_loops))
   print_loops_stat('functions in', len(loops.functions_in_loops))
   if LC.stats.size():
     for x in LC.Insts_cond: print_imix_stat(x + ' conditional', LC.glob['cond_' + x])

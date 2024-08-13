@@ -138,10 +138,11 @@ loop_stats_atts = ''
 
 bwd_br_tgts = []
 loop_cands = []
-functions_in_loops = set()
+functions_in_loops, inter_loops = set(), set()
+inter_loops_dict = dict()
 def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
                 MOLD=4e4):  # Max Outer Loop Distance
-  global bwd_br_tgts, loop_cands, contigous_loops, functions_in_loops  # unlike nonlocal, global works in python2 too!
+  global bwd_br_tgts, loop_cands, contigous_loops, functions_in_loops, inter_loops, inter_loops_dict  # unlike nonlocal, global works in python2 too!
   # lines[x+1]/lines[x+2] etc w/ no labels
   def next_line(x, step=1):
     while x + step < len(lines) and LC.is_label(lines[x+step]):
@@ -252,6 +253,19 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         elif inst_ip and (inst_ip < ip or inst_ip > loop['back']):
           break
         x -= 1
+    # interleaving loops
+    k = str(ip)
+    prev_ip = LC.line_ip(prev_l)
+    if k in inter_loops_dict:
+      flag, loop1, loop2 = inter_loops_dict[k]
+      if flag is True: return
+      if not (is_in_loop(prev_ip, loop1) or is_in_loop(prev_ip, loop2)):
+        inter_loops_dict[k][0] = None
+      elif flag is None:
+        inter_loops_dict[k][0] = prev_ip
+      elif prev_ip != flag:
+        inter_loops_dict[k][0] = True
+        inter_loops.add((loop1, loop2))
     return
 
   # only simple loops, of these attributes, are supported:
@@ -284,6 +298,10 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           ins.add(LC.hex_ip(l))
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(LC.hex_ip(ip))
+        # interleaving loops
+        if l < ip < loops[l]['back'] < xip or ip < l < xip < loops[l]['back']:
+          # [prev ip before shared block, loop1 ip, loop2 ip]
+          inter_loops_dict[str(ip)] = [xip, l, ip]
       loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'imix-ID': None,
                    'attributes': ';entered_by_indirect' if indirect_jmp_enter() else '',
                    'entry-block': 0 if xip > ip else find_block_ip()[0],  # 'BK': {hex(xip): 1, },

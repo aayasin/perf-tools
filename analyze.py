@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.32 # see version line of do.py
+__version__ = 0.41 # see version line of do.py
 
 import common as C, pmu, stats, tma
 from lbr import x86
@@ -19,8 +19,10 @@ from lbr import x86
 threshold = {
   'hot-loop': 0.05,
   'misp-sig': 5,
+  'useless-hwpf': 0.15,
 }
-for b in tma.get('bottlenecks-list-2'): threshold[b] = tma.threshold_of(b);
+def bottlenecks(): return tma.get('bottlenecks-list-5')
+for b in bottlenecks(): threshold[b] = tma.threshold_of(b);
 
 def advise(m, prefix='Advise'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
 def hint(m): advise(m, '\tHint')
@@ -83,6 +85,11 @@ def analyze(app, args, do=None):
             easy = False
             break
         if easy: hint('above forward-conditional branch should be converted to CMOV. check your compiler')
+
+  if examine('Cache_Memory_Bandwidth'):
+    value = stats.get('Useless_HWPF', app)
+    if value > threshold['useless-hwpf']:
+      advise('too much useless HW prefetches of %s; try to disable them' % percent(value))
 
   if not examine('Instruction_Fetch_BW'): return
   loops = stats.read_loops_info(info, as_loops=True)

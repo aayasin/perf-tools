@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.91
+__version__= 0.92
 
 import common as C, pmu, stats
 import os, sys, time, re
@@ -44,6 +44,7 @@ grep -F Puzzle, $log # replace this to grep a score (performance result) of your
 DM=C.env2str('STUDY_MODE', 'imix-loops')
 STUDY_PROF_MASK = 0x1911a
 Conf = {
+  # TODO: let below hardcoded events use pmu.perf_event()
   'Events': {'imix-loops': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r10c4:BR_INST_RETIRED.COND_NTAKEN', #'r11c4:BR_INST_RETIRED.COND'
     'imix-dsb': 'r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r0262:DSB_FILL.OTHER_CANCEL,r01470261:DSB2MITE_SWITCHES.COUNT,'
                 'FRONTEND_RETIRED.DSB_MISS,FRONTEND_RETIRED.ANY_DSB_MISS,BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN,'
@@ -58,6 +59,8 @@ Conf = {
     #,r01e5:MEM_UOP_RETIRED.LOAD,r02e5:MEM_UOP_RETIRED.STA'
     'cond-misp': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r01c5:BR_MISP_RETIRED.COND_TAKEN'
                  ',r10c4:BR_INST_RETIRED.COND_NTAKEN,r10c5:BR_MISP_RETIRED.COND_NTAKEN',
+    # TODO: remove if once event-list is updated
+    'mem-bw':   '' if pmu.icelake() else ','.join([pmu.perf_event('L2_LINES_OUT.'+x) for x in ('USELESS_HWPF', 'NON_SILENT', 'SILENT')]),
     'openmp': 'r0106,r10d1:MEM_LOAD_RETIRED.L2_MISS,r3f24:L2_RQSTS.MISS,r70ec:CPU_CLK_UNHALTED.PAUSE'
               ',syscalls:sys_enter_sched_yield',
   },
@@ -83,7 +86,7 @@ def modes_list():
 
 def parse_args():
   def conf(x): return Conf[x][DM] if DM in Conf[x] else None
-  ap = C.argument_parser('analyze two or more modes (configs)', mask=STUDY_PROF_MASK,
+  ap = C.argument_parser('study two or more modes (configs)', mask=STUDY_PROF_MASK,
          defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
   ap.add_argument('config', nargs='*', default=[])
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)
@@ -148,7 +151,7 @@ def parse_args():
   fassert(args.profile_mask & 0x100, 'args.pm=0x%x' % args.profile_mask)
   assert args.repeat > 2, "stats module requires '--repeat 3' at least"
   if DM in ('dsb-align', ): pass
-  else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN events")
+  else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN, USELESS_HWPF events")
   if args.stages & 0x4 and len(args.config) == 2:
     assert sys.version_info >= (3, 0), "stage 4 requires Python 3 or above."
     for element in args.table_width:

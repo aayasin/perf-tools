@@ -194,6 +194,8 @@ def read_perf(f):
     if e == 'ref-cycles':
       d['TSC'] = (get_TSC(f), 'Event')
       d['CPUs_Utilized'] = (v / d['TSC'][0], group)
+    if e == 'L2_LINES_OUT.SILENT': d['Useless_HWPF'] = (
+      d['L2_LINES_OUT.USELESS_HWPF'][0] / (d['L2_LINES_OUT.SILENT'][0] + d['L2_LINES_OUT.NON_SILENT'][0]), group)
   if f is None: return calc_metric(None) # a hack!
   if debug > 3: print('reading %s' % f)
   lines = C.file2lines(f)

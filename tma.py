@@ -53,9 +53,9 @@ def get(tag):
   if tag =='fe-bottlenecks': return prepend_info(metrics['bot-fe'])
   if tag =='bottlenecks-list':
     return get('bottlenecks-only').replace(',+DSB_Misses', '').replace('+', '').split(',')
-  if tag =='bottlenecks-list-2':
+  if tag.startswith('bottlenecks-list-'):
     all = get('bottlenecks-list')
-    return [all[i] for i in (0, 2)]
+    return [all[i] for i in range(int(tag[-1]))]
   model = 'GNR' if pmu.granite() else pmu.cpu('CPU') or C.env2str('TMA_CPU', 'SPR')
   if tag == 'zero-ok':
     ZeroOk = C.csv2dict(settings_file('tma-zero-ok.csv'))

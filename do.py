@@ -116,8 +116,7 @@ do = {'run':        C.RUN_DEF,
   'tma-group':      None,
   'xed':            1 if pmu.cpu('x86', 0) else 0,
 }
-for b in tma.get('bottlenecks-list-2'):
-  do['az-%s' % b] = tma.threshold_of(b);
+for b in analyze.bottlenecks(): do['az-%s' % b] = tma.threshold_of(b);
 args = argparse.Namespace()
 
 def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=False, export=None):

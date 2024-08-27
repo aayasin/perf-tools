@@ -133,11 +133,13 @@ def get_flow(flow, func):
 # returns last processed function line and inner functions IPs (for recursive calling)
 def process_function(lines, outer_funcs=[]):
   assert 'call' in lines[0], C.error(f'wrong function detected with no call {lines[0]}')
-  if len(lines) == 1: return lines[0], []  # corner case of last line being a CALL
-  srcline = LC.get_srcline(lines[0]) if LC.is_srcline(lines[0]) else None
+  if len(lines) == 1: return lines[0], []  # corner case 1 of call only
   lines.pop(0)
-  if LC.is_srcline(lines[0]): srcline = LC.get_srcline(lines[0])
-  if LC.is_label(lines[0]): lines.pop(0)
+  srcline = LC.get_srcline(lines[0]) if LC.is_srcline(lines[0]) else None
+  if LC.is_label(lines[0]):
+    if len(lines) == 1:
+      return lines[0], [] # corner case 2 of call -> label -> sample end
+    lines.pop(0)
   ip = LC.line_ip_hex(lines[0])
   new_func = Function(ip)
   new_func.srcline = srcline

@@ -7,6 +7,7 @@
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 import common as C
+import lbr.common_lbr as LC
 import pmu
 import os
 import re
@@ -115,10 +116,9 @@ def lbrmca(input_file_path, args='', llvm_log=None, loop_ipc=None):
   if not os.path.exists(LLVM): C.error('llvm-mca is not installed! Please run ./build-llvm.sh to install it.')
   reg = ""
   nasm = 0
-  def rem_ilen(s): return re.sub(r"ilen:\s+(\d+)", '', s)
   with open(input_file_path, 'r') as input_file:
     for l in input_file.readlines():
-      if re.match(r'^[0-9a-f]+\s+', l):
+      if not LC.is_empty(l):
         s = ' '.join(l.split()[1:]) + '\n'
         for o, r in repl:
           s = s.replace(o, r)
@@ -129,7 +129,6 @@ def lbrmca(input_file_path, args='', llvm_log=None, loop_ipc=None):
         n = s.split()
         if len(n) > 2 and n[0] == "movsx":
           s = s.replace("movsx", "movs" + regsuf(n[1]) + regsuf(n[2]))
-        s = rem_ilen(s)
         reg += s
         nasm += 1
   if nasm > 0:

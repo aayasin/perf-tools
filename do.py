@@ -135,7 +135,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=Fa
   if not do['tee']: x = x.split('|')[0]
   profiling = C.any_in([' stat', ' record', 'toplev.py', 'genretlat'], x)
   if export: pass
-  elif (args.verbose > globs['V_timing'] and re.match(r'perf (script|annotate)', x)) or (
+  elif (args.verbose > globs['V_timing'] and x.startswith(('perf script', 'perf annotate'))) or (
        do['time'] and profiling): x = get_time_cmd()
   x = bash(x, export).replace('  ', ' ').strip()
   debug = args.verbose > 0
@@ -760,7 +760,7 @@ def profile(mask, toplev_args=['mvl6', None]):
           cmd += " | tee >(%s %s %s %s >> %s) %s | GREP_INST | %s " % (
             lbr_env, C.realpath('lbr_stats'), do['lbr-stats-tk'], ev, info, misp, clean)
           if do['imix'] & 0x1:
-            cmd += r"| tee >(sort| sed 's/\s\+/\\t/g'|uniq -c|sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
+            cmd += r"| tee >(sort| sed 's/\s\+/\\t/g' | sed -E 's/ilen:\s*[0-9]+//g' | uniq -c | sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
             msg += ', hitcounts'
           if do['imix'] & 0x2:
             cmd += "| cut -f2- | tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) " % (sort2up, out)
@@ -771,7 +771,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         if (do['imix'] & 0x4) == 0:
           cmd += ' > /dev/null'
         perf_script(cmd, msg, data)
-        if args.mode != "profile": inst_fusions(hits, info)
+        if do['lbr-verbose'] & 0x1 and args.mode != "profile": inst_fusions(hits, info)
         if do['imix'] & 0x4: exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
             "@instruction-mix no operands")
         if args.verbose > 0: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)

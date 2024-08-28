@@ -111,8 +111,8 @@ def fixed_events(intel_names):
 
 # TODO: lookup Metric's attribute in pmu-tools/ratio; no hardcoding!
 def is_uncore_metric(m):
-  return m in ('DRAM_BW_Use', 'Power', 'Socket_CLKS') or C.startswith(
-    [x+'_' for x in ('MEM', 'PMM', 'HBM', 'Uncore', 'UPI', 'IO')], m)
+  return m in ('DRAM_BW_Use', 'Power', 'Socket_CLKS') or \
+         m.startswith(tuple(x + '_' for x in ('MEM', 'PMM', 'HBM', 'Uncore', 'UPI', 'IO')))
 
 TPEBS = {'MTL':
   "MEM_LOAD_RETIRED.L3_HIT,MEM_LOAD_L3_HIT_RETIRED.XSNP_NO_FWD,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD,"

@@ -680,8 +680,8 @@ def profile(mask, toplev_args=['mvl6', None]):
     print_info.first = True
     def static_stats():
       if args.mode == 'profile': return
-      bins = exe2list(perf + r" script -i %s | awk -F'\\(' '{print $NF}' | cut -d\) -f1 | grep -E -v '^\[|anonymous' | %s | tail -5" %
-                        (data, sort2u))[1:][::2]
+      bins = exe2list(perf + r" script -i %s | awk -F'\\(' '{print $NF}' | cut -d\) -f1 "
+        "| grep -E -v '^\[|anonymous|/tmp/perf-' | %s | tail -5" % (data, sort2u))[1:][::2]
       assert len(bins)
       print_info('# %s:\n#\n' % 'Static Statistics')
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")

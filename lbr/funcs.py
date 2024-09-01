@@ -135,10 +135,10 @@ def process_function(lines, outer_funcs=[]):
   assert 'call' in lines[0], C.error(f'wrong function detected with no call {lines[0]}')
   if len(lines) == 1: return lines[0], []  # corner case 1 of call only
   lines.pop(0)
-  srcline = LC.get_srcline(lines[0]) if LC.is_srcline(lines[0]) else None
-  if LC.is_label(lines[0]):
-    if len(lines) == 1:
-      return lines[0], [] # corner case 2 of call -> label -> sample end
+  info = LC.line2info(lines[0])
+  srcline = info.srcline() if LC.is_srcline(lines[0]) else None
+  if info.is_label():
+    if len(lines) == 1: return lines[0], [] # corner case 2 of call -> label -> sample end
     lines.pop(0)
   ip = LC.line_ip_hex(lines[0])
   new_func = Function(ip)
@@ -188,12 +188,13 @@ def process_function(lines, outer_funcs=[]):
   inner_end = None
   for index, line in enumerate(lines):
     if inner_end and index <= inner_end: continue  # bypass lines of inner function
-    if LC.is_label(line): continue
+    info = LC.line2info(line)
+    if info.is_label(): continue
     new_flow.size += 1
     new_flow.code += line.strip() + '\n'
-    line_ip = LC.line_ip(line)
-    hex_ip = LC.hex_ip(line_ip)
-    if LC.is_taken(line):
+    line_ip = info.ip()
+    hex_ip = info.ip_hex()
+    if info.is_taken():
       new_flow.taken += 1
       new_flow.takens.add(hex_ip)
       if not loop_code:
@@ -214,19 +215,19 @@ def process_function(lines, outer_funcs=[]):
           new_flow.mov_op_mf += 1
         elif x86_f.is_ld_op_fusion(lines[index - 1], line) or x86_f.is_vec_ld_op_fusion(lines[index - 1], line):
           new_flow.ld_op_mf += 1
-    t = LC.line_inst(line)
+    t = info.inst_type()
     if t and t in types: insts_cnt[t] += 1
     if line_ip in loops and not loop_code:
       new_flow.flow += '_' + hex_ip + '_'
       loop_code = True
       loop_end = loops[line_ip]['back']
-    if LC.is_type(x86.COND_BR, line):  # cond branch line
+    if info.is_cond_br():  # cond branch line
       new_flow.conds += 1
-      if loop_end and line_ip == loop_end and not LC.is_taken(line):
+      if loop_end and line_ip == loop_end and not info.is_taken():
         loop_code = False
         continue
       if not loop_code:
-        t = '1' if LC.is_taken(line) else '0'
+        t = '1' if info.is_taken() else '0'
         new_flow.flow += t
   # reached sample end before function ends
   add_func()

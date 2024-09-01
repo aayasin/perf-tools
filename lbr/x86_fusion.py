@@ -9,7 +9,6 @@
 
 # Assembly support specific to x86 Intel macro-fusion cases
 __author__ = 'akhalil'
-__version__ = 0.01
 
 from lbr.x86 import *
 import re
@@ -72,7 +71,7 @@ def is_ld_op_fusion(line1, line2):
   if not is_fusion_mov(get('inst', line1)) or not re.search(LOAD, line1): return False
   if not C.any_in(['add', 'sub', 'and', 'or', 'xor', 'imul'], get('inst', line2)): return False
   if '(%rip' in line1: return False  # not RIP relative
-  if re.search(MEM_IDX, line1): return False  # no index register
+  if is_mem_idx(line1): return False  # no index register
   # 32 or 64 bit dest
   dest_reg = get('dst', line1)
   if dest_reg not in REGS_32 and dest_reg not in REGS_64: return False
@@ -155,7 +154,7 @@ def is_vec_ld_op_fusion(line1, line2):
   if not inst1 in HEADS_LD: return False
   if not is_memory(line1) or is_memory(line2): return False
   if '(%rip' in line1: return False  # not RIP relative
-  if re.search(MEM_IDX, line1): return False  # no index register
+  if is_mem_idx(line1): return False  # no index register
   dst1, dst2 = get('dst', line1), get('dst', line2)
   if check(dst1) or check(dst2): return False
   if dst1 != dst2: return False  # same dest reg

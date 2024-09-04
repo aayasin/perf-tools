@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.33
+__version__ = 3.34
 
 import argparse, os.path, re, sys
 
@@ -379,13 +379,12 @@ def get_perf_toplev():
     env = 'PERF=%s ' % perf
   for x in ('toplev.py', 'ocperf', 'genretlat'):
     C.check_executable('/'.join((args.pmu_tools.split()[-1], x)))
-    ptools[x] = env + args.pmu_tools + '/' + x
+    ptools[x] = ('' if x == 'ocperf' else env) + args.pmu_tools + '/' + x
   if args.verbose > 5: ptools['toplev.py'] = 'OCVERBOSE=1 %s' % ptools['toplev.py']
   forcecpu = globs['force-cpu']
   if forcecpu:
     ptools['toplev.py'] += ' --force-cpu=%s' % pmu.force_cpu_toplev(forcecpu)
     env += 'EVENTMAP=%s ' % pmu.force_cpu(forcecpu)
-    ptools['ocperf'] = env + args.pmu_tools + '/' + 'ocperf'
   elif do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
@@ -466,7 +465,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if args.stdout or do['tee']==0 or do['help']<0: return C.error('perf-stat failed') if ret else None
     if args.mode == 'process': return log
     if not isfile(log) or os.path.getsize(log) == 0:
-      ret = profile_exe(tscperf + ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
+      ret = profile_exe(env + ' ' + tscperf + ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
     if not isfile(log) or int(exe_1line('wc -l ' + log, 0, False)) < 5:
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', step, events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
@@ -645,7 +644,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     flags, raw, events = '-W -c 20011', 'raw' in do['model'], pmu.get_events(do['model'])
     nevents = events.count('/p' if raw else ':p')
     data = '%s_tpebs-perf.data' % record_name('_%s-%d' % (do['model'], nevents))
-    cmd = "%s record %s -e %s -o %s -- %s" % (perf if raw else ocperf, flags, events, data, r)
+    cmd = "%s record %s -e %s -o %s -- %s" % (perf if raw else '%s %s' % (env, ocperf), flags, events, data, r)
     profile_exe(cmd, "TMA sampling (%s with %d events)" % (do['model'], nevents), 14)
     n = samples_count(data)
     if n < 1e4: C.warn("Too little samples collected (%s in %s); rerun with: --tune :model:'MTLraw:2'" % (n, data))

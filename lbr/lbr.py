@@ -66,7 +66,6 @@ header_ip_str.position = 5
 def header_ip(line): return LC.str2int(header_ip_str(line), (line, None))
 
 def header_cost(line):
-  x = LC.is_header(line)
   x = LC.line2info(line).header()
   assert x, "Not a head of sample: " + line
   return LC.str2int(C.str2list(line.split(':')[2])[2], (line, None))

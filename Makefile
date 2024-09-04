@@ -41,7 +41,7 @@ install: /usr/bin/python openmp tramp3d-v4
 install1:
 	$(MGR) install $(PKG)
 link-python:
-	sudo ln -f -s $(shell find /usr/bin -name 'python[1-9]*' -executable | grep -E -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
+	sudo ln -f -s $$(find /usr/bin -name 'python[1-9]*' -executable | grep -E -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
 diff:
 	git diff | grep -v '^\-' | less
 intel:
@@ -118,13 +118,13 @@ test-default:
 	$(DO1) -pm $(PM) $(DO_SUFF)
 ifeq ($(TEST_LBR_PERF), 1)
 	sync; echo 3 | sudo tee /proc/sys/vm/drop_caches; sleep 3
-	info=$(shell ls -1tr *info.log | tail -1); grep '^LBR samples' $$info | awk -F 'samples/s: ' '{print $$2}' | \
+	info=$$(ls -1tr *info.log | tail -1); echo "info=$$info"; grep '^LBR samples' $$info | awk -F 'samples/s: ' '{print $$2}' | \
 	    awk -F '}' '{print $$1}' | awk '{if ($$1 > 30) exit 0; else exit 1}' || $(FAIL)
 endif
 test-default-non-mux:
 	$(MAKE) test-default PM=313e
 	@mkdir -p perf-trk
-	info=$(shell ls -1tr *info.log | tail -1); grep ^LBR $$info; cp $$info perf-trk/$(shell date +"%Y-%m-%d").$$info
+	info=$$(ls -1tr *info.log | tail -1); grep ^LBR $$info; cp $$info perf-trk/$$(date +"%Y-%m-%d").$$info
 
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp --tune :forgive:2 $(DO_SUFF)
@@ -167,7 +167,7 @@ test-forcecpu:
 	passed=true; set -x;\
 	for cpu in $(CPUS); do \
         FORCECPU=$$cpu $(DO) $(CMD) -a "./workloads/BC.sh 7 $$cpu" -pm 19112 --tune :loops:0 :help:0 \
-        -e FRONTEND_RETIRED.ANY_DSB_MISS $(DO_SUFF) 2>&1 || { failed=false; break; }; done;\
+        -e FRONTEND_RETIRED.ANY_DSB_MISS $(DO_SUFF) 2>&1 || { passed=false; break; }; done;\
 	$$passed || $(FAIL)
 	FORCECPU=SPR $(DO) $(CMD) -a "./workloads/BC.sh 7 SPR-slow0" -pm 100 --tune :imix:0x3f :loops:0 :help:0 $(DO_SUFF)
 test-edge-inst:

@@ -127,7 +127,8 @@ test-default-non-mux:
 	info=$$(ls -1tr *info.log | tail -1); grep ^LBR $$info; cp $$info perf-trk/$$(date +"%Y-%m-%d").$$info
 
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
-TS_B = ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --mode all-misp --tune :forgive:2 $(DO_SUFF)
+TS_B = STUDY_MODE=all-misp ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --tune :forgive:2 $(DO_SUFF)
+TS_C = STUDY_MODE=dsb-bw ./$< cfg1 cfg2 -t2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo $(TS_A) > $@
@@ -140,6 +141,8 @@ test-study: study.py stats.py run.sh do.py
 	test -f BC2s-cfg1-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips*.log
 	test -f BC2s-cfg2-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips*.log
 	test -f BC2s-cfg1-t1_BC2s-cfg2-t1.stats.log
+	@echo $(TS_C) >> $@
+	$(TS_C) >> $@ 2>&1
 test-stats: stats.py
 	@$(MAKE) test-default APP="$(APP) s" PM=1012 > /dev/null 2>&1
 	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
@@ -198,8 +201,8 @@ pre-push: help
 	    -o $(AP)-u $(DO_SUFF)" CMD='suspend-smt profile tar' PM=3931a &&\
 	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && test -f $(AP)-u.$(CPU).results.tar.gz\
 	    # tests unfiltered- calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command
-	$(MAKE) test-default APP=./$(AP) CMD="log profile" PM=313e DO_SUFF="--tune :perf-stat:\"'-a'\" :perf-record:\"' -a -g'\" \
-	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
+	$(MAKE) test-default APP=./$(AP) CMD="log profile" PM=313e DO_SUFF="--tune :perf-stat:\"' -a'\" :perf-record:\"' -a -g'\" \
+	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" :perf-filter:0 -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
 	mkdir -p test-dir; cd test-dir; ln -sf ../common.py && \
 	    make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1\
 	    # tests default from another directory, toplev describe

@@ -61,7 +61,7 @@ do = {'run':        C.RUN_DEF,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
   'flameg':         0,
-  'forgive':        1, # set it to 2 to convert error to warning
+  'forgive':        1, # set it to: 2 to convert error to warning, 3 to further force tings
   'gen-kernel':     1,
   'help':           1,
   'interval':       10,
@@ -1006,7 +1006,7 @@ def main():
   elif args.mode == 'both' and args.verbose >= 0 and args.profile_mask & 0x100 and not (args.profile_mask & 0x2):
     C.warn("Better enable 'per-app counting' profile-step with LBR; try '-pm %x'" % (args.profile_mask | 0x2))
   record_steps = ('record', 'lbr', 'pebs', 'ldlat', 'pt')
-  if pmu.hybrid() and args.profile_mask & 0x10000:
+  if pmu.hybrid() and args.profile_mask & 0x10000 and do['forgive'] < 3:
     C.warn('bottlenecks view not supported on Hybrid. disabling..')
     args.profile_mask &= ~0x10000
   if args.sys_wide:

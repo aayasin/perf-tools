@@ -22,7 +22,7 @@ else:
 #
 # PMU, no prefix
 #
-def sys_devices_cpu(): return '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
+def sys_devices_cpu(s=''): return '/sys/devices/cpu%s%s' % ('_core' if os.path.isdir('/sys/devices/cpu_core') else '', s)
 def name(real=False):
   forcecpu = C.env2str('FORCECPU')
   def pmu_name():

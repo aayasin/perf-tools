@@ -60,7 +60,7 @@ Conf = {
     'cond-misp': 'BR_INST_RETIRED.COND_TAKEN,BR_MISP_RETIRED.COND_TAKEN'
                  ',BR_INST_RETIRED.COND_NTAKEN,BR_MISP_RETIRED.COND_NTAKEN',
     # TODO: remove if once event-list is updated
-    'mem-bw':   '' if pmu.icelake() else ','.join([pmu.perf_event('L2_LINES_OUT.'+x) for x in ('USELESS_HWPF', 'NON_SILENT', 'SILENT')]),
+    'mem-bw':   '' if pmu.icelake() or pmu.alderlake() else ','.join([pmu.perf_event('L2_LINES_OUT.'+x) for x in ('USELESS_HWPF', 'NON_SILENT', 'SILENT')]),
     'openmp': 'r0106,MEM_LOAD_RETIRED.L2_MISS,L2_RQSTS.MISS,CPU_CLK_UNHALTED.PAUSE'
               ',syscalls:sys_enter_sched_yield',
   },
@@ -135,7 +135,7 @@ def parse_args():
                             help="skip loops stats")
   side_by_side.add_argument('-sa', '--show-all', action='store_true',
                             help='show stats with None or zero values')
-  side_by_side.add_argument('--skip', nargs='*', default=[],
+  side_by_side.add_argument('--skip', nargs='*', default=['dsb-heatmap', '_2T', 'topdown-'],
                             help='stats sub-names to skip, e.g. "--skip cond" will skip all stats including "cond"')
   add_arg('lbr-threshold', 0.01, "info.log global stats are included in top & bottom tables "
                                  "if stat/all instructions in info.log > this thresh%%")

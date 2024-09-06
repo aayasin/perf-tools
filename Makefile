@@ -122,13 +122,14 @@ ifeq ($(TEST_LBR_PERF), 1)
 	    awk -F '}' '{print $$1}' | awk '{if ($$1 > 30) exit 0; else exit 1}' || $(FAIL)
 endif
 test-default-non-mux:
-	$(MAKE) test-default PM=313e
+	$(MAKE) test-default PM=313e SHOW="tee $@"
 	@mkdir -p perf-trk
 	info=$$(ls -1tr *info.log | tail -1); grep ^LBR $$info; cp $$info perf-trk/$$(date +"%Y-%m-%d").$$info
 
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 TS_B = STUDY_MODE=all-misp ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --tune :forgive:2 $(DO_SUFF)
 TS_C = STUDY_MODE=dsb-bw ./$< cfg1 cfg2 -t2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
+TS_D = STUDY_MODE=mem-bw ./$< cfg1 cfg2 -t3 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo $(TS_A) > $@
@@ -143,9 +144,10 @@ test-study: study.py stats.py run.sh do.py
 	test -f BC2s-cfg1-t1_BC2s-cfg2-t1.stats.log
 	@echo $(TS_C) >> $@
 	$(TS_C) >> $@ 2>&1
-test-stats: stats.py
-	@$(MAKE) test-default APP="$(APP) s" PM=1012 > /dev/null 2>&1
-	./stats.py $(AP)-s.toplev-vl6-perf.csv && test -f $(AP)-s.$(CPU).stat
+	@echo $(TS_D) >> $@
+	$(TS_D) >> $@ 2>&1
+test-stats: stats.py test-default-non-mux
+	./stats.py $(AP).toplev-vl6-perf.csv && test -f $(AP).$(CPU).stat
 ../perf:
 	$(DO) build-perf
 SLI = 1000000
@@ -178,7 +180,7 @@ test-edge-inst:
 PT=perf-tools.1
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \
-	    $(PT) setup-system-* test-{dir,study} .CLTRAMP3D*cmd .ipc_*.txt
+	    $(PT) setup-system-* test-{default-non-mux,dir,study} .CLTRAMP3D*cmd .ipc_*.txt
 post-push:
 	$(CLONE) $(PT) && cd $(PT) && ./do.py setup-perf log && cd .. && rm -rf $(PT)   # tests a fresh clone
 pre-push: help
@@ -192,6 +194,7 @@ pre-push: help
 	$(MAKE) test-build SHOW="grep --color -E '^|build|DSB|Ports'" # tests build command, perf -e, toplev --nodes; Ports_*
 	$(MAKE) test-mem-bw RERUN='-pm 400 -v1'                 # tests load-latency profile-step + verbose:1
 	$(MAKE) test-default-non-mux                            # tests default non-MUX sensitive profile-steps
+	$(MAKE) test-stats                                      # tests stats module
 	$(DO1) --toplev-args ' --no-multiplex --frequency \
 	    --metric-group +Summary' -pm 1010                   # carefully tests MUX sensitive profile-steps
 	$(MAKE) test-analyze                                    # tests analyze module
@@ -208,7 +211,6 @@ pre-push: help
 	    # tests default from another directory, toplev describe
 	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command
 	$(MAKE) test-study                                      # tests study script (errors only)
-	$(MAKE) test-stats                                      # tests stats module
 	$(MAKE) test-srcline                                    # tests srcline loop stat
 	$(MAKE) test-tripcount-mean                             # tests tripcount-mean calculation
 	$(MAKE) test-forcecpu                                   # tests force cpu option

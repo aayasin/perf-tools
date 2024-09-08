@@ -912,6 +912,7 @@ def do_logs(cmd, ext=[], tag=''):
       if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
     if isfile('run.sh'): files += ['run.sh']
     exe('tar -czvf %s ' % r + ' '.join(files), 'tar into %s' % r, log=False)
+    print_cmd('tar -czvf %s setup*.log .%s*.cmd .%s*.{%s}' % (r, s, s, ','.join(log_files[1:])))
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + ' *-out.txt *perf.data* $(find -name __pycache__) results.tar.gz')
 
 def build_kernel(dir='./kernels/'):
@@ -1038,6 +1039,7 @@ def main():
   if args.verbose > 9: C.dump_stack_on_error = 1
   # suspend commands
   com2cond = { 'aslr': True, 'atom': True, 'fix-freq': True, 'hugepages': True, 'prefetches': True, 'smt': pmu.cpu('smt-on') }
+  def a_tag(): return uniq_name() if user_app() else C.error('provide a value for -a or -o')
   while True:
     c = next((c for c in args.command if c.startswith('suspend')), None)
     if not c: break
@@ -1084,13 +1086,13 @@ def main():
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile(args.profile_mask)
     elif c.startswith('get'): get(param)
-    elif c == 'tar':          do_logs(c, tag=uniq_name() if user_app() else C.error('provide a value for -a or -o'))
+    elif c == 'tar':          do_logs(c, tag=a_tag())
     elif c == 'clean':        do_logs(c)
     elif c == 'all':
       setup_perf()
       profile(args.profile_mask | 0x1)
       analyze_it()
-      do_logs('tar')
+      do_logs('tar', tag=a_tag())
     elif c == 'build':        build_kernel()
     elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
     elif c == 'sync-date':    exe('sudo date -s "$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d\' \' -f5-8)Z"', redir_out=None)

@@ -65,15 +65,22 @@ def amd():
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 
+def lbr_event():
+  # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
+  return 'rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp')
+def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
+def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p')
+
 def event(x, precise=0):
   def misp_event(sub): return perf_event('BR_MISP_RETIRED.%s%s' % (sub, '_COST' if retlat() else ''))
-  aliases = {'lbr':     'r20c4:Taken-branches:ppp',
+  def rename_event(m, n): return perf_event(m).replace(m, n)
+  aliases = {'lbr':     lbr_event(),
     'all-misp':   misp_event('ALL_BRANCHES'),
-    'calls-loop': 'r0bc4:callret_loop-overhead',
+    #'calls-loop': 'r0bc4:callret_loop-overhead',
     'cond-misp':  misp_event('COND'),
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
     'dsb-miss':   perf_event('FRONTEND_RETIRED.ANY_DSB_MISS'),
-    'sentries':   'r40c4:system-entries:u',
+    'sentries':   rename_event('BR_INST_RETIRED.FAR_BRANCH', 'sentries') + 'u'
   }
   e = aliases[x] if x in aliases else perf_event(x)
   if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
@@ -83,12 +90,6 @@ def find_event_name(x):
   e = C.flag_value(x, '-e')
   if 'name=' in e: return e.split('name=')[1].split('/')[0]
   return e
-
-def lbr_event():
-  # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
-  return 'rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp')
-def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
-def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p')
 
 def ldlat_event(lat):
   return '"{%s/mem-loads-aux,period=%d/,%s/mem-loads,ldlat=%s/pp}" -d -W' % (pmu(),
@@ -175,7 +176,7 @@ def toplev2intel_name(e):
 def perf_event(e):
   perf_str = C.exe_one_line('%s/ocperf -e %s --print' % (pmutools, e))
   tl_name = find_event_name(perf_str)
-  return perf_str.replace(tl_name, toplev2intel_name(tl_name)).split()[2]
+  return tl_name if tl_name.isupper() else perf_str.replace(tl_name, toplev2intel_name(tl_name)).split()[2]
 
 #
 # CPU, cpu_ prefix
@@ -258,6 +259,10 @@ def cpu(what, default=None):
       'x86':          int(platform.machine().startswith('x86')),
     }
     cpu.state.update(versions())
+    # Forcing cpu to one with no retlat is done here to avoid infinite recursion
+    if forcecpu and retlat():
+      if forcecpu in ('ADL', 'SPR'): cpu.state['CPUID.23H'] = 0
+      else: C.error('FORCECPU=%s is not supported for %s' % (forcecpu, name(True)))
     return cpu(what, default)
   except ImportError:
     C.warn("could not import tl_cpu")

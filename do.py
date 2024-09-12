@@ -122,6 +122,9 @@ args = argparse.Namespace()
 def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=False, export=None):
   def get_time_cmd():
     X, i = x.split(), 0
+    if '-C0.log' in x:
+      while '-C0.log' not in X[i]: i += 1
+      i += 1
     while C.any_in(('=', 'python'), X[i]): i += 1
     j=i+1
     while C.any_in(('--no-desc',), X[j]): j += 1
@@ -385,6 +388,7 @@ def get_perf_toplev():
   if forcecpu:
     ptools['toplev.py'] += ' --force-cpu=%s' % pmu.force_cpu_toplev(forcecpu)
     env += 'EVENTMAP=%s ' % pmu.force_cpu(forcecpu)
+    # TODO: handle forcing for genretlat
   elif do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'

@@ -27,6 +27,8 @@ all: tramp3d-v4
 	@echo done
 ../perf:
 	$(DO) build-perf
+cpuid:
+	$(MGR) -o Acquire::http::proxy=false install cpuid
 git:
 	$(MGR) install git
 openmp:
@@ -139,7 +141,7 @@ test-stats: stats.py test-default-track-perf
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 TS_B = STUDY_MODE=all-misp ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --tune :forgive:2 $(DO_SUFF)
 TS_C = STUDY_MODE=dsb-bw ./$< cfg1 cfg2 -t2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
-TS_D = STUDY_MODE=mem-bw ./$< cfg1 cfg2 -t3 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
+TS_D = STUDY_MODE=mem-bw ./$< cfg1 cfg2 -t3 -a ./run.sh --tune :loops:0 -s27 -v1 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo $(TS_A) > $@

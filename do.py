@@ -46,6 +46,9 @@ globs = {
 if globs['uname-a'].startswith('Darwin'):
   C.error("Are you on MacOS? it is not supported; 'uname -a =' %s" % globs['uname-a'])
 if not pmu.intel(): C.warn('Non-Intel platform detected: ' + pmu.cpu('vendor'))
+if 'generic' in pmu.name() and not globs['force-cpu']:
+  C.error('\n'.join(("You are using an old Linux kernel not enabled for your platform",
+                     "pmu: "+pmu.name(), "kernel: "+globs['uname-a'])))
 
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
@@ -338,8 +341,9 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
     for m in do['msrs']:
       v = pmu.msr_read(m)
       exe('echo "MSR 0x%03x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
-  if do['cpuid']: exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c,
-                      label(' 0x000000(01|0a|23 0x0[0-5])', 'cpuid'), out))
+  if do['cpuid']:
+    exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x000000(01|0a|23 0x0[0-5])', 'cpuid'), out))
+    if pmu.hybrid(): exe("cpuid -r | tee %s | grep '0x00000023 0x00' | uniq -c >> %s" % (c.replace('.log', '-all.log'), out))
   exe("dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d,
     label('Command line|Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
@@ -1085,7 +1089,7 @@ def main():
       func() if arg is None else func(*arg) if type(arg) is tuple else func(arg)
     elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
     elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
-                                    ' '.join([':%s:0' % x for x in (do['packages'] + ['tee', ])])))
+                                    ' '.join([':%s:0' % x for x in (do['packages'] + ['tee'])])))
     elif c == 'analyze':      analyze_it()
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile(args.profile_mask)

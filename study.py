@@ -332,7 +332,7 @@ def main():
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
 
-  C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'EVENTMAP')
+  C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'FORCECPU', 'EVENTMAP')
                       ] + sys.argv + ['# version %.2f' % __version__]), '.study.cmd')
   if args.stages & 0x1:
     enable_it=0

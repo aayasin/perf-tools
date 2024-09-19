@@ -23,7 +23,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument('--CC', default='gcc -g -O2', help='compiler and flags', required=False)
 parser.add_argument('--GEN', type=int, default=1, help='1 = generate kernel source code; 0 = skip this step; Default = 1', required=False)
 parser.add_argument('--PY', default='python3', help='Python version', required=False)
-parser.add_argument('--RF', type=int, default=1, help='1 = generate rfetch kernels; 0 = skip this step; Default = 1', required=False)
+parser.add_argument('--RF', type=int, default=0, help='1 = generate rfetch kernels; 0 = skip this step; Default = 1', required=False)
 args = parser.parse_args()
 
 kernels = []

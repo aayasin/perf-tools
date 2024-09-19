@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.93
+__version__= 0.94
 
 import common as C, pmu, stats
 import os, sys, time, re
@@ -91,7 +91,7 @@ def parse_args():
   ap.add_argument('config', nargs='*', default=[])
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)
   ap.add_argument('-t', '--attempt', default='1')
-  C.add_hex_arg(ap, '-s', '--stages', 0x1f, 'stages in study')
+  C.add_hex_arg(ap, '-s', '--stages', 0x3f, 'stages in study')
   ap.add_argument('--dump', action='store_const', const=True, default=False)
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
@@ -370,6 +370,10 @@ def main():
   if args.stages & 0x10:
     if args.stages & 0x2: time.sleep(60)
     exe(' '.join((do_cmd('tar'), '-a', args.app)))
+
+  if args.stages & 0x20:
+    for x in args.config:
+      exe(' '.join((do_cmd('analyze'), '-a', app(x))))
 
 if __name__ == "__main__":
   args = parse_args()

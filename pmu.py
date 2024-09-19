@@ -51,6 +51,8 @@ def v5p(): return perfmetrics()
 def goldencove_on():  return cpu_has_feature('arch_lbr')
 # Redwood Cove onward PMUs have CPUID.0x23
 def redwoodcove_on(): return cpu('CPUID.23H')
+# For now
+def lunarlake_on():  return lunarlake()
 
 def retlat():     return redwoodcove_on()
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')

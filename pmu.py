@@ -166,13 +166,17 @@ def perf_format(es):
     else: rs += [ orig_e ]
   return ','.join(rs)
 
+perftools = os.path.dirname(os.path.realpath(__file__))
+pmutools = C.env2str('PMUTOOLS', perftools + '/pmu-tools')
 Toplev2Intel = {}
 def toplev2intel_name(e):
   if not len(Toplev2Intel):
-    with open(cpu('eventlist')) as file:
-      db = json.load(file)['Events']
-      for event in db:
-        Toplev2Intel[event['EventName'].lower().replace('.', '_')] = event['EventName']
+    try:
+      with open(cpu('eventlist')) as file:
+        for event in json.load(file)['Events']:
+          Toplev2Intel[event['EventName'].lower().replace('.', '_')] = event['EventName']
+    except FileNotFoundError:
+      C.error('PMU event list %s is missing; try: %s/event_download.py' % (cpu('eventlist'), pmutools))
   return Toplev2Intel[e]
 
 def perf_event(e):
@@ -183,7 +187,6 @@ def perf_event(e):
 #
 # CPU, cpu_ prefix
 #
-perftools = os.path.dirname(os.path.realpath(__file__))
 def cpu_has_feature(feature):
   if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
     cpuid_f = '%s/setup-cpuid.log' % perftools
@@ -218,7 +221,6 @@ def force_cpu(cpu):
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
   return event_list
 
-pmutools = C.env2str('PMUTOOLS', perftools + '/pmu-tools')
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:

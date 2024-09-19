@@ -7,11 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef RDTSC_ONLY
 #include <x86intrin.h>
-#else
-#include <immintrin.h>
-#endif
 
 #define C0_1 1
 #define C0_2 0

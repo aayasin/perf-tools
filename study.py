@@ -137,7 +137,7 @@ def parse_args():
   side_by_side.add_argument('-sl', '--show-loops', action='store_true', help="show loops' stats")
   side_by_side.add_argument('-sa', '--show-all', action='store_true',
                             help='show stats with None or zero values')
-  side_by_side.add_argument('--skip', nargs='*', default=['dsb-heatmap', '_2T', 'topdown-'],
+  side_by_side.add_argument('--skip', nargs='*', default=['dsb-heatmap', '_2T', 'topdown-', 'perf_metrics_'],
                             help='stats sub-names to skip, e.g. "--skip cond" will skip all stats including "cond"')
   add_arg('lbr-threshold', 0.01, "info.log global stats are included in top & bottom tables "
                                  "if stat/all instructions in info.log > this thresh%%")

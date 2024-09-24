@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.42
+__version__ = 3.43
 
 import argparse, os.path, re, sys
 
@@ -75,7 +75,7 @@ do = {'run':        C.RUN_DEF,
   'loops':          min(pmu.cpu('corecount'), 30),
   'log-stdout':     1,
   'lbr-branch-stats': 1,
-  'lbr-indirects':  None,
+  'lbr-indirects':  10,
   'lbr-jcc-erratum': 0,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
@@ -441,7 +441,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     return power() if args.power and not pmu.v5p() else ''
   def perf_ic(data, comm): return ' '.join(['-i', data, C.flag2str('-c ', comm)])
   def perf_F(ilen=False):
-    ilen = ilen or do['lbr-jcc-erratum'] or do['lbr-indirects']
+    ilen = ilen or do['lbr-jcc-erratum'] # or do['lbr-indirects'] // lbr.py handle x2g indirects regardless of ilen
     if ilen and not perf_newer_than(5.17): error('perf is too old: %s (no ilen support)' % perf_version())
     return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
                                                         ',+srcline' if do['srcline'] else '',
@@ -1122,7 +1122,8 @@ def main():
   return 0
 
 def get_indirects(log, num):
-  return ','.join(['0x%s' % x.lstrip('0') for x in exe2list("tail -%d %s | grep -v total | %s" % (num, log, x86.inst_patch()))[2:][::5]])
+  return ','.join(['0x%s' % x.lstrip('0') for x in exe2list("tail -%d %s | grep -v total | %s" % (
+    num + 1, log, x86.inst_patch()))[2:][::5]])
 def get(param):
   assert param and len(param) == 3, '3 parameters expected: e.g. get:<what>:<logfile>:<num>'
   sub, log, num = param

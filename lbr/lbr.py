@@ -27,10 +27,11 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.39 # see version line of do.py
+__version__= x86.__version__ + 2.40 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 uica_log = C.envfile('UICA_LOG')
+glob_hist_threshold = C.env2int('LBR_GLOB_HIST_THR', 3) / 100.0
 
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 def ratio(a, b): return C.ratio(a, b) if b else '-'
@@ -183,9 +184,8 @@ def edge_stats(line, lines, xip, size):
     pages.add(ip >> 12)
   # lines[-1]/lines[-2] etc w/ no labels
   def prev_line(i=-1):
-    while LC.is_label(lines[i]):
-      i -= 1
-    return lines[i]
+    while -i < len(lines) and LC.is_label(lines[i]): i -= 1
+    return None if -i > len(lines) else lines[i]
   xline = prev_line()
   xinfo = LC.line2info(xline)
   if 'dsb-heatmap' in hsts and (xinfo.is_taken() or new_line):
@@ -259,10 +259,11 @@ def edge_stats(line, lines, xip, size):
   if size <= 1: return # a sample with >= 2 instructions after this point
   if not x86_f.is_jcc_fusion(xline, line):
     x2line = prev_line(-2)
-    if x86_f.is_ld_op_fusion(x2line, xline): inc_pair('LD', 'OP', suffix='fusible')
-    elif x86_f.is_mov_op_fusion(x2line, xline): inc_pair('MOV', 'OP', suffix='fusible')
-    if x86_f.is_vec_ld_op_fusion(lines[-2], lines[-1]): inc_pair('VEC LD', 'OP', suffix='fusible')
-    elif x86_f.is_vec_mov_op_fusion(lines[-2], lines[-1]): inc_pair('VEC MOV', 'OP', suffix='fusible')
+    if x2line:
+      if x86_f.is_ld_op_fusion(x2line, xline): inc_pair('LD', 'OP', suffix='fusible')
+      elif x86_f.is_mov_op_fusion(x2line, xline): inc_pair('MOV', 'OP', suffix='fusible')
+      if x86_f.is_vec_ld_op_fusion(x2line, xline): inc_pair('VEC LD', 'OP', suffix='fusible')
+      elif x86_f.is_vec_mov_op_fusion(x2line, xline): inc_pair('VEC MOV', 'OP', suffix='fusible')
   if 'call' in xinfo.inst(): inc(hsts[FUNCI], ip)
 
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
@@ -293,7 +294,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
   while not valid:
     valid, lines, loops.bwd_br_tgts = 1, [], []
     # size is # instructions in sample while insts is # instruction since last taken
-    insts, size, takens, xip, timestamp, srcline = 0, 0, [], None, None, None
+    insts, size, takens, xip, timestamp, srcline, func = 0, 0, [], None, None, None, None
     tc_state = 'new'
     def update_size_stats():
       if not LC.stats.size() or size < 0: return
@@ -327,13 +328,14 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         return lines if check_min_lines() and not skip_bad else None
       header = info.header()
       if header:
-        ev = header.group(3)[:-1]
+        ev = header.group(3)
+        if ev.endswith(':'): ev = ev[:-1]
         # first sample here (of a given event)
         if ev not in lbr_events:
           if not len(lbr_events) and '[' in header.group(1):
             for k in header_field.keys(): header_field[k] += 1
           lbr_events += [ev]
-          x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split(' ')[-1])
+          x = 'events= %s @ %s' % (str(lbr_events), header.group(1).split()[-1])
           def f2s(x):
             return C.flag2str(' ', C.env2str(x, prefix=True))
           if len(lbr_events) == 1: x += ' primary= %s edge=%d%s%s' % (event, LC.edge_en, f2s('LBR_STOP'), f2s('LBR_IMIX'))
@@ -441,9 +443,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       if (LC.edge_en or 'DSB_MISS' in event) and 'jmp' in info.inst():
         ilen = info.ilen()
         if ilen: ips_after_uncond_jmp.add(ip + ilen)
-      if 'call' in line and not func:
-        func = len(lines)
-        func_srcline = srcline
+      if 'call' in line and not func: func = len(lines)
       assert len(lines) or event in line
       line = line.rstrip('\r\n')
       info.line = line
@@ -503,7 +503,7 @@ def get_taken(sample, n):
     if i < (len(sample)-1): to = LC.line_ip(sample[i + (2 if LC.is_label(sample[i + 1]) else 1)], sample)
   return {'from': frm, 'to': to, 'taken': 1}
 
-def print_glob_hist(hist, name, weighted=False, threshold=.03):
+def print_glob_hist(hist, name, weighted=False, threshold=glob_hist_threshold):
   if name in hsts_threshold: threshold = hsts_threshold[name]
   d = LC.print_hist((hist, name, None, None, None, weighted), threshold)
   if not type(d) is dict: return d

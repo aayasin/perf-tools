@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.99
+__version__= 1.00
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -283,16 +283,20 @@ def read_toplev(filename, metric=None):
   for l in C.file2lines(filename, fail=True):
     try:
       if not re.match(r"^(|core )(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
+      l = l.replace('% ', '%_')
       items = l.strip().split()
       if debug > 5: print('debug:', len(items), items, l)
       if items[0] == 'core': items.pop(0)
-      if l.startswith('Info') and 'Uncore_Frequency' not in l:
-        d[items[1]] = (convert(items[3]), items[0])  # (value, group)
-      elif '<==' in l:
-        d['Critical-Group'] = (Key2group[items[0]], None)
-        d['Critical-Node'] = (items[1], None)
-      elif l.startswith('warning'):
+      if l.startswith('warning'):
         d['zero-counts'] = (l.split(':')[2].strip(), None)
+      elif 'Uncore_Frequency' not in l:
+        name, group = items[1], items[0]
+        if not l.startswith('Info') and not l.startswith('Bottleneck'):
+          name, group = items[1].split('.')[-1], 'TMA'
+        d[name] = (convert(items[3]), group)  # (value, group)
+        if '<==' in l:
+          d['Critical-Group'] = (Key2group[items[0]], None)
+          d['Critical-Node'] = (items[1], None)
     except ValueError:
       C.warn("cannot parse: '%s'" % l)
     except AttributeError:

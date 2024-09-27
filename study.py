@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.91
+__version__= 0.94
 
 import common as C, pmu, stats
 import os, sys, time, re
@@ -44,21 +44,24 @@ grep -F Puzzle, $log # replace this to grep a score (performance result) of your
 DM=C.env2str('STUDY_MODE', 'imix-loops')
 STUDY_PROF_MASK = 0x1911a
 Conf = {
-  'Events': {'imix-loops': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r10c4:BR_INST_RETIRED.COND_NTAKEN', #'r11c4:BR_INST_RETIRED.COND'
-    'imix-dsb': 'r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r0262:DSB_FILL.OTHER_CANCEL,r01470261:DSB2MITE_SWITCHES.COUNT,'
+  # TODO: remaining hardcoded events to use pmu.perf_event(+ CMask support)
+  'Events': {'imix-loops': 'BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN', #'r11c4:BR_INST_RETIRED.COND'
+    'imix-dsb': 'L2_RQSTS.CODE_RD_MISS,BACLEARS.ANY,DSB_FILL.OTHER_CANCEL,r01470261:DSB2MITE_SWITCHES.COUNT,'
                 'FRONTEND_RETIRED.DSB_MISS,FRONTEND_RETIRED.ANY_DSB_MISS,BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN,'
                 'branches,IDQ.MS_CYCLES_ANY,ASSISTS.ANY,INT_MISC.CLEARS_COUNT,MACHINE_CLEARS.COUNT,MACHINE_CLEARS.MEMORY_ORDERING,UOPS_RETIRED.MS:c1',  # 4.6-nda+
     'dsb-align':  '{instructions,cycles,ref-cycles,IDQ_UOPS_NOT_DELIVERED.CORE,UOPS_ISSUED.ANY,IDQ.DSB_UOPS,FRONTEND_RETIRED.ANY_DSB_MISS},'
                   '{instructions,cycles,INT_MISC.CLEARS_COUNT,DSB2MITE_SWITCHES.PENALTY_CYCLES,INT_MISC.CLEAR_RESTEER_CYCLES,ICACHE_DATA.STALLS}',
-    'dsb-glc':  '{IDQ.DSB_UOPS,r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r01470261:DSB2MITE_SWITCHES.COUNT,'
+    'dsb-glc':  '{IDQ.DSB_UOPS,L2_RQSTS.CODE_RD_MISS,BACLEARS.ANY,r01470261:DSB2MITE_SWITCHES.COUNT,'
                 'FRONTEND_RETIRED.ANY_DSB_MISS,UOPS_ISSUED.ANY,INT_MISC.CLEARS_COUNT,INST_RETIRED.MACRO_FUSED}',
-    'dsb-bw':   '{r010879:IDQ.DSB_UOPS-c1,r020879:IDQ.DSB_UOPS-c2,r030879:IDQ.DSB_UOPS-c3,r0879:IDQ.DSB_UOPS,r010e:UOPS_ISSUED.ANY,r02c2:UOPS_RETIRED.SLOTS},'
+    'dsb-bw':   '{r010879:IDQ.DSB_UOPS-c1,r020879:IDQ.DSB_UOPS-c2,r030879:IDQ.DSB_UOPS-c3,IDQ.DSB_UOPS,UOPS_ISSUED.ANY,UOPS_RETIRED.SLOTS},'
                 '{r040879:IDQ.DSB_UOPS-c4,r050879:IDQ.DSB_UOPS-c5,r060879:IDQ.DSB_UOPS-c6,r070879:IDQ.DSB_UOPS-c7}',
     #r02c0:INST_RETIRED.NOP,r10c0:INST_RETIRED.MACRO_FUSED,'\
     #,r01e5:MEM_UOP_RETIRED.LOAD,r02e5:MEM_UOP_RETIRED.STA'
-    'cond-misp': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r01c5:BR_MISP_RETIRED.COND_TAKEN'
-                 ',r10c4:BR_INST_RETIRED.COND_NTAKEN,r10c5:BR_MISP_RETIRED.COND_NTAKEN',
-    'openmp': 'r0106,r10d1:MEM_LOAD_RETIRED.L2_MISS,r3f24:L2_RQSTS.MISS,r70ec:CPU_CLK_UNHALTED.PAUSE'
+    'cond-misp': 'BR_INST_RETIRED.COND_TAKEN,BR_MISP_RETIRED.COND_TAKEN'
+                 ',BR_INST_RETIRED.COND_NTAKEN,BR_MISP_RETIRED.COND_NTAKEN',
+    # TODO: remove if once event-list is updated
+    'mem-bw':   '' if pmu.icelake() or pmu.alderlake() else ','.join([pmu.perf_event('L2_LINES_OUT.'+x) for x in ('USELESS_HWPF', 'NON_SILENT', 'SILENT')]),
+    'openmp': 'r0106,MEM_LOAD_RETIRED.L2_MISS,L2_RQSTS.MISS,CPU_CLK_UNHALTED.PAUSE'
               ',syscalls:sys_enter_sched_yield',
   },
   'Pebs': {
@@ -83,12 +86,12 @@ def modes_list():
 
 def parse_args():
   def conf(x): return Conf[x][DM] if DM in Conf[x] else None
-  ap = C.argument_parser('analyze two or more modes (configs)', mask=STUDY_PROF_MASK,
+  ap = C.argument_parser('study two or more modes (configs)', mask=STUDY_PROF_MASK,
          defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
   ap.add_argument('config', nargs='*', default=[])
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)
   ap.add_argument('-t', '--attempt', default='1')
-  C.add_hex_arg(ap, '-s', '--stages', 0x1f, 'stages in study')
+  C.add_hex_arg(ap, '-s', '--stages', 0x3f, 'stages in study')
   ap.add_argument('--dump', action='store_const', const=True, default=False)
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
@@ -132,7 +135,7 @@ def parse_args():
                             help="skip loops stats")
   side_by_side.add_argument('-sa', '--show-all', action='store_true',
                             help='show stats with None or zero values')
-  side_by_side.add_argument('--skip', nargs='*', default=[],
+  side_by_side.add_argument('--skip', nargs='*', default=['dsb-heatmap', '_2T', 'topdown-'],
                             help='stats sub-names to skip, e.g. "--skip cond" will skip all stats including "cond"')
   add_arg('lbr-threshold', 0.01, "info.log global stats are included in top & bottom tables "
                                  "if stat/all instructions in info.log > this thresh%%")
@@ -148,7 +151,7 @@ def parse_args():
   fassert(args.profile_mask & 0x100, 'args.pm=0x%x' % args.profile_mask)
   assert args.repeat > 2, "stats module requires '--repeat 3' at least"
   if DM in ('dsb-align', ): pass
-  else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN events")
+  else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN, USELESS_HWPF events")
   if args.stages & 0x4 and len(args.config) == 2:
     assert sys.version_info >= (3, 0), "stage 4 requires Python 3 or above."
     for element in args.table_width:
@@ -329,7 +332,7 @@ def main():
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
 
-  C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'EVENTMAP')
+  C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'FORCECPU', 'EVENTMAP')
                       ] + sys.argv + ['# version %.2f' % __version__]), '.study.cmd')
   if args.stages & 0x1:
     enable_it=0
@@ -367,6 +370,10 @@ def main():
   if args.stages & 0x10:
     if args.stages & 0x2: time.sleep(60)
     exe(' '.join((do_cmd('tar'), '-a', args.app)))
+
+  if args.stages & 0x20:
+    for x in args.config:
+      exe(' '.join((do_cmd('analyze'), '-a', app(x))))
 
 if __name__ == "__main__":
   args = parse_args()

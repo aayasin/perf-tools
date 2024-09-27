@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.98
+__version__= 0.99
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -106,7 +106,7 @@ def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=Tr
 
 def is_metric(s):
   return s[0].isupper() and not s.isupper() and \
-         not re.search(r"(instructions|pairs|branches|insts-class|insts-subclass)$", s.lower())
+         not s.lower().endswith(('instructions', 'pairs', 'branches', 'insts-class', 'insts-subclass'))
 
 def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
   assert os.path.isfile(info), 'Missing file: %s' % info
@@ -194,6 +194,8 @@ def read_perf(f):
     if e == 'ref-cycles':
       d['TSC'] = (get_TSC(f), 'Event')
       d['CPUs_Utilized'] = (v / d['TSC'][0], group)
+    if e == 'L2_LINES_OUT.SILENT': d['Useless_HWPF'] = (
+      d['L2_LINES_OUT.USELESS_HWPF'][0] / (d['L2_LINES_OUT.SILENT'][0] + d['L2_LINES_OUT.NON_SILENT'][0]), group)
   if f is None: return calc_metric(None) # a hack!
   if debug > 3: print('reading %s' % f)
   lines = C.file2lines(f)
@@ -236,7 +238,7 @@ def parse_perf(l):
   else:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
-    if name.count('_') >= 1 and name.islower() and not re.match('^(cpu_core/|perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
+    if name.count('_') >= 1 and name.islower() and not name.startswith(('cpu_core/', 'perf_metrics', 'unc_', 'sys')): # hack ocperf lower casing!
       base_event = name.split(':')[0]
       Name = name.replace(base_event, pmu.toplev2intel_name(base_event))
       assert ':C1' not in Name # Name = Name.replace(':C1', ':c1')

@@ -23,7 +23,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument('--CC', default='gcc -g -O2', help='compiler and flags', required=False)
 parser.add_argument('--GEN', type=int, default=1, help='1 = generate kernel source code; 0 = skip this step; Default = 1', required=False)
 parser.add_argument('--PY', default='python3', help='Python version', required=False)
-parser.add_argument('--RF', type=int, default=1, help='1 = generate rfetch kernels; 0 = skip this step; Default = 1', required=False)
+parser.add_argument('--RF', type=int, default=0, help='1 = generate rfetch kernels; 0 = skip this step; Default = 1', required=False)
 args = parser.parse_args()
 
 kernels = []
@@ -94,6 +94,7 @@ if args.GEN:
     gen_kernel("-i 'movdqa %xmm1,%xmm2' NOP 'andps %xmm3, %xmm2' -n 14", 'v-mov-nop-op')
     gen_kernel("-i 'cvtsd2si %xmm0,%r8d' -n64 ",'v2i')
     gen_kernel("-i 'comiss 0x100(%rsp),%xmm0' -n64 ",'i2v')
+    gen_kernel("-i 'movw $0x1, %ax' -n4000 ",'lcp')
     kernels.append("memcpy")
     kernels.append("pagefault")
     kernels.append("tripcount-mean")

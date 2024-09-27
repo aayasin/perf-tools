@@ -78,7 +78,7 @@ Insts_cond = ['backward-taken', 'forward-taken', 'non-taken', 'fusible', 'non-fu
 Insts_Fusions = [x + '-OP fusible' for x in [y + z for z in ['MOV', 'LD'] for y in ['', 'VEC ']]]
 Insts_MRN = ['%s non-MRNable'%x for x in ['INC','DEC','LD-ST']]
 Insts_V2II2V = ['%s transition-Penalty'%x for x in ['V2I','I2V']]
-Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_MRN + Insts_global
+Insts_all = ['cond_%s'%x for x in Insts_cond] + Insts_Fusions + Insts_MRN + Insts_V2II2V + Insts_global
 
 glob = {x: 0 for x in ['loop_cycles', 'loop_iters', 'counted_non-fusible'] + Insts_all}
 
@@ -96,18 +96,20 @@ def line_inst(line):
   pInsts = ['cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper'] + user_loop_imix
   allInsts = ['nop', 'lea', 'cisc-test'] + IMIX_CLASS + pInsts
   if not line: return allInsts
+  info = line2info(line)
+  branch = info.is_branch()
   if 'nop' in line: return 'nop'
   if '(' in line:  # load/store take priority in CISC insts
     if 'lea' in line: return 'lea'
-    if x86.is_branch(line): return 'mem_indir-branch'
-    return x86.get_mem_inst(line)
-  if x86.is_branch(line): return 'nonmem-branch'
+    if branch: return 'mem_indir-branch'
+    return info.mem_inst()
+  if branch: return 'nonmem-branch'
   for x in pInsts: # skip non-vector p/v-prefixed insts
     if x in line: return x
-  r = re.match(r"\s+\S+\s+(\S+)", line)
+  r = info.inst()
   if not r: pass
-  elif re.match(r"^(and|or|xor|not)", r.group(1)): return 'logic'
-  elif re.match(r"^[pv]", r.group(1)):
+  elif r.startswith(('and', 'or', 'xor', 'not')): return 'logic'
+  elif r.startswith('pv'):
     for i in range(vec_size):
       if re.findall(INT_VEC(i), line): return vec_len(i)
     warn(0x400, 'vec-int: ' + ' '.join(line.split()[1:]))
@@ -115,48 +117,78 @@ def line_inst(line):
   return None
 
 def is_type(t, l):    return x86.is_type(inst2pred(t), l)
-def is_callret(l):    return is_type(x86.CALL_RET, l)
 def is_taken(line):   return '# ' in line
+def is_empty(line):   return line.strip() == ''
 def has_timing(line): return line.endswith('IPC')
 
 def line_timing(line):
-  x = re.match(r"[^#]+# (\S+) (\d+) cycles \[\d+\] ([0-9\.]+) IPC", line)
   # note: this ignores timing of 1st LBR entry (has cycles but not IPC)
-  assert x, 'Could not match IPC in:\n%s' % line
-  ipc = round(float(x.group(3)), 1)
-  cycles = int(x.group(2))
+  assert 'cycles' in line and 'IPC' in line, 'Could not match IPC in:\n%s' % line
+  # PRED 1 cycles [59] 6.00 IPC
+  x = line.split('#')[-1].strip().split()
+  ipc = round(float(x[-2]), 1)
+  cycles = int(x[1])
   return cycles, ipc
+
+# TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictionary if header or None otherwise
+def is_header(line):
+  def patch(x):
+    if debug: C.printf("\nhacking '%s' in: %s" % (x, line))
+    return line.replace(x, '-', 1)
+  if 'ilen:' in line: return False
+  if '[' in line[:50]:
+    p = line.split('[')[0]
+    assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()
+    if '::' in p: pass
+    elif ': ' in p: line = patch(': ')
+    elif ':' in p: line = patch(':')
+  #    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
+  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
+# kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
+#                              re.match(r"(\s?[\S]*)\s+([\d\[\]\.\s]+):\s+\d+\s+(\S*:)\s", line) or
+#AUX data lost 1 times out of 33!
+                              re.match(r"(\w)([\w\s]+)(.)", line) or
+#         python3 105303 [000] 1021657.227299:          cbr:  cbr: 11 freq: 1100 MHz ( 55%)               55e235 PyObject_GetAttr+0x415 (/usr/bin/python3.6)
+                              re.match(r"([^:]*):(\s+)(\w+:)\s", line) or
+# instruction trace error type 1 time 1021983.206228655 cpu 1 pid 105468 tid 105468 ip 0 code 8: Lost trace data
+                              re.match(r"(\s)(\w[\w\s]+\d) time ([\d\.]+)", line))
 
 def is_label(line):
   line = line.strip()
   if 'ilen:' in line: return False
-  return line.endswith(':') or (len(line.split()) == 1 and line.endswith(']')) or \
-      (len(line.split()) > 1 and line.split()[-2].endswith(':')) or \
+  spl = line.split()
+  return line.endswith(':') or (len(spl) == 1 and line.endswith(']')) or \
+      (len(spl) > 1 and spl[-2].endswith(':')) or \
       (':' in line and line.split(':')[-1].isdigit())
 
+def is_srcline(line): return 'srcline:' in line or is_label(line)
 def get_srcline(line):
+  line = line.strip()
   if line.endswith(':') or line.startswith('['): return None
+  spl = line.split()
   if line.endswith(']'):
-    label_split = line.split()[-1].split('[')
+    label_split = spl[-1].split('[')
     optional = '[' + label_split[-1]
     return 'N/A (%s%s)' % (label_split[0], optional if verbose else '')
-  if len(line.split()) > 1 and line.split()[-2].endswith(':'): return line.split()[-1]
+  if len(spl) > 1 and spl[-2].endswith(':'): return spl[-1]
   if ':' in line and line.split(':')[-1].isdigit(): return line
   return None
 
 def get_ilen(line):
-  ilen = re.search(r"ilen:\s+(\d+)", line)
-  return int(ilen.group(1)) if ilen else None
+  if not 'ilen' in line: return None
+  return int(line.split('ilen:')[-1].strip().split()[0])
 
 def is_jcc_erratum(line, previous=None):
-  length = get_ilen(line)
+  info = line2info(line)
+  length = info.ilen()
   if not length: return False
   # JCC/CALL/RET/JMP
-  if not is_type(x86.COND_BR, line) and not is_type(x86.CALL_RET, line) and not is_type(x86.JMP_RET, line): return False
-  ip = line_ip(line)
+  if not info.is_cond_br() and not info.is_call_ret() and not info.is_jmp_ret(): return False
+  ip = info.ip()
   if previous and is_jcc_fusion(previous, line):
-    ip = line_ip(previous)
-    length += get_ilen(previous)
+    pinfo = line2info(previous)
+    ip = pinfo.ip()
+    length += pinfo.ilen()
   next_ip = ip + length
   return not ip >> 5 == next_ip >> 5
 
@@ -175,40 +207,143 @@ def str2int(ip, plist):
     assert 0, "expect address in '%s' of '%s'" % (ip, plist[0])
 
 def line_ip_hex(line):
-  if is_label(line): return None
-  x = re.match(r"\s+(\S+)\s+(\S+)", line)
-  # assert x, "expect <address> at left of '%s'" % line
-  return x.group(1).lstrip("0")
+  if line2info(line).is_label(): return None
+  return line.strip().split()[0].lstrip('0')
 def line_ip(line, sample=None):
-  if is_label(line): return None
+  info = line2info(line)
+  if info.is_label() or info.header(): return None
   try:
-    return str2int(line_ip_hex(line), (line, sample))
+    ip_hex = info.ip_hex()
+    return str2int(ip_hex, (line, sample))
   except:
     exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line.strip(), stack=True)
 def hex_ip(ip): return '0x%x' % ip if ip and ip > 0 else '-'
 
+# line properties class with lazy evaluation
+class LineInfo:
+
+  info2func = {
+    'branch':     x86.is_branch,
+    'call ret':   x86.is_call_ret,
+    'cond br':    is_type,
+    'dst':        x86.get,
+    'empty':      is_empty,
+    'header':     is_header,
+    'ilen':       get_ilen,
+    'imm':        x86.is_imm,
+    'inst':       x86.get,
+    'inst type':  line_inst,
+    'ip':         line_ip,
+    'ip hex':     line_ip_hex,
+    'jmp ret':    x86.is_jmp_ret,
+    'label':      is_label,
+    'memory':     x86.is_memory,
+    'mem idx':    x86.is_mem_idx,
+    'mem imm':    x86.is_mem_imm,
+    'mem inst':   x86.get_mem_inst,
+    'mem load':   x86.is_mem_load,
+    'mem rmw':    x86.is_mem_rmw,
+    'mem store':  x86.is_mem_store,
+    'mem type':   x86.mem_type,
+    'srcline':    get_srcline,
+    'srcs':       x86.get,
+    'taken':      is_taken,
+    'test cmp':   is_type,
+  }
+
+  def __init__(self, line):
+    self.line = line
+    self.info2value = {}
+    # initialize popular attributes
+    # ip, ip hex, taken, empty, label, ilen
+    self.info2value['taken'] = '# ' in line
+    l = line.replace('# ', '').strip()
+    self.info2value['empty'] = l == ''
+    if 'ilen:' in l:  # code line
+      self.info2value['label'] = False
+      self.info2value['header'] = False
+      l = l.split('ilen:')
+      self.info2value['ilen'] = int(l[1].strip().split()[0])
+      l = l[0].strip().split()
+      ip_hex = l[0].lstrip('0')
+      self.info2value['ip hex'] = ip_hex
+      try:
+        self.info2value['ip'] = int(ip_hex, 16)
+      except ValueError:
+        C.error("expect <address> at left of '%s'" % line)
+      # inst
+      check = None if len(l) < 3 else l[2]
+      if not check or ('(' in check or check.startswith(('$', '%', '0x', 'ilen'))):
+        self.info2value['inst'] = l[1]
+        self.info2value['cond br'] = l[1].startswith('j') and 'jmp' not in l[1]
+        self.info2value['call ret'] = C.any_in(['call', 'ret'], l[1])
+      else: self.info2value['inst'] = '%s %s' % (l[1], l[2])  # e.g. lock add
+      self.info2value['jmp ret'] = C.any_in(['jmp', 'ret'], self.info2value['inst'])
+      # dst
+      self.info2value['dst'] = None if len(l) < 3 else l[-1].replace('%', '') if l[-1].startswith('%') else l[-1]
+
+  def _get_info(self, info, arg=None):
+    if not info in self.info2value:
+      self.info2value[info] = self.__class__.info2func[info](self.line) if not arg \
+        else self.__class__.info2func[info](arg, self.line)
+    return self.info2value[info]
+
+  def is_branch(self):      return self._get_info('branch')
+  def is_call_ret(self):    return self._get_info('call ret')
+  def is_cond_br(self):     return self._get_info('cond br', arg=x86.COND_BR)
+  def dst(self):            return self._get_info('dst', arg='dst')
+  def is_empty(self):       return self._get_info('empty')
+  def header(self):         return self._get_info('header')
+  def ilen(self):           return self._get_info('ilen')
+  def is_imm(self):         return self._get_info('imm')
+  def inst(self):           return self._get_info('inst', arg='inst')
+  def inst_type(self):      return self._get_info('inst type')
+  def ip(self):             return self._get_info('ip')
+  def ip_hex(self):         return self._get_info('ip hex')
+  def is_label(self):       return self._get_info('label')
+  def is_jmp_ret(self):     return self._get_info('jmp ret')
+  def is_memory(self):      return self._get_info('memory')
+  def is_mem_idx(self):     return self._get_info('mem idx')
+  def is_mem_imm(self):     return self._get_info('mem imm')
+  def mem_inst(self):       return self._get_info('mem inst')
+  def is_mem_load(self):    return self._get_info('mem load')
+  def is_mem_rmw(self):     return self._get_info('mem rmw')
+  def is_mem_store(self):   return self._get_info('mem store')
+  def mem_type(self):       return self._get_info('mem type')
+  def srcline(self):        return self._get_info('srcline')
+  def srcs(self):           return self._get_info('srcs', arg='srcs')
+  def is_taken(self):       return self._get_info('taken')
+  def is_test_cmp(self):    return self._get_info('test cmp', arg=x86.TEST_CMP)
+
+# global dictioanry across package mapping each line to its info
+Line2Info = {}
+def line2info(line):
+  if is_taken(line) and not line.endswith('# '): line = line.replace(line.split('#')[1], ' ')
+  if line not in Line2Info: Line2Info[line] = LineInfo(line)
+  return Line2Info[line]
+
 def print_ipc_hist(hist, keys, threshold=0.05):
   r = lambda x: round(x, 1)
   tot = sum(hist.values())
-  left, limit = 0, int(threshold * tot)
-  total_eff, left_eff = 0, []
+  left, total_eff, left_eff = 0, 0, 0
+  all_eff = {}
   # calculate efficiencies
   for k in keys:
     fk = float(k)
     eff = hist[k] / fk if fk else 0
-    if limit and (hist[k] < limit or not hist[k] > 1): left_eff.append(eff)
-    else: total_eff += eff
-  left_eff = sum(left_eff) / len(left_eff) if len(left_eff) else 0
-  total_eff += left_eff
+    all_eff[k] = eff
+    total_eff += eff
+  limit = int(threshold * total_eff)
   # print histogram
   result = "{:>6} {:>8} {:>14} {:>12} {:>17}\n".format('IPC', 'Samples', '% of samples', 'Efficiency', '% of efficiency')
   for k in keys:
-    if not limit or hist[k] >= limit and hist[k] > 1:
-      fk = float(k)
-      eff = hist[k] / fk if fk else 0
+    eff = all_eff[k]
+    if limit and (eff < limit or not hist[k] > 1):
+      left += hist[k]
+      left_eff += eff
+    else:
       result += "{:>5}: {:>8} {:>13}% {:>12} {:>16}%\n".\
         format(k, hist[k], r(100.0 * hist[k] / tot), r(eff), r(100.0 * eff / total_eff))
-    else: left += hist[k]
   if left:
     result += "other: {:>8} {:>13}% {:>12} {:>16}%\t//  buckets > 1, < {}%".\
       format(left, r(100.0 * left / tot), r(left_eff), r(100.0 * left_eff / total_eff), 100.0 * threshold)

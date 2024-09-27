@@ -271,13 +271,8 @@ def chop(source, stuff=CHOP_STUFF):
 
 def any_in(l, s):
   for i in l:
-    if i in s: return 1
-  return 0
-
-def startswith(l, s):
-  for i in l:
-    if s.startswith(i): return 1
-  return 0
+    if i in s: return True
+  return False
 
 # 0-9 -> 0-9
 # 10-35 -> a-z

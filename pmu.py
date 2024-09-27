@@ -22,7 +22,7 @@ else:
 #
 # PMU, no prefix
 #
-def sys_devices_cpu(): return '/sys/devices/cpu_core' if os.path.isdir('/sys/devices/cpu_core') else '/sys/devices/cpu'
+def sys_devices_cpu(s=''): return '/sys/devices/cpu%s%s' % ('_core' if os.path.isdir('/sys/devices/cpu_core') else '', s)
 def name(real=False):
   forcecpu = C.env2str('FORCECPU')
   def pmu_name():
@@ -51,6 +51,8 @@ def v5p(): return perfmetrics()
 def goldencove_on():  return cpu_has_feature('arch_lbr')
 # Redwood Cove onward PMUs have CPUID.0x23
 def redwoodcove_on(): return cpu('CPUID.23H')
+# For now
+def lunarlake_on():  return lunarlake()
 
 def retlat():     return redwoodcove_on()
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
@@ -65,15 +67,22 @@ def amd():
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
 
+def lbr_event():
+  # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
+  return 'rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp')
+def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
+def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p')
+
 def event(x, precise=0):
   def misp_event(sub): return perf_event('BR_MISP_RETIRED.%s%s' % (sub, '_COST' if retlat() else ''))
-  aliases = {'lbr':     'r20c4:Taken-branches:ppp',
+  def rename_event(m, n): return perf_event(m).replace(m, n)
+  aliases = {'lbr':     lbr_event(),
     'all-misp':   misp_event('ALL_BRANCHES'),
-    'calls-loop': 'r0bc4:callret_loop-overhead',
+    #'calls-loop': 'r0bc4:callret_loop-overhead',
     'cond-misp':  misp_event('COND'),
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
     'dsb-miss':   perf_event('FRONTEND_RETIRED.ANY_DSB_MISS'),
-    'sentries':   'r40c4:system-entries:u',
+    'sentries':   rename_event('BR_INST_RETIRED.FAR_BRANCH', 'sentries') + 'u'
   }
   e = aliases[x] if x in aliases else perf_event(x)
   if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
@@ -83,12 +92,6 @@ def find_event_name(x):
   e = C.flag_value(x, '-e')
   if 'name=' in e: return e.split('name=')[1].split('/')[0]
   return e
-
-def lbr_event():
-  # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
-  return 'rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp')
-def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
-def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p')
 
 def ldlat_event(lat):
   return '"{%s/mem-loads-aux,period=%d/,%s/mem-loads,ldlat=%s/pp}" -d -W' % (pmu(),
@@ -111,8 +114,8 @@ def fixed_events(intel_names):
 
 # TODO: lookup Metric's attribute in pmu-tools/ratio; no hardcoding!
 def is_uncore_metric(m):
-  return m in ('DRAM_BW_Use', 'Power', 'Socket_CLKS') or C.startswith(
-    [x+'_' for x in ('MEM', 'PMM', 'HBM', 'Uncore', 'UPI', 'IO')], m)
+  return m in ('DRAM_BW_Use', 'Power', 'Socket_CLKS') or \
+         m.startswith(tuple(x + '_' for x in ('MEM', 'PMM', 'HBM', 'Uncore', 'UPI', 'IO')))
 
 TPEBS = {'MTL':
   "MEM_LOAD_RETIRED.L3_HIT,MEM_LOAD_L3_HIT_RETIRED.XSNP_NO_FWD,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD,"
@@ -163,24 +166,27 @@ def perf_format(es):
     else: rs += [ orig_e ]
   return ','.join(rs)
 
+perftools = os.path.dirname(os.path.realpath(__file__))
+pmutools = C.env2str('PMUTOOLS', perftools + '/pmu-tools')
 Toplev2Intel = {}
 def toplev2intel_name(e):
   if not len(Toplev2Intel):
-    with open(cpu('eventlist')) as file:
-      db = json.load(file)['Events']
-      for event in db:
-        Toplev2Intel[event['EventName'].lower().replace('.', '_')] = event['EventName']
+    try:
+      with open(cpu('eventlist')) as file:
+        for event in json.load(file)['Events']:
+          Toplev2Intel[event['EventName'].lower().replace('.', '_')] = event['EventName']
+    except FileNotFoundError:
+      C.error('PMU event list %s is missing; try: %s/event_download.py' % (cpu('eventlist'), pmutools))
   return Toplev2Intel[e]
 
 def perf_event(e):
   perf_str = C.exe_one_line('%s/ocperf -e %s --print' % (pmutools, e))
   tl_name = find_event_name(perf_str)
-  return perf_str.replace(tl_name, toplev2intel_name(tl_name)).split()[2]
+  return tl_name if tl_name.isupper() else perf_str.replace(tl_name, toplev2intel_name(tl_name)).split()[2]
 
 #
 # CPU, cpu_ prefix
 #
-perftools = os.path.dirname(os.path.realpath(__file__))
 def cpu_has_feature(feature):
   if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
     cpuid_f = '%s/setup-cpuid.log' % perftools
@@ -215,7 +221,6 @@ def force_cpu(cpu):
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
   return event_list
 
-pmutools = C.env2str('PMUTOOLS', perftools + '/pmu-tools')
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:
@@ -258,6 +263,10 @@ def cpu(what, default=None):
       'x86':          int(platform.machine().startswith('x86')),
     }
     cpu.state.update(versions())
+    # Forcing cpu to one with no retlat is done here to avoid infinite recursion
+    if forcecpu and retlat():
+      if forcecpu in ('ADL', 'SPR'): cpu.state['CPUID.23H'] = 0
+      else: C.error('FORCECPU=%s is not supported for %s' % (forcecpu, name(True)))
     return cpu(what, default)
   except ImportError:
     C.warn("could not import tl_cpu")

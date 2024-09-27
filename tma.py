@@ -21,7 +21,7 @@ def fixed_metrics(intel_names=False, force_glc=False):
     prefix = ',topdown-'
     def prepend(l): return prefix.join([''] + l)
     events += prepend(['retiring', 'bad-spec', 'fe-bound', 'be-bound'])
-    events_files = len([f for f in os.listdir(pmu.sys_devices_cpu() + '/events/') if f.startswith('topdown')])
+    events_files = len([f for f in os.listdir(pmu.sys_devices_cpu('/events')) if f.startswith('topdown')])
     if (pmu.goldencove_on() or force_glc) and events_files == 8:
       events += prepend(['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound'])
       flags = ' --td-level=2'
@@ -40,6 +40,8 @@ metrics = {
   'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
                     C.flag2str(',+IpAssist', pmu.v4p()) +
                     C.flag2str(',+Memory_Bound*/3', pmu.goldencove_on()),
+  'key-nodes':    ("+CoreIPC,+CORE_CLKS" if pmu.lunarlake_on() else "+IPC,+CLKS") +
+                    ",+Instructions,+Time,-CPUs_Utilized,-CPU_Utilization",
   'version':      '4.8-full-perf',
   'num-mux-groups':   58, # -pm 0x80 on ICX
 }
@@ -53,9 +55,9 @@ def get(tag):
   if tag =='fe-bottlenecks': return prepend_info(metrics['bot-fe'])
   if tag =='bottlenecks-list':
     return get('bottlenecks-only').replace(',+DSB_Misses', '').replace('+', '').split(',')
-  if tag =='bottlenecks-list-2':
+  if tag.startswith('bottlenecks-list-'):
     all = get('bottlenecks-list')
-    return [all[i] for i in (0, 2)]
+    return [all[i] for i in range(int(tag[-1]))]
   model = 'GNR' if pmu.granite() else pmu.cpu('CPU') or C.env2str('TMA_CPU', 'SPR')
   if tag == 'zero-ok':
     ZeroOk = C.csv2dict(settings_file('tma-zero-ok.csv'))
@@ -65,7 +67,7 @@ def get(tag):
     return Dedup[model].replace(';', ',')
   if tag == 'perf-groups':
     groups = ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model), True))
-    td_groups = [f for f in os.listdir('/sys/devices/cpu/events/') if f.startswith('topdown')]
+    td_groups = [f for f in os.listdir(pmu.sys_devices_cpu('/events')) if f.startswith('topdown')]
     for e in ['heavy-ops', 'br-mispredict', 'fetch-lat', 'mem-bound']:
       name = 'topdown-' + e
       if not name in td_groups: groups = groups.replace(',' + name, '')

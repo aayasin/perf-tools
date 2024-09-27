@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.25 # see version line of do.py
+__version__= x86.__version__ + 2.39 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 uica_log = C.envfile('UICA_LOG')
@@ -37,10 +37,11 @@ def ratio(a, b): return C.ratio(a, b) if b else '-'
 def read_line(): return sys.stdin.readline()
 
 def skip_sample(s):
-  line = read_line()
-  while not re.match(r"^$", line):
+  info = LC.line2info(read_line())
+  while not info.is_empty():
     line = read_line()
-    assert line, 'was input truncated? sample:\n%s'%s
+    assert line, 'was input truncated? sample:\n%s' % s
+    info = LC.line2info(line)
   return 0
 
 header_field = {
@@ -49,7 +50,7 @@ header_field = {
   'dso': 7,
 }
 def header_ip_str(line):
-  x = is_header(line)
+  x = LC.line2info(line).header()
   assert x, "Not a head of sample: " + line
   #           clang 155371 [062] 1286179.977117:      70001 r20c4:ppp:      7ffff7de04c2 _dl_relocate_object+0xbc2 (/lib/x86_64-linux-gnu/ld-2.27.so)
   if 0:
@@ -65,7 +66,7 @@ header_ip_str.position = 5
 def header_ip(line): return LC.str2int(header_ip_str(line), (line, None))
 
 def header_cost(line):
-  x = is_header(line)
+  x = LC.line2info(line).header()
   assert x, "Not a head of sample: " + line
   return LC.str2int(C.str2list(line.split(':')[2])[2], (line, None))
 
@@ -132,8 +133,10 @@ def edge_en_init(indirect_en):
 def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
   branches, dirjmps, insts_per_call, x = 0, 0, 0, len(lines) - 1
   while x > 0:
-    if LC.is_type('ret', lines[x]): break # not a leaf function call
-    if LC.is_type('call', lines[x]):
+    info = LC.line2info(lines[x])
+    inst = info.inst()
+    if 'ret' in inst: break # not a leaf function call
+    if 'call' in inst:
       inc(hsts[IPLFC], insts_per_call)
       LC.glob['leaf-call'] += (insts_per_call + 2)
       d = 'ind' if '%' in lines[x] else 'dir'
@@ -154,24 +157,25 @@ def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
       if LC.verbose & 0x10 and 'IPC' in lines[-(len(lines) - x)]:
         info_lines('call to leaf-func %s of size %d' % (name, insts_per_call), lines[-(len(lines)-x):] + [line])
       break
-    elif x86.is_branch(lines[x]):
+    elif info.is_branch():
       branches += 1
       if 'jmp' in lines[x] and '%' not in lines[x]: dirjmps += 1
-    if not LC.is_label(lines[x]): insts_per_call += 1
+    if not info.is_label(): insts_per_call += 1
     x -= 1
 
 def edge_stats(line, lines, xip, size):
-  if LC.is_label(line): return
+  info = LC.line2info(line)
+  if info.is_label(): return
   # An instruction may be counted individually and/or per imix class
   for x in LC.Insts:
     if LC.is_type(x, line):
       LC.glob[x] += 1
       if x == 'lea' and LC.is_type(x86.LEA_S, line): LC.glob['lea-scaled'] += 1
-  t = LC.line_inst(line)
+  t = info.inst_type()
   if t and LC.is_imix(t):
     LC.glob[t] += 1
-    if t in x86.MEM_INSTS and x86.mem_type(line):
-      LC.glob[x86.mem_type(line)] += 1
+    if t in x86.MEM_INSTS and info.mem_type():
+      LC.glob[info.mem_type()] += 1
   ip = LC.line_ip(line, lines)
   new_line = is_line_start(ip, xip)
   if new_line:
@@ -183,57 +187,59 @@ def edge_stats(line, lines, xip, size):
       i -= 1
     return lines[i]
   xline = prev_line()
-  if 'dsb-heatmap' in hsts and (LC.is_taken(xline) or new_line):
+  xinfo = LC.line2info(xline)
+  if 'dsb-heatmap' in hsts and (xinfo.is_taken() or new_line):
     inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
   if 'indirect-x2g' in hsts and LC.is_type(x86.INDIRECT, xline):
-    ilen = LC.get_ilen(xline) or 2
+    ilen = xinfo.ilen() or 2
     if abs(ip - (xip + ilen)) >= 2 ** 31:
       inc(hsts['indirect-x2g'], xip)
       if 'MISP' in xline: inc(hsts['indirect-x2g-misp'], xip)
   if xip and xip in indirects:
     inc(hsts['indirect_%s_targets' % LC.hex_ip(xip)], ip)
     #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
-  #MRN with IDXReg detection
-  mrn_dst=x86.get("dst",line)
-  # CHECK: is this RIP only (64-bit) or applies to EIP too ?!
-  def mrn_cond(l):return not LC.is_type(x86.JUMP, l) and '%rip' not in l and re.search(x86.MEM_IDX, l) and not re.search("[x-z]mm", l) and not re.search("%([a-d]x|[sd]i|[bs]p|r(?:[89]|1[0-5])w)", l)
-  if LC.is_type("inc-dec", line) and x86.is_memory(line) and re.search(x86.MEM_IDX, line):
-    inc_stat('%s non-MRNable' % ('INC' if 'inc' in x86.get('inst',line) else 'DEC'))
-  elif mrn_cond(line) and (x86.is_mem_store(line) or x86.is_mem_rmw(line)) and not re.search("%[a-d]h",mrn_dst):
+  # MRN with index reg detection
+  mrn_dst = info.dst()
+  # CHECK: is this RIP only (64-bit) or applies to EIP too?!
+  def mrn_cond(l):
+    mem_idx = LC.line2info(l).is_mem_idx()
+    return not LC.is_type(x86.JUMP, l) and '%rip' not in l and mem_idx and \
+           not C.any_in(['xmm', 'ymm', 'zmm'], l) and not re.search("%([a-d]x|[sd]i|[bs]p|r(?:[89]|1[0-5])w)", l)
+  if LC.is_type("inc-dec", line) and info.is_memory() and info.is_mem_idx():
+    inc_stat('%s non-MRNable' % ('INC' if 'inc' in info.inst() else 'DEC'))
+  elif mrn_cond(line) and (info.is_mem_store() or info.is_mem_rmw()) and not re.match("[a-d]h", mrn_dst):
     x = len(lines)-1
     while x > 0:
-      if mrn_cond(lines[x]) and x86.is_mem_load(lines[x]):
-        mrn_src=x86.get("srcs",lines[x])
+      info_x = LC.line2info(lines[x])
+      if mrn_cond(lines[x]) and info_x.is_mem_load():
+        mrn_src = info_x.srcs()
         if mrn_src and mrn_src[0] == mrn_dst:
-          inc_pair('LD','ST',suffix='non-MRNable')
+          inc_pair('LD', 'ST', suffix='non-MRNable')
           break
       x-=1 
-  if x86.get('inst',line) in x86.V2II2V:
-    vecs=['xmm','ymm','zmm']
-    v2ii2v_srcs=x86.get('srcs',line)
-    v2ii2v_dst=x86.get('dst',line)
+  if info.inst() in x86.V2II2V:
+    vecs = ['xmm','ymm','zmm']
+    v2ii2v_srcs = info.srcs()
+    v2ii2v_dst = info.dst()
     if v2ii2v_srcs:
-      if C.any_in(vecs,''.join(v2ii2v_srcs)):
-        inc_stat('V2I transition-Penalty')
-      elif C.any_in(vecs,v2ii2v_dst):
-        inc_stat('I2V transition-Penalty')
-    elif v2ii2v_dst:
-        inc_stat('V2I transition-Penalty')
-  if LC.is_type(x86.COND_BR, xline) and LC.is_taken(xline):
+      if C.any_in(vecs, ''.join(v2ii2v_srcs)): inc_stat('V2I transition-Penalty')
+      elif C.any_in(vecs, v2ii2v_dst): inc_stat('I2V transition-Penalty')
+    elif v2ii2v_dst: inc_stat('V2I transition-Penalty')
+  if xinfo.is_cond_br() and xinfo.is_taken():
     LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
   # checks all lines but first
-  if LC.is_type(x86.COND_BR, line):
-    if LC.is_taken(line): LC.glob['cond_taken-not-first'] += 1
+  if info.is_cond_br():
+    if info.is_taken(): LC.glob['cond_taken-not-first'] += 1
     else: LC.glob['cond_non-taken'] += 1
     if x86_f.is_jcc_fusion(xline, line):
       LC.glob['cond_fusible'] += 1
-      if size > 1 and LC.is_type(x86.TEST_CMP, xline) and LC.is_type(x86.LOAD, prev_line(-2)):
+      if size > 1 and xinfo.is_test_cmp() and LC.is_type(x86.LOAD, prev_line(-2)):
         inc_pair('LD-CMP', suffix='fusible')
     else:
       LC.glob['cond_non-fusible'] += 1
-      if x86.is_mem_imm(xline):
-        inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if LC.is_type(x86.TEST_CMP, xline) else 'OTHER',
-                                      '' if LC.is_type(x86.MEM_IDX, xline) else 'NO'))
+      if xinfo.is_mem_imm():
+        inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if xinfo.is_test_cmp() else 'OTHER',
+                                      '' if xinfo.is_mem_imm() else 'NO'))
       else:
         counted = False
         for x in LC.user_jcc_pair:
@@ -241,7 +247,7 @@ def edge_stats(line, lines, xip, size):
             counted = inc_pair(x)
             break
         if counted: pass
-        elif LC.is_type(x86.COND_BR, xline): counted = inc_pair('JCC')
+        elif xinfo.is_cond_br(): counted = inc_pair('JCC')
         elif LC.is_type(x86.COMI, xline): counted = inc_pair('COMI')
         if size > 1 and x86_f.is_jcc_fusion(prev_line(-2), line):
           def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
@@ -249,7 +255,7 @@ def edge_stats(line, lines, xip, size):
           elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
   # check erratum for line (with no consideration of macro-fusion with previous line)
   if LC.is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
-  if LC.is_type('ret', line): edge_leaf_func_stats(lines, line)
+  if 'ret' in info.inst(): edge_leaf_func_stats(lines, line)
   if size <= 1: return # a sample with >= 2 instructions after this point
   if not x86_f.is_jcc_fusion(xline, line):
     x2line = prev_line(-2)
@@ -257,9 +263,8 @@ def edge_stats(line, lines, xip, size):
     elif x86_f.is_mov_op_fusion(x2line, xline): inc_pair('MOV', 'OP', suffix='fusible')
     if x86_f.is_vec_ld_op_fusion(lines[-2], lines[-1]): inc_pair('VEC LD', 'OP', suffix='fusible')
     elif x86_f.is_vec_mov_op_fusion(lines[-2], lines[-1]): inc_pair('VEC MOV', 'OP', suffix='fusible')
-  if LC.is_type('call', xline): inc(hsts[FUNCI], ip)
+  if 'call' in xinfo.inst(): inc(hsts[FUNCI], ip)
 
-inter_loops = set()
 def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
                 loop_ipc=0, lp_stats_en=False, event=LBR_Event, indirect_en=True, mispred_ip=None):
   def invalid(bad, msg):
@@ -268,7 +273,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
   def header_only_str(l):
     dso = get_field(l, 'dso').replace('(','').replace(')','')
     return 'header-only: ' + (dso if 'kallsyms' in dso else ' '.join((get_field(l, 'sym'), dso)))
-  global lbr_events, inter_loops
+  global lbr_events
   valid, lines, loops.bwd_br_tgts = 0, [], []
   if skip_bad and not loop_ipc: LC.stats.enables |= LC.stats.SIZE
   if lp_stats_en: LC.stats.enables |= LC.stats.LOOP
@@ -291,7 +296,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
     insts, size, takens, xip, timestamp, srcline = 0, 0, [], None, None, None
     tc_state = 'new'
     def update_size_stats():
-      if not LC.stats.size() or size<0: return
+      if not LC.stats.size() or size < 0: return
       if LC.stat['size']['sum'] == 0:
         LC.stat['size']['min'] = LC.stat['size']['max'] = size
       else:
@@ -304,13 +309,14 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       if not len(lines): return False
       i = 0
       for l in lines[1:]:
-        if not LC.is_label(l): i += 1
+        if not LC.line2info(l).is_label(): i += 1
         if i > min_lines: return True
       return False
     LC.stat['total'] += 1
     if LC.stat['total'] % read_sample.tick == 0: C.printf('.')
     while True:
       line = read_line()
+      info = LC.line2info(line)
       # input ended
       if not line:
         if len(lines): invalid('bogus', 'input truncated')
@@ -319,7 +325,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           C.error('No LBR data in profile')
         if not loop_ipc: C.printf(' .\n')
         return lines if check_min_lines() and not skip_bad else None
-      header = is_header(line)
+      header = info.header()
       if header:
         ev = header.group(3)[:-1]
         # first sample here (of a given event)
@@ -337,7 +343,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           if not header.group(2).isdigit(): C.printf(line)
           C.printf(x+'\n')
         inc(LC.stat['events'], ev)
-        func = func_srcline = None
+        func = None
         if LC.debug: timestamp = header.group(1).split()[-1]
       # a new sample started
       # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
@@ -347,7 +353,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
             break
           inc(LC.stat['IPs'], header_ip_str(line))
       # a sample ended
-      if re.match(r"^$", line):
+      if info.is_empty():
         if not skip_bad and (not min_lines or check_min_lines()): break
         len_m1 = len(lines)-1 if len(lines) else 0
         if len_m1 < 2 or\
@@ -366,7 +372,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
             if loops.loop_stats_id: loops.loop_stats(None, 0, 0)
           # else: note a truncated tripcount, i.e. unknown in 1..31, is not accounted for by default.
         if mispred_ip and valid < 2: valid = 0
-        if func: funcs.detect_functions(lines[func:], func_srcline)
+        if func: funcs.detect_functions(lines[func:])
         if LC.debug and LC.debug == timestamp:
           exit((line.strip(), len(lines)), lines, 'sample-of-interest ended')
         break
@@ -381,11 +387,11 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       if skip_bad and tag in line:
         valid = 0
         invalid('bad', tag)
-        assert re.match(r"^$", read_line())
+        assert LC.is_empty(read_line())
         break
       # a line with a label
-      label = LC.is_label(line)
-      if label: srcline = LC.get_srcline(line.strip())
+      label = info.is_label()
+      if label: srcline = info.srcline()
       # e.g. "        00007ffff7afc6ca        <bad>" then "mismatch of LBR data and executable"
       tag = 'mismatch of LBR data'
       if tag in line:
@@ -399,22 +405,22 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         valid = skip_sample(lines[0])
         invalid('bogus', 'instruction address missing')
         break
-      if skip_bad and len(lines) and not label and LC.is_taken(line) and not x86.is_branch(line):
+      if skip_bad and len(lines) and not label and info.is_taken() and not info.is_branch():
         valid = skip_sample(lines[0])
-        invalid('bogus', 'non-branch instruction "%s" marked as taken' % x86.get('inst', line))
+        invalid('bogus', 'non-branch instruction "%s" marked as taken' % info.inst())
         break
       if (not len(lines) and event in line) or (len(lines) and label):
-        lines += [ line.rstrip('\r\n') ]
+        lines += [line.rstrip('\r\n')]
         continue
       elif not len(lines): continue
-      ip = None if header or label or 'not reaching sample' in line else LC.line_ip(line, lines)
-      if LC.is_taken(line): takens += [ip]
+      ip = None if header or label or 'not reaching sample' in line else info.ip()
+      if info.is_taken(): takens += [ip]
       if len(takens) < 2:
         # perf may return subset of LBR-sample with < 32 records
         size += 1
       elif LC.edge_en: # instructions after 1st taken is observed (none of takens/IPC/IPTB used otherwise)
         insts += 1
-        if LC.is_taken(line):
+        if info.is_taken():
           inc(hsts[IPTB], insts); size += insts; insts = 0
           if 'IPC' in line: inc(hsts['IPC'], LC.line_timing(line)[1])
       LC.glob['all'] += 1
@@ -426,33 +432,28 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         if LC.glob['all'] == 1:  # 1st instruction observed
           if 'ilen:' in line: LC.stats.enables |= LC.stats.ILEN
           if LC.stats.ilen(): LC.glob['JCC-erratum'] = 0
-        if len(takens) and LC.is_taken(line) and LC.verbose & 0x2: #FUNCR
+        if len(takens) and info.is_taken() and LC.verbose & 0x2: #FUNCR
           x = get_taken_idx(lines, -1)
           if x >= 0:
-            if LC.is_type('call', line): count_of('st-stack', lines, x + 1, FUNCP)
-            if LC.is_type('call', lines[x]): count_of('push', lines, x + 1, FUNCR)
+            if 'call' in info.inst(): count_of('st-stack', lines, x + 1, FUNCP)
+            if 'call' in x86.get('inst', lines[x]): count_of('push', lines, x + 1, FUNCR)
         edge_stats(line, lines, xip, size)
-      if (LC.edge_en or 'DSB_MISS' in event) and LC.is_type('jmp', line):
-        ilen = LC.get_ilen(line)
+      if (LC.edge_en or 'DSB_MISS' in event) and 'jmp' in info.inst():
+        ilen = info.ilen()
         if ilen: ips_after_uncond_jmp.add(ip + ilen)
-      # interleaving loops
-      if ip:
-        line_loop = loops.loop_by_line(line, body=True)
-        if line_loop:
-          for l in loops.loops:
-            if ip == loops.loops[l]['back'] and ip < loops.loops[line_loop]['back'] and l < line_loop: inter_loops.add(ip)
       if 'call' in line and not func:
         func = len(lines)
         func_srcline = srcline
       assert len(lines) or event in line
       line = line.rstrip('\r\n')
+      info.line = line
       if LC.has_timing(line):
         cycles = LC.line_timing(line)[0]
         LC.stat['total_cycles'] += cycles
         if LC.edge_en and loops.loop_by_line(line):
           loops.total_cycles += cycles
-      if mispred_ip and LC.is_taken(line) and mispred_ip == LC.line_ip(line) and 'MISPRED' in line: valid += 1
-      lines += [ line ]
+      if mispred_ip and info.is_taken() and mispred_ip == info.ip() and 'MISPRED' in line: valid += 1
+      lines += [line]
       xip = ip
     if read_sample.dump: LC.print_sample(lines, read_sample.dump)
     if read_sample.stop and LC.stat['total'] >= int(read_sample.stop):
@@ -465,29 +466,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
 read_sample.stop = os.getenv('LBR_STOP')
 read_sample.tick = C.env2int('LBR_TICK', 1000)
 read_sample.dump = C.env2int('LBR_DUMP', 0)
-
-# TODO: re-design this function to return: event-name, ip, timestamp, cost, etc as a dictionary if header or None otherwise
-def is_header(line):
-  def patch(x):
-    if LC.debug: C.printf("\nhacking '%s' in: %s" % (x, line))
-    return line.replace(x, '-', 1)
-  if '\tilen:' in line: return False
-  if '[' in line[:50]:
-    p = line.split('[')[0]
-    assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()
-    if '::' in p: pass
-    elif ': ' in p: line = patch(': ')
-    elif ':' in p: line = patch(':')
-  #    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
-  return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
-# kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
-#                              re.match(r"(\s?[\S]*)\s+([\d\[\]\.\s]+):\s+\d+\s+(\S*:)\s", line) or
-#AUX data lost 1 times out of 33!
-                              re.match(r"(\w)([\w\s]+)(.)", line) or
-#         python3 105303 [000] 1021657.227299:          cbr:  cbr: 11 freq: 1100 MHz ( 55%)               55e235 PyObject_GetAttr+0x415 (/usr/bin/python3.6)
-                              re.match(r"([^:]*):(\s+)(\w+:)\s", line) or
-# instruction trace error type 1 time 1021983.206228655 cpu 1 pid 105468 tid 105468 ip 0 code 8: Lost trace data
-                              re.match(r"(\s)(\w[\w\s]+\d) time ([\d\.]+)", line))
 
 def is_jmp_next(br, # a hacky implementation for now
   JS=2,             # short direct Jump Size
@@ -542,7 +520,7 @@ c = lambda x: x.replace(':', '-')
 def stat_name(name, prefix='count', ratio_of=None):
   def nm(x):
     if not ratio_of or ratio_of[0] != 'ALL': return x
-    n = (x if 'cond' in name or 'fusible' in name or 'MRN' in name else x.upper()) + ' '
+    n = (x if C.any_in(['cond', 'fusible', 'MRN', 'Penalty'], name) else x.upper()) + ' '
     if x.startswith('vec'): n += 'comp '
     if x in LC.is_imix(None):  n += 'insts-class'
     elif x in x86.mem_type(None):  n += 'insts-subclass'
@@ -577,7 +555,7 @@ def print_global_stats():
   print_loops_stat('undetermined size', len([l for l in loops.loops.keys() if loops.loops[l]['size'] is None]))
   if LC.stats.ilen() : print_loops_stat('non-contiguous', len(loops.loops) - len(loops.contigous_loops))
   print_stat(nc('functions'), len(hsts[FUNCI]), prefix='proxy count', comment=FUNCI)
-  print_loops_stat('interleaving', len(inter_loops))
+  print_loops_stat('interleaving', 2 * len(loops.inter_loops))
   print_loops_stat('functions in', len(loops.functions_in_loops))
   if LC.stats.size():
     for x in LC.Insts_cond: print_imix_stat(x + ' conditional', LC.glob['cond_' + x])

@@ -24,12 +24,12 @@ loops, contigous_loops = {}, []
 total_cycles = 0
 
 def is_loop_by_ip(ip):  return ip in loops
-def is_loop(line):    return is_loop_by_ip(LC.line_ip(line))
+def is_loop(line):    return is_loop_by_ip(LC.line2info(line).ip())
 # FIXME: this does not work for non-contigious loops!
 def is_in_loop(ip, loop): return ip and loop <= ip <= loops[loop]['back']
 def get_loop(ip):     return loops[ip] if ip in loops else None
 def loop_by_line(line, body=False):
-  ip = LC.line_ip(line)
+  ip = LC.line2info(line).ip()
   if not ip: return False
   for loop_ipc in loops:
     if (body and loop_ipc < ip < loops[loop_ipc]['back']) or \
@@ -65,12 +65,12 @@ def tripcount_mean(loop, loop_ipc):
   hex_ipc = hex_ipc[1:]
   head = 0 if hex_ipc in loop_body[0] else 1
   loop_hotness = hotness(loop_body[head])
-  if head == 1 and not re.search(x86.JMP_RET, loop_body[0]):  # JCC before loop is not considered a special case
+  if head == 1 and not x86.is_jmp_ret(loop_body[0]):  # JCC before loop is not considered a special case
     before += hotness(loop_body[0])  # entrance by inst before loop
   addresses = hex_ipc
   for i in range(head + 1, head + size):
     line = loop_body[i].replace(str(hotness(loop_body[i])), '')
-    addresses += '|' + LC.line_ip_hex(line)
+    addresses += '|' + LC.line2info(line).ip_hex()
   # entrance by JMP to loop code
   # JCC that may jump to loop is not included
   entrances = C.exe_output(C.grep(r'jmp*\s+0x(%s)' % addresses, LC.hitcounts, '-E'), sep='\n')
@@ -118,38 +118,40 @@ def loop_stats(line, loop_ipc, tc_state):
   #  #not (is_loop(line) or (type(tcstate) == int)))):
   #  return tc_state
   #elif tc_state == 'new' and is_loop(line):
+  info = LC.line2info(line)
   if LC.stats.loop() and tc_state == 'new' and is_loop(line):
-    loop_stats_id = LC.line_ip(line)
+    loop_stats_id = info.ip()
     loop_stats_atts = ''
   if loop_stats_id:
-    if not is_in_loop(LC.line_ip(line), loop_stats_id): # just exited a loop
+    if not is_in_loop(info.ip(), loop_stats_id): # just exited a loop
       loop_stats(None, 0, 0)
     else:
       mark(x86.INDIRECT, 'indirect')
       mark(x86.IMUL, 'scalar-int')
-      if x86.get('inst', line).startswith('vp'): pass
+      if info.inst().startswith('vp'): pass
       else: mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % x86.FP_SUFFIX, 'scalar-fp')
       for i in range(LC.vec_size):
         if mark(r"[^aku]p%s\s+.*%s" % (x86.FP_SUFFIX, LC.vec_reg(i)), LC.vec_len(i, 'fp')): continue
         mark(LC.INT_VEC(i), LC.vec_len(i))
-  return tripcount(LC.line_ip(line), loop_ipc, tc_state)
+  return tripcount(info.ip(), loop_ipc, tc_state)
 loop_stats_id = None
 loop_stats_atts = ''
 
 bwd_br_tgts = []
 loop_cands = []
-functions_in_loops = set()
+functions_in_loops, inter_loops = set(), set()
+inter_loops_dict = dict()
 def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
                 MOLD=4e4):  # Max Outer Loop Distance
-  global bwd_br_tgts, loop_cands, contigous_loops, functions_in_loops  # unlike nonlocal, global works in python2 too!
+  global bwd_br_tgts, loop_cands, contigous_loops, functions_in_loops, inter_loops, inter_loops_dict  # unlike nonlocal, global works in python2 too!
   # lines[x+1]/lines[x+2] etc w/ no labels
   def next_line(x, step=1):
-    while x + step < len(lines) and LC.is_label(lines[x+step]):
+    while x + step < len(lines) and LC.line2info(lines[x+step]).is_label():
       x += 1
     return lines[x+step] if x + step < len(lines) else None
   # lines[-1]/lines[-2] etc w/ no labels
   def prev_line(i=-1):
-    while LC.is_label(lines[i]):
+    while LC.line2info(lines[i]).is_label():
       i -= 1
     return lines[i]
   def find_block_ip(x=len(lines) - 2):
@@ -157,22 +159,23 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       if LC.is_taken(lines[x]):
         n = next_line(x)
         if n is None: return 0, -1
-        return LC.line_ip(n), x
+        return LC.line2info(n).ip(), x
       x -= 1
     return 0, -1
   def has_ip(at):
     while at > 0:
-      if LC.line_ip(lines[at]) == ip: return True
+      if LC.line2info(lines[at]).ip() == ip: return True
       at -= 1
     return False
   def has_call(at):
     res = False
     while at > 0:
       if 'call' in lines[at]: res = True
-      if LC.line_ip(lines[at]) == ip: return res
+      if LC.line2info(lines[at]).ip() == ip: return res
       at -= 1
     return False
   prev_l = prev_line()
+  prev_i = LC.line2info(prev_l)
   def iter_update():
     # inc(loop['BK'], hex(line_ip(lines[-1])))
     assert ip == loop_ipc
@@ -206,27 +209,28 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     loop = loops[ip]
     loop['hotness'] += 1
     if srcline and not 'srcline' in loop: loop['srcline'] = srcline
-    if LC.is_taken(prev_l):
+    if prev_i.is_taken():
       if indirect_jmp_enter() and 'entered_by_indirect' not in loop['attributes']:
         loop['attributes'] += ';entered_by_indirect'
-      if ip == loop_ipc and LC.line_ip(prev_l) == loop['back']: iter_update()
+      if ip == loop_ipc and prev_i.ip() == loop['back']: iter_update()
     elif not loop['entry-block']:
       loop['entry-block'] = find_block_ip()[0]
     # Try to fill size & attributes for already detected loops
-    if not loop['size'] and not loop['outer'] and len(lines) > 2 and LC.line_ip(prev_l) == loop['back']:
+    if not loop['size'] and not loop['outer'] and len(lines) > 2 and prev_i.ip() == loop['back']:
       size, cnt, conds, op_jcc_mf, mov_op_mf, ld_op_mf, erratum = 1, {}, [], 0, 0, 0, 0 if ilen_on() else None
       types = ['lea', 'cmov'] + x86.MEM_INSTS + LC.user_loop_imix
       for i in types: cnt[i] = 0
       x = len(lines) - 2
       while x >= 1:
-        if LC.is_label(lines[x]):
+        info_x = LC.line2info(lines[x])
+        if info_x.is_label():
           x -= 1
           continue
         size += 1
-        inst_ip = LC.line_ip(lines[x])
-        if LC.is_taken(lines[x]):
+        inst_ip = info_x.ip()
+        if info_x.is_taken():
           break  # do not fill loop size/etc unless all in-body branches are non-taken
-        if LC.is_type(x86.COND_BR, lines[x]): conds += [inst_ip]
+        if info_x.is_cond_br(): conds += [inst_ip]
         next_l = next_line(x)
         if x86_f.is_jcc_fusion(lines[x], next_l):
           op_jcc_mf += 1
@@ -237,7 +241,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         elif x86_f.is_vec_mov_op_fusion(lines[x], next_l): mov_op_mf += 1
         # erratum feature disabled if erratum is None, otherwise erratum counts feature cases
         if erratum is not None and LC.is_jcc_erratum(next_l, lines[x]): erratum += 1
-        t = LC.line_inst(lines[x])
+        t = info_x.inst_type()
         if t and t in types: cnt[t] += 1
         if inst_ip == ip:
           loop['size'], loop['Conds'], loop['op-jcc-mf'], loop['mov-op-mf'], loop['ld-op-mf'] = \
@@ -252,17 +256,30 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         elif inst_ip and (inst_ip < ip or inst_ip > loop['back']):
           break
         x -= 1
+    # interleaving loops
+    k = str(ip)
+    prev_ip = LC.line_ip(prev_l)
+    if k in inter_loops_dict:
+      flag, loop1, loop2 = inter_loops_dict[k]
+      if flag is True: return
+      if not (is_in_loop(prev_ip, loop1) or is_in_loop(prev_ip, loop2)):
+        inter_loops_dict[k][0] = None
+      elif flag is None:
+        inter_loops_dict[k][0] = prev_ip
+      elif prev_ip != flag:
+        inter_loops_dict[k][0] = True
+        inter_loops.add((loop1, loop2))
     return
 
   # only simple loops, of these attributes, are supported:
   # * loop-body is entirely observed in a single sample
   # * a tripcount > 1 is observed
-  if LC.is_taken(prev_l):
-    xip = LC.line_ip(prev_l)
+  if prev_i.is_taken():
+    xip = prev_i.ip()
     if ilen_on(): detect_jump_to_mid_loop(ip, xip)
     if xip <= ip:
       pass  # not a backward jump
-    elif LC.is_callret(prev_l):
+    elif prev_i.is_call_ret():
       pass  # requires --xed
     elif (xip - ip) >= MOLD:
       LC.warn(0x200, "too large distance in:\t%s" % prev_l.split('#')[0].strip())
@@ -284,13 +301,17 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
           ins.add(LC.hex_ip(l))
           loops[l]['inner'] += 1
           loops[l]['outer-loops'].add(LC.hex_ip(ip))
+        # interleaving loops
+        if l < ip < loops[l]['back'] < xip or ip < l < xip < loops[l]['back']:
+          # [prev ip before shared block, loop1 ip, loop2 ip]
+          inter_loops_dict[str(ip)] = [xip, l, ip]
       loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'imix-ID': None,
                    'attributes': ';entered_by_indirect' if indirect_jmp_enter() else '',
                    'entry-block': 0 if xip > ip else find_block_ip()[0],  # 'BK': {hex(xip): 1, },
                    'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
                    }
       if srcline: loops[ip]['srcline'] = srcline.replace(':', ';')
-      ilen = LC.get_ilen(prev_l)
+      ilen = prev_i.ilen()
       if ilen:
         loops[ip]['sizeIB'] = int(xip) - ip + ilen  # size In Bytes
         if (ip + loops[ip]['sizeIB'] - ilen) == int(xip): contigous_loops += [ip]

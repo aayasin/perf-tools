@@ -15,7 +15,8 @@ __author__ = 'akhalil'
 
 from lbr.lbr import print_stat
 import lbr.x86 as x86, lbr.x86_fusion as x86_f
-import re, os
+import lbr.common_lbr as LC
+import os
 import common as C
 
 def inst_fusions(hitcounts, info):
@@ -26,7 +27,8 @@ def inst_fusions(hitcounts, info):
   hotness = lambda s: C.str2list(s)[0]
   def is_mov(l):
     l = l.replace(hotness(l), '')  # remove hotness
-    return x86_f.is_fusion_mov(x86.get('inst', l), int=False) and not x86.is_mem_store(l)
+    i = LC.line2info(l)
+    return x86_f.is_fusion_mov(i.inst(), int=False) and not i.is_mem_store()
   def calc_stats():
     block = hotness_key = None
     int_cands_log = hitcounts.replace("hitcounts", "int-fusion-candidates")
@@ -46,7 +48,8 @@ def inst_fusions(hitcounts, info):
       to_check = lines[2:]
       for i, line in enumerate(to_check):
         line = patch(line)
-        if x86.get('dst', line) == dest_reg:  # same dest reg
+        info = LC.line2info(line)
+        if info.dst() == dest_reg:  # same dest reg
           # jcc macro-fusion disables candidate
           if i < len(to_check) - 1 and x86_f.is_jcc_fusion(line, patch(to_check[i+1])): return None
           ld_fusion, mov_fusion = x86_f.is_ld_op_fusion(mov_line, line), x86_f.is_mov_op_fusion(mov_line, line)
@@ -54,10 +57,11 @@ def inst_fusions(hitcounts, info):
           int_fusion, vec_fusion = ld_fusion or mov_fusion, vld_fusion or vmov_fusion
           if not int_fusion and not vec_fusion: return None
           # check if dest reg was used as src before OP or any OP src was ever modified
-          srcs = x86.get('srcs', line)
+          srcs = info.srcs()
           for x in range(1, i + 2):
-            if int_fusion and re.search(x86.CMOV, x86.get('inst', lines[x])): return None  # CMOV will use wrongly modified RFLAGS
-            line_dst = x86.get('dst', lines[x])
+            xinfo = LC.line2info(lines[x])
+            if int_fusion and x86.CMOV in xinfo.inst(): return None  # CMOV will use wrongly modified RFLAGS
+            line_dst = xinfo.dst()
             for src in srcs:
               if not x86.is_imm(src) and x86.is_sub_reg(line_dst, src): return None  # OP src was modified before OP
             if C.any_in(dest_subs, lines[x]): return None  # dest reg used before OP

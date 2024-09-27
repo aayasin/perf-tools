@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.32 # see version line of do.py
+__version__ = 0.42 # see version line of do.py
 
 import common as C, pmu, stats, tma
 from lbr import x86
@@ -19,8 +19,10 @@ from lbr import x86
 threshold = {
   'hot-loop': 0.05,
   'misp-sig': 5,
+  'useless-hwpf': 0.15,
 }
-for b in tma.get('bottlenecks-list-2'): threshold[b] = tma.threshold_of(b);
+def bottlenecks(): return tma.get('bottlenecks-list-5')
+for b in bottlenecks(): threshold[b] = tma.threshold_of(b);
 
 def advise(m, prefix='Advise'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
 def hint(m): advise(m, '\tHint')
@@ -35,8 +37,8 @@ def analyze(app, args, do=None):
       if 'az-%s' % x in do: threshold[x] = do['az-%s' % x]
   threshold['IpTB'] = 3 * pmu.cpu_pipeline_width()
   def exe(x, msg=None): return C.exe_cmd(x, msg=msg, debug = args.verbose > 1)
-  def verbose(tag, x):
-    if not args.verbose: return
+  def verbose(tag, x, level):
+    if not args.verbose or level > args.verbose: return
     if type(x) is list:
       x = x[0] if args.verbose == 1 else ','.join(x)
     C.printc('\t%s:: %s' % (tag, str(x)))
@@ -50,8 +52,8 @@ def analyze(app, args, do=None):
   def examine(bottleneck):
     value = stats.get(bottleneck, app)
     flagged = value > threshold[bottleneck]
-    C.printc('\n%s = %s is %s' % (bottleneck, value, 'exceeded' if flagged else 'within its threshold'),
-             C.color.RED if flagged else C.color.DARKCYAN)
+    atts = ('\n', 'exceeded', C.color.RED) if flagged else ('', 'within its threshold', C.color.DARKCYAN)
+    C.printc('%s%s = %s is %s' % (atts[0], bottleneck, value, atts[1]), atts[2])
     return flagged
 
   if examine('Mispredictions'):
@@ -62,7 +64,7 @@ def analyze(app, args, do=None):
     misp = C.file2lines(misp1); misp.pop()
     while 1:
       b = C.str2list(misp.pop())
-      verbose('misp', b)
+      verbose('misp', b, 1)
       if float(b[0][:-1]) < threshold['misp-sig']: break
       line, forward, src, tgt = lookup(b[3]), -1, None, None # forward < 0 denotes unknown
       if x86.is_branch(hits2line(line), x86.COND_BR):
@@ -84,26 +86,36 @@ def analyze(app, args, do=None):
             break
         if easy: hint('above forward-conditional branch should be converted to CMOV. check your compiler')
 
+  if examine('Cache_Memory_Bandwidth'):
+    value = stats.get('Useless_HWPF', app)
+    if value > threshold['useless-hwpf']:
+      advise('too much useless HW prefetches of %s; try to disable them' % percent(value))
+
   if not examine('Instruction_Fetch_BW'): return
   loops = stats.read_loops_info(info, as_loops=True)
   for l in sorted(loops.keys()):
-    verbose('loop', (l, loops[l]))
+    verbose('loop', (l, loops[l]), 2)
     if 'FL-cycles%' not in loops[l]: continue
     cycles, issues, extra, hints = loops[l]['FL-cycles%'], [], [], set()
     if cycles <= threshold['hot-loop']: continue
+    verbose('loop', (l, loops[l]), 1)
     loop_size = loops[l]['size'] if type(loops[l]['size']) == int else -1
     if 0 < loop_size < threshold['IpTB']:
       issues += ['tight in size']
+      extra += ['size-in-bytes=%d' % loops[l]['sizeIB']]
       hints.add('unroll')
     if loops[l]['inner']:
       issues += ['inner-loop']
       extra += ['nest-level=%d' % loops[l]['outer-loops'].count('[')]
       hints.add('unroll')
+      if int(loops[l]['ip'], 16) & 0x3F:
+        issues += ['64-byte unaligned']
+        hints.add('align')
     if int(loops[l]['ip'], 16) & 0x1F:
       issues += ['32-byte unaligned']
       hints.add('align')
     if len(issues) == 0: continue
-    advise('Hot %s is %s (%s of time, size= ~%d uops, %s); try to %s it' % (l,
+    advise('Hot %s is %s (%s of time, size= ~%d uops, %s);\n\t\t\t-> try to %s it' % (l,
       l2s(issues), percent(cycles), loop_uops(loops[l], loop_size), l2s(extra), l2s(hints)))
     #if loop_size > 0 and loops[l]['taken'] == 0: loop_code(loops[l])
     if loop_size > 0: loop_code(loops[l])
@@ -125,4 +137,3 @@ def gen_misp_report(data, header='Branch Misprediction Report (taken-only)'):
     f.write('%s:\n' % header + ' '.join(('significance', '%7s' % 'misp-ratio', 'instruction address & ASM')) + '\n')
     for b in C.hist2slist(mispreds):
       if b[1] > 1: f.write('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0]))+'\n')
-

@@ -10,10 +10,13 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
 ## Overview
 * **do.py** -- The main driver with handy shortcuts for setting up and doing profiling, over [Linux perf](https://perf.wiki.kernel.org)
 * **study.py** -- A driver to study and compare multiple flavors of an application (it wraps do.py and employs parallel post-processing)
-* **analyze.py** -- A module for analyzing profiling logs
-* **lbr.py** -- A module for processing Last Branch Record (LBR) streams
+* **analyze.py** -- A module for analyzing profiling logs. It automates the process of software optimizations described in [From Top-down Microarchitecture Analysis to Structured Performance Optimizations](https://doi.org/10.52843/cassyni.gtjvgt)
 * **pmu.py** -- A module for interface to the Performance Monitoring Unit (PMU)
 * **stats.py** --  A module for processing counters and profiling logs
+* **lbr/** -- functionality for processing Last Branch Record (LBR) streams
+  * **loops.py** -- A module for handling loops
+  * **funcs.py** -- A module for handling functions / procedures
+  * **x86.py** -- A module for handling x86 instructions
 * **tma.py** -- A module with modern encapsulation of the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools
   * **toplev** -- profiler featuring TMA method on Intel processors
@@ -113,5 +116,6 @@ Raptor Lake | 5.18 |
 Sapphire Rapids | 5.18 |
 Meteor Lake | 6.4 | 6.3 or 6.5 onwards
 Granite Rapids | 6.8 | 6.6
+Lunar Lake | 6.10 | 6.7
 
 Besides, perf tool version 5.13 or newer is required (except observed [broken perf versions](settings/perf-bad.txt)). See `do.py --install-perf` for more.

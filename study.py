@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.94
+__version__= 0.95
 
 import common as C, pmu, stats
 import os, sys, time, re
@@ -341,8 +341,12 @@ def main():
       enable_it=1
     if args.stages & 0x8: exe(do_cmd('version log'))
     if args.profile_mask == STUDY_PROF_MASK and C.any_in(('misp', 'dsb'), args.mode): args.profile_mask |= 0x200
-    for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
-    if enable_it: exe('%s enable-smt -v1' % do0)
+    try:
+      for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
+    # command failed and exited w/ error
+    except SystemExit as e: sys.exit(e)
+    finally:
+      if enable_it: exe('%s enable-smt -v1' % do0)
 
   if args.stages & 0x2:
     jobs = []

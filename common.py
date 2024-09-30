@@ -75,15 +75,15 @@ def error(msg):
   frame = inspect.currentframe().f_back
   module = inspect.getmodule(frame).__name__
   if module == '__main__': module = os.path.basename(sys.argv[0]).replace('.py', '')
+  to_print = ''
   if env2int('TRACEBACK'):
-    print("Traceback (most recent call last):")
-    traceback.print_stack(frame)
-  printc('ERROR in module %s at function %s() in line %s: %s !' %
-         (module, inspect.getframeinfo(frame).function, frame.f_lineno, msg), color.RED)
+    to_print += "Traceback (most recent call last):\n" + ''.join(traceback.format_stack(frame))
+  to_print += printc('ERROR in module %s at function %s() in line %s: %s !' %
+         (module, inspect.getframeinfo(frame).function, frame.f_lineno, msg), color.RED, log_only=True)
   logs = [log[1] for log in re.findall(r"(>|tee) (\S+\.log)", msg) if log[1][0].isalpha()]
   if len(logs): exe_cmd('tail ' + ' '.join(set(logs)), debug=True)
   if dump_stack_on_error: assert 0
-  sys.exit(' !')
+  sys.exit(to_print)
 
 def exit(msg=None):
   printc('%s ..' % str(msg), color.GREEN)

@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.43
+__version__ = 3.44
 
 import argparse, os.path, re, sys
 
@@ -211,7 +211,8 @@ def analyze_it():
   exe_v0(msg="Analyzing '%s'" % args.app)
   analyze.analyze(uniq_name(), args, do)
 
-def tools_install(installer='sudo %s -y install ' % do['package-mgr'], packages=[]):
+def tools_install(packages=[]):
+  installer='sudo %s -y install ' % do['package-mgr']
   if args.install_perf:
     if args.install_perf == 'install':
       if do['package-mgr'] == 'dnf': exe('sudo yum install perf', 'installing perf')
@@ -449,7 +450,7 @@ def profile(mask, toplev_args=['mvl6', None]):
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'],
                 csv=False, # note !csv implies to collect TSC
                 basic_events=do['perf-stat-add'] > 1, last_events=',' + do['perf-stat-def'], warn=True,
-                grep = "| grep -E 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | uniq"):
+                grep = "| grep -E 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | grep -v 'perf stat' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
     evts, perf_args, user_events = events, [flags, '-x,' if csv else '--log-fd=1', do['perf-stat'] ], args.events and step != 16
     if args.metrics: perf_args += ['--metric-no-group', '-M', args.metrics] # 1st is workaround bug 4804e0111662 in perf-stat -r2 -M
@@ -927,7 +928,7 @@ def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
   app = args.app
   if do['gen-kernel']:
-    exe(fixup('%s ./gen-kernel.py %s > ./%s.c'%(do['python'], args.gen_args, app)), 'building kernel: ' + app, redir_out=None)
+    exe1(fixup('%s ./gen-kernel.py %s > ./%s.c 2>/dev/null' % (do['python'], args.gen_args, app)), 'building kernel: ' + app, log=False)
     if args.verbose > 1: exe(fixup('grep instructions ./%s.c'%app))
   exe(fixup('%s -g -o ./%s ./%s.c'%(do['compiler'], app, app)), None if do['gen-kernel'] else 'compiling')
   do['run'] = fixup('%s ./%s %d' % (do['pin'], app, int(float(args.app_iterations))))

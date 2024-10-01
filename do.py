@@ -940,6 +940,7 @@ def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   epilog = """environment variables:
     FORCECPU - force a specific CPU all over e.g. SPR, spr.
+    TRACEBACK - print traceback of calls on error.
   """
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
     defs={'perf': 'perf', 'pmu-tools': '%s %s/pmu-tools' % (do['python'], C.dirname()),
@@ -986,6 +987,67 @@ def handle_tunables():
     do['python-pkgs'] += ['matplotlib', 'brewer2mpl']
   if do['super']:
     do['perf-stat-def'] += ',syscalls:sys_enter_sched_yield'
+
+def run_commands(commands):
+  for c in commands:
+    param = c.split(':')[1:] if ':' in c else None
+    if   c == 'forgive-me':   pass
+    elif c == 'setup-all':    tools_install()
+    elif c == 'prof-no-mux':  profile(args.profile_mask if args.profile_mask != C.PROF_MASK_DEF else 0x80,
+                                      toplev_args=['vl6', ' --metric-group +Summary --single-thread'])
+    elif c == 'build-perf':   exe('%s ./do.py setup-all --install-perf build -v%d --tune %s' % (do['python'],
+      args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+['xed', 'tee', 'loop-ideal-ipc'])])))
+    elif c == 'setup-perf':   setup_perf()
+    elif c == 'find-perf':    find_perf()
+    elif c == 'git-log1': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | grep -E -v "
+      r"'Merge (branch .master.|pull request #)|forbid perf tool|\sa (bug|) fix|[ /]\-$'")
+    elif c == 'tools-update': tools_update()
+    elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
+    elif c == 'eventlist-update': tools_update(mask=0x4)
+    elif c.startswith('disable') or c.startswith('enable'):
+      en = c.startswith('enable')
+      com2func = {'aslr':        (set_sysfile, ('/proc/sys/kernel/randomize_va_space', 1 if en else 0)),
+                  'atom':        (atom, 'online' if en else None),
+                  'fix-freq':    (fix_frequency, None if en else 'undo'),
+                  'hugepages':   (exe, 'echo %s | sudo tee /sys/kernel/mm/transparent_hugepage/enabled' % ('always' if en else 'never')),
+                  'prefetches':  (exe, 'sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % (msr_clear(0x1a4, 0xf) if en else msr_set(0x1a4, 0xf))),
+                  'smt':         (smt, 'on' if en else None)}
+      key = c.replace('enable-' if en else 'disable-', '')
+      if key not in com2func:
+        C.error("Unknown command: '%s' !" % c)
+        return -1
+      func, arg = com2func[key][0], com2func[key][1]
+      func() if arg is None else func(*arg) if type(arg) is tuple else func(arg)
+    elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
+    elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
+                                    ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))
+    elif c == 'analyze':      analyze_it()
+    elif c == 'log':          log_setup()
+    elif c == 'profile':      profile(args.profile_mask)
+    elif c.startswith('get'): get(param)
+    elif c == 'tar':          do_logs(c, tag=uniq_name() if user_app() else C.error('provide a value for -a or -o'))
+    elif c == 'clean':        do_logs(c)
+    elif c == 'all':
+      setup_perf()
+      profile(args.profile_mask | 0x1)
+      analyze_it()
+      do_logs('tar')
+    elif c == 'build':        build_kernel()
+    elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
+    elif c == 'sync-date':    exe('sudo date -s "$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d\' \' -f5-8)Z"', redir_out=None)
+    elif c == 'version':      print(os.path.basename(__file__), 'version =', version(), '; '.join([''] +
+      [module_version(x) for x in ('analyze', 'lbr', 'stats')] + [exe_1line(
+        args.perf + ' --version').replace(' version ', '='), 'TMA=%s' % pmu.cpu('TMA version')]))
+    elif c.startswith('backup'):
+      r = '../perf-tools-%s-%s-e%d.tar.gz' % (version(),
+          '-'.join([module_version(x) for x in ('lbr', 'stats', 'study')]), len(param))
+      to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
+      if isfile(r): C.warn('file exists: %s' % r)
+      fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + ['.git'] + param if param else [])
+      scp = 'scp %s %s' % (r, to)
+      exe('tar -czvf %s %s ; echo %s' % (r, fs, scp), redir_out=None)
+      #subprocess.Popen(['scp', r, to])
+    else: C.error("Unknown command: '%s' !" % c)
 
 def main():
   global args
@@ -1059,67 +1121,20 @@ def main():
     else:
       C.error("Unknown command: '%s' !" % c)
       return -1
-  for c in args.command:
-    param = c.split(':')[1:] if ':' in c else None
-    if   c == 'forgive-me':   pass
-    elif c == 'setup-all':    tools_install()
-    elif c == 'prof-no-mux':  profile(args.profile_mask if args.profile_mask != C.PROF_MASK_DEF else 0x80,
-                                      toplev_args=['vl6', ' --metric-group +Summary --single-thread'])
-    elif c == 'build-perf':   exe('%s ./do.py setup-all --install-perf build -v%d --tune %s' % (do['python'],
-      args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+['xed', 'tee', 'loop-ideal-ipc'])])))
-    elif c == 'setup-perf':   setup_perf()
-    elif c == 'find-perf':    find_perf()
-    elif c == 'git-log1': exe("git log --pretty=format:'%h%x09%an%x09%ad%x09%s' | grep -E -v "
-      r"'Merge (branch .master.|pull request #)|forbid perf tool|\sa (bug|) fix|[ /]\-$'")
-    elif c == 'tools-update': tools_update()
-    elif c.startswith('tools-update:'): tools_update(mask=int(param[0], 16))
-    elif c == 'eventlist-update': tools_update(mask=0x4)
-    elif c.startswith('disable') or c.startswith('enable'):
-      en = c.startswith('enable')
-      com2func = {'aslr':        (set_sysfile, ('/proc/sys/kernel/randomize_va_space', 1 if en else 0)),
-                  'atom':        (atom, 'online' if en else None),
-                  'fix-freq':    (fix_frequency, None if en else 'undo'),
-                  'hugepages':   (exe, 'echo %s | sudo tee /sys/kernel/mm/transparent_hugepage/enabled' % ('always' if en else 'never')),
-                  'prefetches':  (exe, 'sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % (msr_clear(0x1a4, 0xf) if en else msr_set(0x1a4, 0xf))),
-                  'smt':         (smt, 'on' if en else None)}
-      key = c.replace('enable-' if en else 'disable-', '')
-      if key not in com2func:
-        C.error("Unknown command: '%s' !" % c)
-        return -1
-      func, arg = com2func[key][0], com2func[key][1]
-      func() if arg is None else func(*arg) if type(arg) is tuple else func(arg)
-    elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
-    elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
-                                    ' '.join([':%s:0' % x for x in (do['packages'] + ['tee'])])))
-    elif c == 'analyze':      analyze_it()
-    elif c == 'log':          log_setup()
-    elif c == 'profile':      profile(args.profile_mask)
-    elif c.startswith('get'): get(param)
-    elif c == 'tar':          do_logs(c, tag=a_tag())
-    elif c == 'clean':        do_logs(c)
-    elif c == 'all':
-      setup_perf()
-      profile(args.profile_mask | 0x1)
-      analyze_it()
-      do_logs('tar', tag=a_tag())
-    elif c == 'build':        build_kernel()
-    elif c == 'reboot':       exe('history > history-%d.txt && sudo shutdown -r now' % os.getpid(), redir_out=None)
-    elif c == 'sync-date':    exe('sudo date -s "$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d\' \' -f5-8)Z"', redir_out=None)
-    elif c == 'version':      print(os.path.basename(__file__), 'version =', version(), '; '.join([''] +
-      [module_version(x) for x in ('analyze', 'lbr', 'stats')] + [exe_1line(
-        args.perf + ' --version').replace(' version ', '='), 'TMA=%s' % pmu.cpu('TMA version')]))
-    elif c.startswith('backup'):
-      r = '../perf-tools-%s-%s-e%d.tar.gz' % (version(),
-          '-'.join([module_version(x) for x in ('lbr', 'stats', 'study')]), len(param))
-      to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
-      if isfile(r): C.warn('file exists: %s' % r)
-      fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + ['.git'] + param if param else [])
-      scp = 'scp %s %s' % (r, to)
-      exe('tar -czvf %s %s ; echo %s' % (r, fs, scp), redir_out=None)
-      #subprocess.Popen(['scp', r, to])
-    else:
-      C.error("Unknown command: '%s' !" % c)
-      return -1
+  try: run_commands(args.command)
+  # command failed and exited w/ err
+  except SystemExit as e:
+    # complete suspend commands run & exit
+    to_run = []
+    stop = len(args.command) / 2
+    for i, com in enumerate(args.command):
+      # enough to check half of the list
+      if i > stop: break
+      com_t = args.command[-(i + 1)]
+      if com.startswith('disable') and com_t == 'enable-%s' % com.split('-')[1]:
+        to_run.append(com_t)
+    run_commands(to_run)
+    sys.exit(e)
   return 0
 
 def get_indirects(log, num):

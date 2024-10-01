@@ -61,7 +61,7 @@ Conf = {
                  ',BR_INST_RETIRED.COND_NTAKEN,BR_MISP_RETIRED.COND_NTAKEN',
     # TODO: remove if once event-list is updated
     'mem-bw':   '' if pmu.icelake() or pmu.alderlake() else ','.join([pmu.perf_event('L2_LINES_OUT.'+x) for x in ('USELESS_HWPF', 'NON_SILENT', 'SILENT')]),
-    'openmp': 'r0106,MEM_LOAD_RETIRED.L2_MISS,L2_RQSTS.MISS,CPU_CLK_UNHALTED.PAUSE'
+    'openmp': 'r0106,MEM_INST_RETIRED.ALL_LOADS,MEM_LOAD_RETIRED.L2_MISS,L2_RQSTS.MISS,CPU_CLK_UNHALTED.PAUSE'
               ',syscalls:sys_enter_sched_yield',
   },
   'Pebs': {
@@ -89,7 +89,8 @@ def parse_args():
   ap = C.argument_parser('study two or more modes (configs)', mask=STUDY_PROF_MASK,
          defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
   ap.add_argument('config', nargs='*', default=[])
-  ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)
+  ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM,
+                  help='Must prepend your study.py command with STUDY_MODE=<mode> for now')
   ap.add_argument('-t', '--attempt', default='1')
   C.add_hex_arg(ap, '-s', '--stages', 0x3f, 'stages in study')
   ap.add_argument('--dump', action='store_const', const=True, default=False)
@@ -115,9 +116,10 @@ def parse_args():
                          |                        | multiplying w/ LBR factor | insts >= lbr-thresh%  |
       LBR.Metric, Metric | metric                 | -                         | -                     | starts with uppercase and doesn't include
       , Info.*           |                        |                           |                       | 'instructions'/'pairs'/'branches'/'insts-class'/'insts-subclass'
-      LBR.Event, Event   | event (counter)        | >= diff-thresh            | -                     |
+      LBR.Event, Event   | event (counter)        | >= diff-threshold[0]      | -                     |
       LBR.Proxy          | info.log proxy stat    | -                         | -                     |
-      LBR.Loop           | info.log per-loop stat | -                         | -                     | exclude it with -sl (--skip-loops)
+      LBR.Loop           | info.log per-loop stat | -                         | -                     | show it with -sl (--show-loops)
+      TMA                | tree node or Bottleneck| >= diff-threshold[1]      |                       | Metric of value in 0 .. 100
       
   side-by-side args"""
   side_by_side = ap.add_argument_group(description)
@@ -126,16 +128,16 @@ def parse_args():
     side_by_side.add_argument('-%s%s' % (l[0][0], l[1][0]), '--%s' % name, default=default, type=type(default), help=help)
   side_by_side.add_argument('--loop-id', default='imix-ID', choices=['imix-ID', 'srcline'],
                             help="loop stat to use as loop ID")
-  add_arg('diff-threshold', 10000.0, "diff threshold to filter top & bottom tables")
+  side_by_side.add_argument('-dt', '--diff-threshold', nargs='*', default=[1e4, 2.0],
+                            help="diff thresholds to filter top & bottom tables")
   add_arg('round-factor', 3, "round factor for calculations")
   add_arg('table-size', 10, "top & bottom tables size")
   side_by_side.add_argument('-w', '--table-width', nargs='*', default=[30],
                             help="fields widths in tables, non-specified column will use the final width")
-  side_by_side.add_argument('-sl', '--skip-loops', action='store_true',
-                            help="skip loops stats")
+  side_by_side.add_argument('-sl', '--show-loops', action='store_true', help="show loops' stats")
   side_by_side.add_argument('-sa', '--show-all', action='store_true',
                             help='show stats with None or zero values')
-  side_by_side.add_argument('--skip', nargs='*', default=['dsb-heatmap', '_2T', 'topdown-'],
+  side_by_side.add_argument('--skip', nargs='*', default=['dsb-heatmap', '_2T', 'topdown-', 'perf_metrics_'],
                             help='stats sub-names to skip, e.g. "--skip cond" will skip all stats including "cond"')
   add_arg('lbr-threshold', 0.01, "info.log global stats are included in top & bottom tables "
                                  "if stat/all instructions in info.log > this thresh%%")
@@ -181,6 +183,7 @@ def compare_stats(app1, app2):
   def hide(key, group, value1, value2):
     return (not args.show_all and (not value1 or not value2 or ':var' in key)) or \
            C.any_in(args.skip, key) or (args.groups and (not group or not C.any_in(args.groups, group)))
+  def is_TMA(group): return 1 if group == 'TMA' or 'Bottleneck' in group else 0
   # filtering what stats get into top & bottom tables
   # see description in study.py -h
   def filter(key, group, value1, value2, diff, ratio):
@@ -191,10 +194,11 @@ def compare_stats(app1, app2):
       if value1: value1 = value1 * lbr_factor1
       if value2: value2 = value2 * lbr_factor2
       diff = calc(value1, value2, op='diff')
-    info_metric = group and 'Info' in group and stats.is_metric(key)
-    diff_cond = isinstance(diff, (int, float)) and \
-                (group and C.any_in(('Metric', 'LBR.Metric', 'LBR.Proxy', 'LBR.Loop'), group)
-                 or info_metric or abs(diff) >= args.diff_threshold)
+    info_metric = group and group != 'Info.Bottleneck' and 'Info' in group and stats.is_metric(key)
+    diff_cond = isinstance(diff, (int, float)) and group and (
+            C.any_in(('Metric', 'LBR.Metric', 'LBR.Proxy', 'LBR.Loop'), group) # ignore diff
+            or info_metric
+            or abs(diff) >= float(args.diff_threshold[is_TMA(group)]))
     ratio_cond = isinstance(ratio, (int, float)) and not (not value1 and value2 == 0)
     return diff_cond and ratio_cond
   # filtering what stats get into strings table
@@ -258,8 +262,8 @@ def compare_stats(app1, app2):
   info1, info2 = get_info_file(app1), get_info_file(app2)
   # adding info files stats
   if info1 and info2:
-    stats.sDB[app1_str].update(stats.read_info(info1, read_loops=not args.skip_loops, loop_id=args.loop_id))
-    stats.sDB[app2_str].update(stats.read_info(info2, read_loops=not args.skip_loops, loop_id=args.loop_id))
+    stats.sDB[app1_str].update(stats.read_info(info1, read_loops=args.show_loops, loop_id=args.loop_id))
+    stats.sDB[app2_str].update(stats.read_info(info2, read_loops=args.show_loops, loop_id=args.loop_id))
     lbr_all_insts_key = stat_name('ALL', ratio_of=('ALL', ))
     lbr_all_insts1, lbr_all_insts2 = stats.get(lbr_all_insts_key, app1), stats.get(lbr_all_insts_key, app2)
     msg = "LBR run & stats aren't complete, check "
@@ -306,7 +310,7 @@ def compare_stats(app1, app2):
     print('String diffs:')
     print_list(strings_stats)
   # print table of loops with regressed IPC
-  if not args.skip_loops: print_regressed_ipcs()
+  if args.show_loops: print_regressed_ipcs()
 
 def main():
   do0 = C.realpath('do.py')

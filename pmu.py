@@ -189,6 +189,7 @@ def perf_event(e):
 #
 def cpu_has_feature(feature):
   if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
+    if C.env2int('CPUID23H'): return 1
     cpuid_f = '%s/setup-cpuid.log' % perftools
     if not os.path.exists(cpuid_f):
       C.warn("Missing file: %s" % cpuid_f)

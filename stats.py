@@ -75,10 +75,14 @@ def rollup_all(stat=None):
 def convert(v, adjust_percent=True):
   if not type(v) is str: return v
   v = v.strip()
-  if v.isdigit(): return int(v)  # e.g. 13
-  if v.replace('.', '', 1).isdigit(): return float(v)  # e.g. 1.13
+  m = 1
+  if v.startswith('-'):
+    m = -1
+    v = v.lstrip('-')
+  if v.isdigit(): return m * int(v)  # e.g. 13
+  if v.replace('.', '', 1).isdigit(): return m * float(v)  # e.g. 1.13
   v2 = v.replace(',', '')
-  if v2.isdigit() or v2.replace('.', '', 1).isdigit(): return convert(v2)  # e.g. 12,122,321 -> 12122321
+  if v2.isdigit() or v2.replace('.', '', 1).isdigit(): return m * convert(v2)  # e.g. 12,122,321 -> 12122321
   if '%' in v:  # e.g. 1.3% -> 1.3 or 0.013
     v = float(v.replace('%', ''))
     return v / 100 if adjust_percent else v
@@ -91,7 +95,7 @@ def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=Tr
   if loops != '':  # loops stats found
     for loop in loops.split('\n'):
       if loop_id == 'srcline' and 'srcline:' not in loop:
-        C.warn('Must run with srcline for loops stats, run with --tune :loop-srcline:1')
+        C.warn('Must run with srcline for loops stats, run with --tune :srcline:1')
         break
       key = loop.split(':')[0].strip()
       loop_attrs = re.split(r',(?![^\[]*\])', loop[loop.index('[') + 1:-1])

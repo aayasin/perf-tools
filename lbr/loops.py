@@ -132,7 +132,7 @@ def loop_stats(line, loop_ipc, tc_state):
       else: mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % x86.FP_SUFFIX, 'scalar-fp')
       for i in range(LC.vec_size):
         if mark(r"[^aku]p%s\s+.*%s" % (x86.FP_SUFFIX, LC.vec_reg(i)), LC.vec_len(i, 'fp')): continue
-        mark(LC.INT_VEC(i), LC.vec_len(i))
+        mark(LC.VEC(i), LC.vec_len(i))
   return tripcount(info.ip(), loop_ipc, tc_state)
 loop_stats_id = None
 loop_stats_atts = ''
@@ -251,6 +251,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
               (size, len(conds), op_jcc_mf, mov_op_mf, ld_op_mf)
           if erratum is not None: loop['jcc-erratum'] = erratum
           for i in types: loop[i] = cnt[i]
+          # not using rmw in imix-ID helps correlating loops despite register spills (occured in certain compilation of 548.exchange2)
           loop['imix-ID'] = C.num2char(loop['load']) + C.num2char(loop['store']) + C.num2char(loop['Conds']) + C.num2char(loop['lea'])
           if len(conds):
             loop['Cond_polarity'] = {}

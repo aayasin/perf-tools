@@ -132,7 +132,7 @@ def loop_stats(line, loop_ipc, tc_state):
       else: mark(r"[^k]s%s\s[\sa-z0-9,\(\)%%]+mm" % x86.FP_SUFFIX, 'scalar-fp')
       for i in range(LC.vec_size):
         if mark(r"[^aku]p%s\s+.*%s" % (x86.FP_SUFFIX, LC.vec_reg(i)), LC.vec_len(i, 'fp')): continue
-        mark(LC.INT_VEC(i), LC.vec_len(i))
+        mark(LC.VEC(i), LC.vec_len(i))
   return tripcount(info.ip(), loop_ipc, tc_state)
 loop_stats_id = None
 loop_stats_atts = ''

@@ -58,7 +58,7 @@ def inst2pred(i):
     return sorted(list(i2p.keys()))
   return i2p[i] if i in i2p else i
 
-def INT_VEC(i): return r"\s%sp.*%s" % ('(v)?' if i == 0 else 'v', vec_reg(i))
+def VEC(i, t='int'): return r"\s%s%s.*%s" % ('(v)?' if i == 0 else 'v', 'p' if t == 'int' else '', vec_reg(i))
 vec_size = 3 if pmu.cpu_has_feature('avx512vl') else 2
 def vec_reg(i): return '%%%smm' % chr(ord('x') + i)
 def vec_len(i, t='int'): return 'vec%d-%s' % (128 * (2 ** i), t)
@@ -114,13 +114,13 @@ def line_inst(line):
   # vec-int
   elif r.startswith(('vp', 'p')):
     for i in range(vec_size):
-      if re.findall(INT_VEC(i), line): return vec_len(i)
+      if re.findall(VEC(i), line): return vec_len(i)
     warn(0x400, 'vec-int: ' + ' '.join(line.split()[1:]))
     return 'vecX-int'
   # vec-fp
   elif r.endswith(('ps', 'pd', 'ph')) and r not in ['cmps', 'incsspd', 'rdsspd']:
     for i in range(vec_size):
-      if re.findall(INT_VEC(i), line): return vec_len(i, t='fp')
+      if re.findall(VEC(i, t='fp'), line): return vec_len(i, t='fp')
     C.error('counted as vec-fp instruction: ' + ' '.join(line.split()[1:]))
   elif r.endswith(('ss', 'sh', 'sd')): return 'scalar-fp'
   return None

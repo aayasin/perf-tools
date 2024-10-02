@@ -66,10 +66,9 @@ def vec_len(i, t='int'): return 'vec%d-%s' % (128 * (2 ** i), t)
 IMIX_CLASS = x86.MEM_INSTS + ['mem_indir-branch', 'nonmem-branch']
 # determine what is counted globally
 def is_imix(t):
-  # TODO: cover FP vector too
-  IMIX_LIST = IMIX_CLASS + ['logic']
-  if not t: return IMIX_LIST + [vec_len(x) for x in range(vec_size)] + ['vecX-int']
-  return t in IMIX_LIST or t.startswith('vec')
+  IMIX_LIST = IMIX_CLASS + ['logic', 'amx', 'string', 'IO']
+  if not t: return IMIX_LIST + [vec_len(x, t) for x in range(vec_size) for t in ['int', 'fp']] + ['vecX-int', 'scalar-fp']
+  return t in IMIX_LIST or t.startswith(('vec', 'scalar'))
 Insts = inst2pred(None) + ['cmov', 'lea', 'lea-scaled', 'jmp', 'call', 'ret', 'push', 'pop', 'vzeroupper'] + user_imix
 Insts_leaf_func = ['-'.join([x, 'leaf', y]) for y in ('dircall', 'indcall') for x in ('branchless', 'dirjmponly')] + ['leaf-call']
 Insts_global = Insts + is_imix(None) + x86.mem_type() + Insts_leaf_func + ['all']
@@ -93,7 +92,7 @@ class stats:
   def size(): return stats.enables & stats.SIZE
 
 def line_inst(line):
-  pInsts = ['cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper'] + user_loop_imix
+  pInsts = ['cmov', 'pause', 'pdep', 'pext', 'popcnt', 'pop', 'push', 'vzeroupper', 'pconfig', 'ptwrite'] + user_loop_imix
   allInsts = ['nop', 'lea', 'cisc-test'] + IMIX_CLASS + pInsts
   if not line: return allInsts
   info = line2info(line)
@@ -107,13 +106,23 @@ def line_inst(line):
   for x in pInsts: # skip non-vector p/v-prefixed insts
     if x in line: return x
   r = info.inst()
-  if not r: pass
+  if not r or r in ['lss', 'wrssd', 'wrussd']: pass
   elif r.startswith(('and', 'or', 'xor', 'not')): return 'logic'
-  elif r.startswith('pv'):
+  elif r.startswith(('tdpb', 'tile')): return 'amx'
+  elif r.startswith(('rep', 'scas', 'stos', 'lods')): return 'string'
+  elif r == 'in' or r.startswith(('ins', 'out')): return 'IO'
+  # vec-int
+  elif r.startswith(('vp', 'p')):
     for i in range(vec_size):
       if re.findall(INT_VEC(i), line): return vec_len(i)
     warn(0x400, 'vec-int: ' + ' '.join(line.split()[1:]))
     return 'vecX-int'
+  # vec-fp
+  elif r.endswith(('ps', 'pd', 'ph')) and r not in ['cmps', 'incsspd', 'rdsspd']:
+    for i in range(vec_size):
+      if re.findall(INT_VEC(i), line): return vec_len(i, t='fp')
+    C.error('counted as vec-fp instruction: ' + ' '.join(line.split()[1:]))
+  elif r.endswith(('ss', 'sh', 'sd')): return 'scalar-fp'
   return None
 
 def is_type(t, l):    return x86.is_type(inst2pred(t), l)

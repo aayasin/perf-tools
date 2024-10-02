@@ -107,7 +107,8 @@ def line_inst(line):
     if x in line: return x
   r = info.inst()
   if not r or r in ['lss', 'wrssd', 'wrussd']: pass
-  elif r.startswith(('and', 'or', 'xor', 'not')): return 'logic'
+  # lump any logic regardless of data-type
+  elif re.search(r'^(|p|vp|k)(and|not|or|xor|xnor)', r): return 'logic'
   elif r.startswith(('tdpb', 'tile')): return 'amx'
   elif r.startswith(('rep', 'scas', 'stos', 'lods')): return 'string'
   elif r == 'in' or r.startswith(('ins', 'out')): return 'IO'

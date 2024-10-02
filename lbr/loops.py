@@ -251,7 +251,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
               (size, len(conds), op_jcc_mf, mov_op_mf, ld_op_mf)
           if erratum is not None: loop['jcc-erratum'] = erratum
           for i in types: loop[i] = cnt[i]
-          # not using rmw was useful in 548.exchange2
+          # not using rmw in imix-ID helps correlating loops despite register spills (occured in certain compilation of 548.exchange2)
           loop['imix-ID'] = C.num2char(loop['load']) + C.num2char(loop['store']) + C.num2char(loop['Conds']) + C.num2char(loop['lea'])
           if len(conds):
             loop['Cond_polarity'] = {}

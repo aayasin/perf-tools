@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.40 # see version line of do.py
+__version__= x86.__version__ + 2.42 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 uica_log = C.envfile('UICA_LOG')
@@ -586,6 +586,8 @@ def print_common(total):
     print("""# Notes: CMP = CMP or TEST instructions.
 # RMW = Read-Modify-Write instructions.
 # GLOBAL denotes Global or static memory references.
+# imix-ID chars: load-store-Conds-lea
+# 0-9->0-9, 10-35->a-z, 36-63->A-Z
 #Global-stats-end\n""")
   C.warn_summary('info', 50)
   C.warn_summary()

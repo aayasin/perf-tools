@@ -68,3 +68,4 @@ optional arguments:
                         num-iterations of kernel (default: 1e9)
 
 environment variables: FORCECPU - force a specific CPU all over e.g. SPR, spr.
+TRACEBACK - print traceback of calls on error.

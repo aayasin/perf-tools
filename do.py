@@ -59,7 +59,7 @@ do = {'run':        C.RUN_DEF,
   'compiler':       'gcc -O2 -ffast-math', # ~/tools/llvm-6.0.0/bin/clang',
   'container':      0,
   'core':           1,
-  'cpuid':          0 if not isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
+  'cpuid':          0 if not isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.os_release()) else 1,
   'debug':          0,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
@@ -217,7 +217,7 @@ def tools_install(packages=[]):
   installer='sudo %s -y install ' % do['package-mgr']
   if args.install_perf:
     if args.install_perf == 'install':
-      if do['package-mgr'] == 'dnf': exe('sudo yum install perf', 'installing perf')
+      if do['package-mgr'] == 'dnf': exe('sudo apt-get install perf', 'installing perf')
       else: packages += ['linux-tools-generic && ' + globs['find-perf']]
     elif args.install_perf == 'build':
       b='./build-perf.sh'
@@ -236,9 +236,11 @@ def tools_install(packages=[]):
   if do['xed']:
     if do['xed'] < 2 and isfile(C.Globals['xed']): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
-    pip = 'pip3' if python_version().startswith('3') else 'pip'
-    for x in do['python-pkgs']: exe('%s install %s' % (pip, x), '@installing %s' % x)
-    if 'Red Hat' in C.file2str('/etc/os-release', 1): exe('sudo yum install python3-xlsxwriter.noarch', '@patching xlsx')
+    debian = 'Debian' in C.os_release()
+    assert not debian or python_version().startswith('3')
+    pip = do['package-mgr'] if debian else ('pip3' if python_version().startswith('3') else 'pip')
+    for x in do['python-pkgs']: exe('%s install %s%s' % (pip, 'python3-' if debian else '', x), '@installing %s' % x)
+    if 'Red Hat' in C.os_release(): exe('sudo apt-get install python3-xlsxwriter.noarch', '@patching xlsx')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
   if do['loop-ideal-ipc'] & 0x1:

@@ -189,10 +189,10 @@ def glob(regex):
 
 # OS
 #
+def os_release(): return file2str('/etc/os-release', 1)
 def os_installer():
-  installer='yum'
-  name = file2str('/etc/os-release', 1)
-  if 'Ubuntu' in name: installer='apt-get'
+  installer, name = 'yum', os_release()
+  if 'Ubuntu' in name or 'Debian' in name: installer='apt-get'
   if 'CentOS' in name: installer='dnf'
   return installer
 

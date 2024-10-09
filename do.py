@@ -109,7 +109,7 @@ do = {'run':        C.RUN_DEF,
   'pin':            'taskset 0x4',
   'plot':           0,
   'python':         sys.executable,
-  'python-pkgs':    ['numpy', 'pandas', 'xlsxwriter'],
+  'python-pkgs':    ['numpy', 'pandas', 'tabulate', 'xlsxwriter'],
   'reprocess':      2, # for LBR profile-step: -1: append, 0: lazy, 1: reuse header, 2: process anew
   'sample':         2,
   'size':           1,

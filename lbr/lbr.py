@@ -227,6 +227,31 @@ def edge_stats(line, lines, xip, size):
     elif v2ii2v_dst: inc_stat('V2I transition-Penalty')
   if xinfo.is_cond_br() and xinfo.is_taken():
     LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
+  #Shortcircuit detection
+  if 'set' in x86.get('inst',line):
+    x = len(lines)-1
+    max_inst=8
+    max_cnt=0
+    candidate_regs=[]
+    entry_pt=0
+    while x > 0 and not x86.is_branch(lines[x],x86.CALL_RET) and  max_cnt <= max_inst:
+      if re.search(x86.TEST_CMP,lines[x]):
+        if entry_pt == 0:
+          candidate_regs=x86.get("srcs",lines[x]) + [x86.get("dst",lines[x])]
+          for i in candidate_regs:
+            if '0x' in i:
+              candidate_regs.remove(i)
+          max_cnt=-1
+          entry_pt=1
+        else:
+          for i in candidate_regs:
+            if i in lines[x]:
+              if LC.verbose & 0x10:
+                info_lines('Shortcircuits with these %s' % candidate_regs, lines[-(len(lines)-x):] + [line])
+              inc_stat('ShortCircuits')
+              break
+      max_cnt+=1
+      x-=1
   # checks all lines but first
   if info.is_cond_br():
     if info.is_taken(): LC.glob['cond_taken-not-first'] += 1
@@ -566,6 +591,7 @@ def print_global_stats():
     for x in LC.Insts_Fusions: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_MRN: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_V2II2V: print_imix_stat(x, LC.glob[x])
+    for x in LC.Insts_ShortCircuit: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_global: print_imix_stat(x, LC.glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

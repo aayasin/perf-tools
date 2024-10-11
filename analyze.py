@@ -11,44 +11,93 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.42 # see version line of do.py
+__version__ = 0.50 # see version line of do.py
 
 import common as C, pmu, stats, tma
 from lbr import x86
 
 threshold = {
-  'hot-loop': 0.05,
-  'misp-sig': 5,
-  'useless-hwpf': 0.15,
+  'hot-loop':         0.05,
+  'misp-sig':         5,
+  'indirect-target':  0.15,
+  'useless-hwpf':     0.15,
 }
 def bottlenecks(): return tma.get('bottlenecks-list-5')
 for b in bottlenecks(): threshold[b] = tma.threshold_of(b);
 
+handles = {}
+def ext(e):
+  if e in handles: return handles[e]
+  if 'app' in handles:
+    handles[e] = stats.get_file(handles['app'], e)
+    return handles[e]
+  C.error("did you missed to invoke analyze.setup('app name') ?")
+def setup(app, verbose=0):
+  global handles
+  C.info("analyze setup for '%s'" % app)
+  if len(handles): handles.clear()
+  handles['app'] = app
+  handles['verbose'] = verbose
+
 def advise(m, prefix='Advise'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
+def exe(x, msg=None): return C.exe_cmd(x, msg=msg, debug=handles['verbose'] > 1)
 def hint(m): advise(m, '\tHint')
 def percent(x): return '%.1f%%' % (100.0 * x)
 
+def verbose(tag, x, level):
+  if not handles['verbose'] or level > handles['verbose']: return
+  if type(x) is list:
+    x = x[0] if handles['verbose'] == 1 else ','.join(x)
+  C.printc('\t%s:: %s' % (tag, str(x)))
+
+def analyze_misp():
+  def code_between(start, end): return C.exe_output("grep --color -A20 %s %s | sed /%s/q" % (start, ext('hitcounts'), end), '\n')
+  def hits2line(h): return '\t' + ' '.join(h.split()[1:])
+  def lookup(x): return C.exe_one_line("grep %s %s" % (x, ext('hitcounts')), fail=1)
+  misp1 = ext('mispreds').replace('.log', '-ptage.log')
+  exe("cat %s | ./ptage | tee %s | tail | grep -E -v '=total|^\s+0'" % (ext('mispreds'), misp1),
+      '@ top significant (== # executions * # mispredicts) branches')
+  misp = C.file2lines(misp1); misp.pop()
+  info_d = stats.read_info(ext('info'))
+  while 1:
+    b = C.str2list(misp.pop())
+    verbose('misp', b, 1)
+    if float(b[0][:-1]) < threshold['misp-sig']: break
+    line, forward, src, tgt = lookup(b[3]), -1, None, None  # forward < 0 denotes non-cond
+    hits0, line = line[0], hits2line(line)
+    src = line.split()[0].lstrip('0')
+    if x86.is_branch(line, x86.COND_BR):
+      tgt = line.split()[2].replace('0x', '0')
+      forward = int(tgt, 16) > int(src, 16)
+    elif x86.is_branch(line, x86.INDIRECT):
+      forward = -2
+    advise('branch at %s has significance of %s, misp-ratio %s, %s' % (b[3].lstrip('0'), b[0], b[2],
+      ('non-cond:' + ('indirect' if forward is -2 else '?')) if forward < 0 else 'cond:forward=%d' % int(forward)))
+    if forward < 0: continue
+    code = code_between(src, tgt) if forward else code_between(tgt, src)
+    print(code)
+    code = code.split('\n')
+    if forward > 0:
+      easy = True
+      for h in code[1:-1]:
+        aline = hits2line(h)
+        if x86.is_branch(aline) or x86.is_memory(aline):
+          easy = False
+          break
+      if easy: hint('above forward-conditional branch should be converted to CMOV. check your compiler')
+
+# interface for do.py
 def analyze(app, args, do=None):
-  info, hits = stats.get_file(app, 'info'), stats.get_file(app, 'hitcounts')
+  handles['app'] = app
+  handles['verbose'] = args.verbose
+  info, hits = ext('info'), ext('hitcounts')
   if args.verbose > 2: print(app, info, hits, sep=', ')
   assert info and hits, 'Profiling info or hitcounts file is missing'
   if do:
     for x in threshold.keys():
       if 'az-%s' % x in do: threshold[x] = do['az-%s' % x]
   threshold['IpTB'] = 3 * pmu.cpu_pipeline_width()
-  def exe(x, msg=None): return C.exe_cmd(x, msg=msg, debug = args.verbose > 1)
-  def verbose(tag, x, level):
-    if not args.verbose or level > args.verbose: return
-    if type(x) is list:
-      x = x[0] if args.verbose == 1 else ','.join(x)
-    C.printc('\t%s:: %s' % (tag, str(x)))
-  def lookup(x, f=hits): return C.exe_one_line("grep %s %s" % (x, f), fail=1)
-  # TODO: move loop_code, loop_uops to lbr/loops.py
-  def loop_code(loop): exe(C.grep(loop['ip'].replace('x', ''), hits, '--color -B1 -A%d' % loop['size']))
-  def loop_uops(loop, loop_size): return loop_size - sum(loop[x] for x in loop.keys() if x.endswith('-mf'))
-  def l2s(l): return ', '.join(l)
-  def hits2line(h): return '\t' + ' '.join(h.split()[1:])
-  def code_between(start, end): return C.exe_output("grep --color -A20 %s %s | sed /%s/q" % (start, hits, end), '\n')
+
   def examine(bottleneck):
     value = stats.get(bottleneck, app)
     flagged = value > threshold[bottleneck]
@@ -57,42 +106,20 @@ def analyze(app, args, do=None):
     return flagged
 
   if examine('Mispredictions'):
-    mispreds = stats.get_file(app, 'mispreds')
-    misp1 = mispreds.replace('.log', '-ptage.log')
-    exe("cat %s | ./ptage | tee %s | tail | grep -E -v '=total|^\s+0'" % (mispreds, misp1),
-        '@ top significant (== # executions * # mispredicts) branches')
-    misp = C.file2lines(misp1); misp.pop()
-    while 1:
-      b = C.str2list(misp.pop())
-      verbose('misp', b, 1)
-      if float(b[0][:-1]) < threshold['misp-sig']: break
-      line, forward, src, tgt = lookup(b[3]), -1, None, None # forward < 0 denotes unknown
-      if x86.is_branch(hits2line(line), x86.COND_BR):
-        line = line.split()
-        src, tgt = line[1], line[3].replace('0x', '0')
-        forward = int(tgt, 16) > int(src, 16)
-      advise('branch at %s has significance of %s, misp-ratio %s, forward=%s' % (b[3].lstrip('0'), b[0], b[2],
-              '?' if forward < 0 else int(forward)))
-      if forward < 0: continue
-      code = code_between(src, tgt) if forward else code_between(tgt, src)
-      print(code)
-      code = code.split('\n')
-      if forward > 0:
-        easy = True
-        for h in code[1:-1]:
-          line = hits2line(h)
-          if x86.is_branch(line) or x86.is_memory(line):
-            easy = False
-            break
-        if easy: hint('above forward-conditional branch should be converted to CMOV. check your compiler')
-
+    analyze_misp()
   if examine('Cache_Memory_Bandwidth'):
     value = stats.get('Useless_HWPF', app)
     if value > threshold['useless-hwpf']:
       advise('too much useless HW prefetches of %s; try to disable them' % percent(value))
+  if examine('Instruction_Fetch_BW'):
+    analyze_ifetch()
 
-  if not examine('Instruction_Fetch_BW'): return
-  loops = stats.read_loops_info(info, as_loops=True)
+def analyze_ifetch():
+  # TODO: move loop_code, loop_uops to lbr/loops.py
+  def loop_code(loop): exe(C.grep(loop['ip'].replace('x', ''), ext('hitcounts'), '--color -B1 -A%d' % loop['size']))
+  def loop_uops(loop, loop_size): return loop_size - sum(loop[x] for x in loop.keys() if x.endswith('-mf'))
+  def l2s(l): return ', '.join(l)
+  loops = stats.read_loops_info(ext('info'), as_loops=True)
   for l in sorted(loops.keys()):
     verbose('loop', (l, loops[l]), 2)
     if 'FL-cycles%' not in loops[l]: continue

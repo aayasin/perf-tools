@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.50 # see version line of do.py
+__version__ = 0.51 # see version line of do.py
 
 import common as C, pmu, stats, tma
 from lbr import x86
@@ -32,12 +32,14 @@ def ext(e):
     handles[e] = stats.get_file(handles['app'], e)
     return handles[e]
   C.error("did you missed to invoke analyze.setup('app name') ?")
-def setup(app, verbose=0):
+def setup(app, basename=None, verbose=0):
   global handles
   C.info("analyze setup for '%s'" % app)
   if len(handles): handles.clear()
   handles['app'] = app
   handles['verbose'] = verbose
+  if basename:
+    for e in ('hitcounts', 'info', 'mispreds'): handles[e] = '.'.join((basename, e, 'log'))
 
 def advise(m, prefix='Advise'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
 def exe(x, msg=None): return C.exe_cmd(x, msg=msg, debug=handles['verbose'] > 1)
@@ -54,11 +56,20 @@ def analyze_misp():
   def code_between(start, end): return C.exe_output("grep --color -A20 %s %s | sed /%s/q" % (start, ext('hitcounts'), end), '\n')
   def hits2line(h): return '\t' + ' '.join(h.split()[1:])
   def lookup(x): return C.exe_one_line("grep %s %s" % (x, ext('hitcounts')), fail=1)
+  info_d = stats.read_info(ext('info'))
+  def top_target(src, i='indirect'):
+    # TODO work with hist struct
+    mode = i + '_0x%s_targets_mode' % src
+    if mode in info_d:
+      t = info_d[mode][0]
+      t_cov = info_d[i + '_0x%s_targets_[%s]' % (src, t)][0] / info_d[i + '_0x%s_targets_total' % src][0]
+      if t_cov > threshold['indirect-target']:
+        hint('de-virtualize above %s branch when target is %s (%s of cases)' % (i, t, percent(t_cov)))
+
   misp1 = ext('mispreds').replace('.log', '-ptage.log')
-  exe("cat %s | ./ptage | tee %s | tail | grep -E -v '=total|^\s+0'" % (ext('mispreds'), misp1),
+  exe("cat %s | ./ptage | tee %s | tail -11 | grep -E -v '=total|^\s+0'" % (ext('mispreds'), misp1),
       '@ top significant (== # executions * # mispredicts) branches')
   misp = C.file2lines(misp1); misp.pop()
-  info_d = stats.read_info(ext('info'))
   while 1:
     b = C.str2list(misp.pop())
     verbose('misp', b, 1)
@@ -73,6 +84,10 @@ def analyze_misp():
       forward = -2
     advise('branch at %s has significance of %s, misp-ratio %s, %s' % (b[3].lstrip('0'), b[0], b[2],
       ('non-cond:' + ('indirect' if forward is -2 else '?')) if forward < 0 else 'cond:forward=%d' % int(forward)))
+    if forward == -2:
+      verbose('indirect', line, 2)
+      top_target(src)
+      top_target(src, 'indirect-misp')
     if forward < 0: continue
     code = code_between(src, tgt) if forward else code_between(tgt, src)
     print(code)

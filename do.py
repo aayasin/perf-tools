@@ -898,10 +898,9 @@ def profile(mask, toplev_args=['mvl6', None]):
   if en(21):
     widths = pmu.cpu_pipeline_width('all_widths')
     evts = pmu.widths_2_cmasks(widths)
-    do['interval'] = 10
     if do['interval'] < 1000:
       C.warn('Adjusting your %dms interval to 1000ms' % do['interval'])
-    do['interval'] = min(do['interval'],1000)
+    do['interval'] = max(do['interval'],1000)
     csv_file = perf_stat('-r1 -I%d' % do['interval'], 'Pipeline view every 1000ms', step=21, csv=True, events=evts, basic_events='', first_events='', last_events='', perfmetrics='') 
     if args.mode != 'profile':
       pipeline_view(csv_file,widths) 

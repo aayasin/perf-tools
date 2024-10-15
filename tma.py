@@ -77,4 +77,4 @@ def get(tag):
 
 # TODO: import the model's ratios.py file under pmu-tools/ to look it up per metric
 def threshold_of(metric):
-  return 20
+  return 15

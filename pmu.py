@@ -295,17 +295,12 @@ def cpu_msrs():
 def cpu_peak_kernels(widths=(4, 5, 6, 8)):
   return ['peak%dwide' % x for x in widths]
 
-def cpu_pipeline_width(all_widths=None):
-  width=4
-  full_widths={'dsb':('IDQ.DSB_UOPS',4),'mite':('IDQ.MITE_UOPS',4),'decoders':('INST_DECODED.DECODERS',4),'ms':('IDQ.MS_UOPS',4),'issued':('UOPS_ISSUED.ANY',4),'executed':('UOPS_EXECUTED.CORE',8),'retired':('UOPS_RETIRED.ALL',4)}
-  if all_widths is None:
-    if icelake(): width = 5
-    elif goldencove() or redwoodcove(): width = 6
-    elif lunarlake(): width = 8
-    return width
-  else: #TODO we will eventually read from pmu-tools.
-    if goldencove() or redwoodcove(): full_widths={'dsb':('IDQ.DSB_UOPS',8),'mite':('IDQ.MITE_UOPS',6),'decoders':('INST_DECODED.DECODERS',6),'ms':('IDQ.MS_UOPS',4),'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.CORE',12),'retired':('UOPS_RETIRED.SLOTS',8)}
-    return full_widths
+def cpu_pipeline_width():
+  width = 4
+  if icelake(): width = 5
+  elif goldencove() or redwoodcove(): width = 6
+  elif lunarlake(): width = 8
+  return width
 
 # deeper uarch stuff
 

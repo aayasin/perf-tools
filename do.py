@@ -29,7 +29,6 @@ from datetime import datetime
 from getpass import getuser
 from math import log10
 from platform import python_version
-from pipeline import pipeline_view
 
 def isfile(f): return f and os.path.isfile(f)
 globs = {
@@ -109,7 +108,7 @@ do = {'run':        C.RUN_DEF,
   'pin':            'taskset 0x4',
   'plot':           0,
   'python':         sys.executable,
-  'python-pkgs':    ['numpy', 'pandas', 'tabulate', 'xlsxwriter'],
+  'python-pkgs':    ['numpy', 'pandas', 'xlsxwriter'],
   'reprocess':      2, # for LBR profile-step: -1: append, 0: lazy, 1: reuse header, 2: process anew
   'sample':         2,
   'size':           1,
@@ -452,7 +451,7 @@ def profile(mask, toplev_args=['mvl6', None]):
                                                         ' 2>>' + err if do['srcline'] else '')
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'],
                 csv=False, # note !csv implies to collect TSC
-                basic_events=do['perf-stat-add'] > 1, first_events='cpu-clock,', last_events=',' + do['perf-stat-def'], warn=True,
+                basic_events=do['perf-stat-add'] > 1, last_events=',' + do['perf-stat-def'], warn=True,
                 grep = "| grep -E 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | grep -v 'perf stat' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
     evts, perf_args, user_events = events, [flags, '-x,' if csv else '--log-fd=1', do['perf-stat'] ], args.events and step != 16
@@ -465,7 +464,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     if basic_events and do['core']: evts += append(pmu.basic_events(), evts)
     if user_events: evts += append(pmu.perf_format(args.events), evts)
     if user_events or args.metrics or grep is None: grep = "| grep -v 'perf stat'" #keep output unfiltered with user-defined events
-    if evts != '': perf_args += ' -e "%s%s%s"' % (first_events, evts, last_events)
+    if evts != '': perf_args += ' -e "cpu-clock,%s%s"' % (evts, last_events)
     log, tscperf = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log'), ''
     if csv:
       if profiling() and isfile(log): os.remove(log)
@@ -894,23 +893,6 @@ def profile(mask, toplev_args=['mvl6', None]):
       ' | ./FlameGraph/'.join(['', 'stackcollapse-perf.pl', 'flamegraph.pl']), perf_data)
     exe(' '.join((perf, 'script', x)), msg=None, redir_out=None)
     print('firefox %s.svg &' % perf_data)
-
-  if en(21):
-    depths=pmu.cpu_pipeline_width('all_depths')
-    evts=""
-    for i in depths:
-      for j in range(int(depths[i][1])):
-        evt_name=depths[i][0]
-        evt_cmask=str(j+1)
-        evts+=str(pmu.perf_event(evt_name+':c'+evt_cmask)).replace(evt_name,evt_name+':c'+evt_cmask)+','
-    evts=evts[:-1]
-    if do['interval'] < 1000:
-      adjusted_interval=int(do['interval']*int((1000/do['interval']))+1000%do['interval'])
-      print('Interval must be at least 1000ms, yours is %d, increasing to %d' % (do['interval'],adjusted_interval))
-      do['interval']=adjusted_interval
-    csv_file=perf_stat('-r1 -I%d' % do['interval'] , 'Pipeline view every 1000ms',step=21, csv=True,events=evts,basic_events='',first_events='',last_events='',perfmetrics='')
-    if args.mode != 'profile':
-      pipeline_view(csv_file,depths)
 
   if do['help'] < 0: profile_mask_help()
   elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)):

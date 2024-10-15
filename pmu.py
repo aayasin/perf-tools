@@ -307,6 +307,16 @@ def cpu_pipeline_width(all_widths=None):
     if goldencove() or redwoodcove(): full_widths={'dsb':('IDQ.DSB_UOPS',8),'mite':('IDQ.MITE_UOPS',6),'decoders':('INST_DECODED.DECODERS',6),'ms':('IDQ.MS_UOPS',4),'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.CORE',12),'retired':('UOPS_RETIRED.SLOTS',8)}
     return full_widths
 
+def widths_2_cmasks(widths):
+    evts=""
+    for i in widths:
+      for j in range(int(widths[i][1])):
+        evt_name = widths[i][0]
+        evt_cmask = str(j+1)
+        evts += str(perf_event(evt_name+':c'+evt_cmask)).replace(evt_name,evt_name+':c'+evt_cmask)+','
+    evts = evts[:-1]
+    return evts
+
 # deeper uarch stuff
 
 # returns MSB bit of DSB's set-index, if uarch is supported

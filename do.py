@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.45
+__version__ = 3.55
 
 import argparse, os.path, re, sys
 
@@ -896,21 +896,15 @@ def profile(mask, toplev_args=['mvl6', None]):
     print('firefox %s.svg &' % perf_data)
 
   if en(21):
-    depths=pmu.cpu_pipeline_width('all_depths')
-    evts=""
-    for i in depths:
-      for j in range(int(depths[i][1])):
-        evt_name=depths[i][0]
-        evt_cmask=str(j+1)
-        evts+=str(pmu.perf_event(evt_name+':c'+evt_cmask)).replace(evt_name,evt_name+':c'+evt_cmask)+','
-    evts=evts[:-1]
+    widths = pmu.cpu_pipeline_width('all_widths')
+    evts = pmu.widths_2_cmasks(widths)
+    do['interval'] = 10
     if do['interval'] < 1000:
-      adjusted_interval=int(do['interval']*int((1000/do['interval']))+1000%do['interval'])
-      print('Interval must be at least 1000ms, yours is %d, increasing to %d' % (do['interval'],adjusted_interval))
-      do['interval']=adjusted_interval
-    csv_file=perf_stat('-r1 -I%d' % do['interval'] , 'Pipeline view every 1000ms',step=21, csv=True,events=evts,basic_events='',first_events='',last_events='',perfmetrics='')
+      C.warn('Adjusting your %dms interval to 1000ms' % do['interval'])
+    do['interval'] = min(do['interval'],1000)
+    csv_file = perf_stat('-r1 -I%d' % do['interval'], 'Pipeline view every 1000ms', step=21, csv=True, events=evts, basic_events='', first_events='', last_events='', perfmetrics='') 
     if args.mode != 'profile':
-      pipeline_view(csv_file,depths)
+      pipeline_view(csv_file,widths) 
 
   if do['help'] < 0: profile_mask_help()
   elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)):

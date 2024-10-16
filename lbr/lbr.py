@@ -27,9 +27,10 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.42 # see version line of do.py
+__version__= x86.__version__ + 2.43 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
+llvm_args = C.env2str('LLVM_ARGS')
 uica_log = C.envfile('UICA_LOG')
 glob_hist_threshold = C.env2int('LBR_GLOB_HIST_THR', 3) / 100.0
 
@@ -127,8 +128,8 @@ def edge_en_init(indirect_en):
   if os.getenv('LBR_INDIRECTS'):
     for x in os.getenv('LBR_INDIRECTS').split(','):
       indirects.add(int(x, 16))
-      hsts['indirect_%s_targets' % x] = {}
-      hsts['indirect_%s_paths' % x] = {}
+      for y in ('', '-misp'):
+        for z in ('targets', 'paths'): hsts['indirect%s_%s_%s' % (y, x, z)] = {}
   if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'], hsts_threshold['dsb-heatmap']  = {}, 0
 
 def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
@@ -197,6 +198,7 @@ def edge_stats(line, lines, xip, size):
       if 'MISP' in xline: inc(hsts['indirect-x2g-misp'], xip)
   if xip and xip in indirects:
     inc(hsts['indirect_%s_targets' % LC.hex_ip(xip)], ip)
+    if 'MISP' in xline: inc(hsts['indirect-misp_%s_targets' % LC.hex_ip(xip)], ip)
     #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
   # MRN with index reg detection
   mrn_dst = info.dst()
@@ -598,7 +600,7 @@ def print_all(nloops=10, loop_ipc=0):
   if total and (LC.stat['bad'] + LC.stat['bogus']) / float(total) > 0.5:
     if LC.verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
     else: C.error('Too many LBR bad/bogus samples in profile')
-  for x in sorted(hsts.keys()): print_glob_hist(hsts[x], x)
+  for x in hsts.keys(): print_glob_hist(hsts[x], x)
   sloops = sorted(loops.loops.items(), key=lambda x: loops.loops[x[0]]['hotness'])
   if loop_ipc:
     if loop_ipc in loops.loops:
@@ -616,7 +618,7 @@ def print_all(nloops=10, loop_ipc=0):
         if lp['size']:
           C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, LC.hitcounts, '-B1 -A%d' % lp['size'] if LC.verbose & 0x40 else '-A%d' % (lp['size'] - 1)),
             'Hitcounts & ASM of loop %s' % LC.hex_ip(loop_ipc))
-          if llvm_log: lp['IPC-ideal%s' % ('' if not uica_log else '-llvm')] = get_ipc_llvm(LC.hitcounts, llvm_log, lp, LC.hex_ip(loop_ipc))
+          if llvm_log: lp['IPC-ideal%s' % ('' if not uica_log else '-llvm')] = get_ipc_llvm(LC.hitcounts, llvm_log, llvm_args, lp, LC.hex_ip(loop_ipc))
           if uica_log: lp['IPC-ideal%s' % ('' if not llvm_log else '-uica')] = get_ipc_uica(LC.hitcounts, uica_log, lp, LC.hex_ip(loop_ipc))
         else:
           if LC.debug: C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, LC.hitcounts), 'Headline of loop %s' % LC.hex_ip(loop_ipc))

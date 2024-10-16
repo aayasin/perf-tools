@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.54
+__version__ = 3.56
 
 import argparse, os.path, sys
 
@@ -59,7 +59,7 @@ do = {'run':        C.RUN_DEF,
   'compiler':       'gcc -O2 -ffast-math', # ~/tools/llvm-6.0.0/bin/clang',
   'container':      0,
   'core':           1,
-  'cpuid':          0 if not isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.file2str('/etc/os-release', 1)) else 1,
+  'cpuid':          0 if not isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.os_release()) else 1,
   'debug':          0,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
@@ -75,13 +75,14 @@ do = {'run':        C.RUN_DEF,
   'loops':          min(pmu.cpu('corecount'), 30),
   'log-stdout':     1,
   'lbr-branch-stats': 1,
-  'lbr-indirects':  10,
+  'lbr-indirects':  20,
   'lbr-jcc-erratum': 0,
   'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
   'lbr-stats-tk':   '- 0 20 1',
   'lbr-verbose':    0,
   'ldlat':          int(globs['ldlat-def']),
   'levels':         2,
+  'llvm-mca-args':  '--iterations=1000 -mcpu=alderlake',
   'metrics':        tma.get('key-info'),
   'model':          'GNR' if pmu.granite() else 'MTL',
   'msr':            0,
@@ -217,7 +218,7 @@ def tools_install(packages=[]):
   installer='sudo %s -y install ' % do['package-mgr']
   if args.install_perf:
     if args.install_perf == 'install':
-      if do['package-mgr'] == 'dnf': exe('sudo yum install perf', 'installing perf')
+      if do['package-mgr'] == 'dnf': exe('sudo apt-get install perf', 'installing perf')
       else: packages += ['linux-tools-generic && ' + globs['find-perf']]
     elif args.install_perf == 'build':
       b='./build-perf.sh'
@@ -236,9 +237,11 @@ def tools_install(packages=[]):
   if do['xed']:
     if do['xed'] < 2 and isfile(C.Globals['xed']): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
-    pip = 'pip3' if python_version().startswith('3') else 'pip'
-    for x in do['python-pkgs']: exe('%s install %s' % (pip, x), '@installing %s' % x)
-    if 'Red Hat' in C.file2str('/etc/os-release', 1): exe('sudo yum install python3-xlsxwriter.noarch', '@patching xlsx')
+    debian = 'Debian' in C.os_release()
+    assert not debian or python_version().startswith('3')
+    pip = do['package-mgr'] if debian else ('pip3' if python_version().startswith('3') else 'pip')
+    for x in do['python-pkgs']: exe('%s install %s%s' % (pip, 'python3-' if debian else '', x), '@installing %s' % x)
+    if 'Red Hat' in C.os_release(): exe('sudo apt-get install python3-xlsxwriter.noarch', '@patching xlsx')
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
   if do['loop-ideal-ipc'] & 0x1:
@@ -808,8 +811,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
                   C.realpath('loop_stats'), exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info))
         perf_script("%s %s && %s" % (perf_F(), cmd,
                     C.grep('FL-cycles...[1-9][0-9]?', info, color=1)), "@detailed stats for hot loops", data,
-                    export='PTOOLS_HITS=%s%s%s' % (hits, (' LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] & 0x1 else '',
-                                                   (' UICA_LOG=%s' % uica) if do['loop-ideal-ipc'] & 0x2 else ''))
+                    export='PTOOLS_HITS=%s%s%s' % (hits, (' LLVM_LOG=%s LLVM_ARGS="%s"' % (llvm_mca, do['llvm-mca-args']))
+                    if do['loop-ideal-ipc'] & 0x1 else '', (' UICA_LOG=%s' % uica) if do['loop-ideal-ipc'] & 0x2 else ''))
       else: warn_file(loops)
 
   if en(9) and do['sample'] > 2:

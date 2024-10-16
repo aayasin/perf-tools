@@ -27,9 +27,10 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.42 # see version line of do.py
+__version__= x86.__version__ + 2.43 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
+llvm_args = C.env2str('LLVM_ARGS')
 uica_log = C.envfile('UICA_LOG')
 glob_hist_threshold = C.env2int('LBR_GLOB_HIST_THR', 3) / 100.0
 
@@ -617,7 +618,7 @@ def print_all(nloops=10, loop_ipc=0):
         if lp['size']:
           C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, LC.hitcounts, '-B1 -A%d' % lp['size'] if LC.verbose & 0x40 else '-A%d' % (lp['size'] - 1)),
             'Hitcounts & ASM of loop %s' % LC.hex_ip(loop_ipc))
-          if llvm_log: lp['IPC-ideal%s' % ('' if not uica_log else '-llvm')] = get_ipc_llvm(LC.hitcounts, llvm_log, lp, LC.hex_ip(loop_ipc))
+          if llvm_log: lp['IPC-ideal%s' % ('' if not uica_log else '-llvm')] = get_ipc_llvm(LC.hitcounts, llvm_log, llvm_args, lp, LC.hex_ip(loop_ipc))
           if uica_log: lp['IPC-ideal%s' % ('' if not llvm_log else '-uica')] = get_ipc_uica(LC.hitcounts, uica_log, lp, LC.hex_ip(loop_ipc))
         else:
           if LC.debug: C.exe_cmd('%s && echo' % C.grep('0%x' % loop_ipc, LC.hitcounts), 'Headline of loop %s' % LC.hex_ip(loop_ipc))

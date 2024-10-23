@@ -13,7 +13,7 @@ __author__ = 'akhalil'
 
 import common as C
 import lbr.common_lbr as LC
-from lbr.loops import loops
+from lbr.loops import loops, is_in_loop
 import lbr.x86_fusion as x86_f, lbr.x86 as x86
 
 user_imix = C.env2list('LBR_FUNC_IMIX', ['zcnt'])
@@ -150,7 +150,7 @@ def process_function(lines, outer_funcs=[]):
   insts_cnt = {}
   for i in types: insts_cnt[i] = 0
   cycles = 0
-  loop_code, loop_end = False, None
+  loop_ip, loop_end = None, None
 
   # finalize stats, add new or update current func/flow if exists
   def add_func(back=None):
@@ -184,6 +184,16 @@ def process_function(lines, outer_funcs=[]):
     func.flows.add(flow)
     funcs_set.add(func)
 
+  def is_loop_exit(loop_ip, loop_back, ip, next_line=None):
+    if not next_line:  # last taken line in sample
+      return ip != loop_back
+    next_ip = LC.line_ip(next_line)
+    return not is_in_loop(next_ip, loop_ip)
+
+  def update_flow(c, s):
+    if not new_flow.flow.endswith('_') and new_flow.flow != '': new_flow.flow += '_'
+    new_flow.flow += '%s%s_' % (c, s)
+
   global total_cycles
   inner_end = None
   for index, line in enumerate(lines):
@@ -197,16 +207,20 @@ def process_function(lines, outer_funcs=[]):
     if info.is_taken():
       new_flow.taken += 1
       new_flow.takens.add(hex_ip)
-      if not loop_code:
+      if not loop_ip or is_loop_exit(loop_ip, loop_end, ip, lines[index + 1] if index + 1 < len(lines) else None):
+        loop_ip = None
         c = LC.line_timing(line)[0]
         cycles += c
         total_cycles += c
+      if info.is_indirect() and index + 1 < len(lines):  # taken indirect branch
+        update_flow('I', LC.line_ip_hex(lines[index + 1]))
     if 'ret' in line:  # function end
       add_func(hex_ip)
-      return line, [ip] + inner_funcs  # return last processed line & inner functions
+      return line, [ip] + inner_funcs if ip not in inner_funcs else inner_funcs  # return last processed line & inner functions
     if 'call' in line:  # inner function
-      resume_line, inner_funcs = process_function(lines[index:], outer_funcs=outer_funcs + [ip])
+      resume_line, inner_funcs_add = process_function(lines[index:], outer_funcs=outer_funcs + [ip])
       inner_end = lines.index(resume_line)
+      inner_funcs.extend([item for item in inner_funcs_add if item not in inner_funcs])
       continue
     if index > 1:
       if x86_f.is_jcc_fusion(lines[index - 1], line): new_flow.op_jcc_mf += 1
@@ -217,21 +231,20 @@ def process_function(lines, outer_funcs=[]):
           new_flow.ld_op_mf += 1
     t = info.inst_type()
     if t and t in types: insts_cnt[t] += 1
-    if line_ip in loops and not loop_code:
-      new_flow.flow += '_' + hex_ip + '_'
-      loop_code = True
-      loop_end = loops[line_ip]['back']
+    if line_ip in loops and not loop_ip:  # inner loop
+      loop_ip, loop_end = line_ip, loops[line_ip]['back']
     if info.is_cond_br():  # cond branch line
       new_flow.conds += 1
-      if loop_end and line_ip == loop_end and not info.is_taken():
-        loop_code = False
+      if loop_ip and line_ip == loop_end and not info.is_taken():  # inner loop end
+        update_flow('L', LC.hex_ip(loop_ip))
+        loop_ip = None
         continue
-      if not loop_code:
+      if not loop_ip:
         t = '1' if info.is_taken() else '0'
         new_flow.flow += t
   # reached sample end before function ends
   add_func()
-  return lines[-1], [ip] + inner_funcs  # return last processed line & inner functions
+  return lines[-1], [ip] + inner_funcs if ip not in inner_funcs else inner_funcs  # return last processed line & inner functions
 
 # supports functions observed in a single sample
 def detect_functions(lines):

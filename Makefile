@@ -171,6 +171,8 @@ test-tripcount-mean: lbr/lbr.py do.py lbr/x86.py
 	$(call check_tripcount,1,90,110)
 	$(call check_tripcount,2,60,80)
 
+test-windows:
+	python < scripts/test-windows.py
 
 clean-all: clean
 	rm tramp3d-v4{,.cpp} CLTRAMP3D

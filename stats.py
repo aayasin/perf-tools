@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.00
+__version__= 1.01
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
@@ -30,6 +30,15 @@ def get_stat_log(s, perf_stat_file):
 def get(s, app):
   return get_stat_int(s, C.command_basename(app))
 
+def get_val(s, c):
+  val = None
+  try:
+    val = sDB[c][s][0]
+  except KeyError:
+    C.warn('KeyError for stat: %s, in config: %s' % (s, c))
+  if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, c, str(val)))
+  return val
+
 def print_metrics(app):
   c = C.command_basename(app)
   rollup(c)
@@ -45,13 +54,7 @@ stats = {'verbose': 0}
 def get_stat_int(s, c, stat_file=None, val=-1):
   if not c in sDB and s in ('CPUs_Utilized', ): return read_perf(stat_file)[s][0]
   rollup(c, stat_file)
-  val = None
-  try:
-    val = sDB[c][s][0]
-  except KeyError:
-    C.warn('KeyError for stat: %s, in config: %s' % (s, c))
-  if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, stat_file, str(val)))
-  return val
+  return get_val(s, c)
 
 def rollup_all(stat=None):
   sDB['ALL'], csv_file, reload = {}, 'rollup.csv', None 
@@ -163,8 +166,19 @@ def rollup(c, perf_stat_file=None):
   # TODO: call do.profile to get file names
   sDB[c] = read_perf(perf_stat_file)
   if os.path.exists(vl6): sDB[c].update(read_toplev(vl6))
-  if os.path.exists(info): sDB[c].update(read_toplev(info))
+  if os.path.exists(info):
+    sDB[c].update(read_toplev(info))
+    sDB[c]['sig-misp'] = (read_mispreds(info.replace('.info', '.mispreds'), 'list'))
   if debug > 1: print_DB(c)
+
+def read_mispreds(mispreds_file, sig_threshold=1.0):
+  misp, sig = C.file2lines_pop(mispreds_file), []
+  while True:
+    b = C.str2list(misp.pop())
+    val = b[0][:-1]
+    if not C.is_num(val) or float(val) < sig_threshold: break
+    sig += [b[3].lstrip('0')]
+  return sig
 
 def print_DB(c):
   d = {}

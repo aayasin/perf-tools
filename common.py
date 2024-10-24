@@ -169,6 +169,9 @@ def exe_one_line(x, field=None, debug=False, fail=0):
   print1('%s\n' % res)
   return res
 
+def ptage(r=2): return 'PTAGE_R=%d %s/ptage' % (r, dirname())
+def tail(f=''): return "tail -11 %s | grep -E -v '=total|^\s+0'" % f
+
 def par_jobs_file(commands, name=None, verbose=False, shell='bash'):
   if not name: name = './.p%d.sh' % os.getpid()
   cmds = open(name, 'w')
@@ -221,6 +224,10 @@ def file2lines(filename, fail=False):
     else:
       warn('cannot open %s'%filename, bold=True)
       return [None]
+
+def file2lines_pop(filename):
+  lines = file2lines(filename); lines.pop()
+  return lines
 
 def file2str(f, lines=0):
   out = file2lines(f)

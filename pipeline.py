@@ -45,13 +45,13 @@ def pipeline_view(log, depths):
         #Take the different between cmask-N which is the superset and cmask-N+1 which is the subset put that into the processed_chunks lists
         if not "not" in chunks[index][i][j] and not "not" in chunks[index][i][j+1]: 
           #This takes into accout the PMU queury rate, and the possibility that an event with cmask N can be possibly smaller than N+1 (superset < subset) due to shift in workload intensity, so we take the abs(absolute value).
-          processed_chunks[index][i][j]=abs(int(chunks[index][i][j])-int(chunks[index][i][j+1]))
+          processed_chunks[index][i][j]=abs(int(chunks[index][i][j])-int(chunks[index][i][j+1]))*(j+1)
         else:
            #Error check that "not counted" doesn't exist 
            common.error("Some events were not counted, try running application longer; aborting")
         #Put the tail cmask as its own calculation outside of loop.
         if j == (cols-2): 
-          processed_chunks[index][i][j+1] = int(chunks[index][i][j+1])
+          processed_chunks[index][i][j+1] = int(chunks[index][i][j+1])*(j+1)
       #Generate a sum value as total sum of an event to be divisor.
       for k in range(cols):
         sum += processed_chunks[index][i][k]

@@ -678,8 +678,6 @@ def profile(mask, toplev_args=['mvl6', None]):
     elif n > 1e5: warn("many")
     return perf_data, n
   
-  def tail(f=''): return "tail %s | grep -v total" % f
-
   if en(8) and do['sample'] > 1:
     assert C.any_in((pmu.lbr_event()[:-1], 'instructions:ppp', 'cycles:p '), do['perf-lbr']) or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
     data, nsamples = perf_record('lbr', 8)
@@ -722,8 +720,8 @@ def profile(mask, toplev_args=['mvl6', None]):
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, r" grep -E -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      slow_cmd = "| tee >(sed -E 's/\[[0-9]+\]//' | %s | ./slow-branch | sort -n | PTAGE_R=2 %s/ptage > %s.slow.log)" % (
-        sort2u, C.dirname(), data) if mask_eq(0x48, do['imix']) else ''
+      slow_cmd = "| tee >(sed -E 's/\[[0-9]+\]//' | %s | ./slow-branch | sort -n | %s > %s.slow.log)" % (
+        sort2u, C.ptage(), data) if mask_eq(0x48, do['imix']) else ''
       perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data, log_br_count('sampled taken',
         'samples').replace('Count', '\\nCount')), '@processing %d samples' % nsamples, data, fail=0)
       if do['xed']:
@@ -777,13 +775,13 @@ def profile(mask, toplev_args=['mvl6', None]):
             cmd += "| cut -f2- | tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) " % (sort2up, out)
             msg += ' & i-mix'
           if do['imix'] & 0x4:
-            cmd += '| %s | tee %s.perf-imix.log | %s' % (sort2up, out, tail())
+            cmd += '| %s | tee %s.perf-imix.log | %s' % (sort2up, out, C.tail())
             msg += 'es'
         if (do['imix'] & 0x4) == 0:
           cmd += ' > /dev/null'
         perf_script(cmd, msg, data)
         if do['lbr-verbose'] & 0x1 and args.mode != "profile": inst_fusions(hits, info)
-        if do['imix'] & 0x4: exe("%s && %s" % (tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
+        if do['imix'] & 0x4: exe("%s && %s" % (C.tail('%s.perf-imix-no.log' % out), log_count('instructions', hits)),
             "@instruction-mix no operands")
         if args.verbose > 0: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)
         report_info(info, err)
@@ -823,7 +821,7 @@ def profile(mask, toplev_args=['mvl6', None]):
         " | tee >(sort -k3 | awk 'BEGIN {ip=0; sum=0} {if ($3 != ip) {if (ip) printf \"%%8d %%18s\\n\", sum, ip; ip=$3; sum=$1} else {sum += $1}}"
                 " END {printf \"%%8d %%18s\\n\", sum, ip}' | sort -n | ./ptage > %s.ips-retlat.log)"
         " | sort -n | ./ptage | tee %s.lat-retlat.log | tail -11" % (data, data), "@ top-10 (retire-latency, IPs) pairs", data)
-      exe(tail(data + '.ips-retlat.log'), "@ top-10 IPs by retire-latency")
+      exe(C.tail(data + '.ips-retlat.log'), "@ top-10 IPs by retire-latency")
     is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
       if pmu.cpu('smt-on') and not do['batch'] and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')

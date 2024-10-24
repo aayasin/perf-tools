@@ -31,11 +31,11 @@ def pipeline_view(log,depths):
     for i in range(rows):
       for j in range(event_depth-1):
         if not "not" in chunks[index][i][j] and not "not" in chunks[index][i][j+1]:
-          processed_chunks[index][i][j]=abs(int(chunks[index][i][j])-int(chunks[index][i][j+1]))
+          processed_chunks[index][i][j]=abs(int(chunks[index][i][j])-int(chunks[index][i][j+1]))*(j+1)
         else:
            common.error("Some events were not counted, try running application longer; aborting")
         if j == (cols-2):
-          processed_chunks[index][i][j+1]=int(chunks[index][i][j+1])
+          processed_chunks[index][i][j+1]=int(chunks[index][i][j+1])*(j+1)
       for k in range(cols):
         sum+=processed_chunks[index][i][k]
       for l in range(cols):

@@ -82,6 +82,7 @@ do = {'run':        C.RUN_DEF,
   'lbr-verbose':    0,
   'ldlat':          int(globs['ldlat-def']),
   'levels':         2,
+  'llvm-mca-args':  '--iterations=1000 -mcpu=alderlake',
   'metrics':        tma.get('key-info'),
   'model':          'GNR' if pmu.granite() else 'MTL',
   'msr':            0,
@@ -798,8 +799,8 @@ def profile(mask, toplev_args=['mvl6', None]):
           exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info))
         perf_script("%s %s && %s" % (perf_F(), cmd,
                     C.grep('FL-cycles...[1-9][0-9]?', info, color=1)), "@detailed stats for hot loops", data,
-                    export='PTOOLS_HITS=%s%s%s' % (hits, (' LLVM_LOG=%s' % llvm_mca) if do['loop-ideal-ipc'] & 0x1 else '',
-                                                   (' UICA_LOG=%s' % uica) if do['loop-ideal-ipc'] & 0x2 else ''))
+                    export='PTOOLS_HITS=%s%s%s' % (hits, (' LLVM_LOG=%s LLVM_ARGS="%s"' % (llvm_mca, do['llvm-mca-args']))
+                    if do['loop-ideal-ipc'] & 0x1 else '', (' UICA_LOG=%s' % uica) if do['loop-ideal-ipc'] & 0x2 else ''))
       else: warn_file(loops)
 
   if en(9) and do['sample'] > 2:

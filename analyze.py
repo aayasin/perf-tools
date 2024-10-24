@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.51 # see version line of do.py
+__version__ = 0.52 # see version line of do.py
 
 import common as C, pmu, stats, tma
 from lbr import x86
@@ -19,7 +19,9 @@ from lbr import x86
 threshold = {
   'hot-loop':         0.05,
   'misp-sig':         5,
+  'misp-sig-ifetch':  1,
   'indirect-target':  0.15,
+  'IpTB':             3 * pmu.cpu_pipeline_width(),
   'useless-hwpf':     0.15,
 }
 def bottlenecks(): return tma.get('bottlenecks-list-5')
@@ -38,8 +40,9 @@ def setup(app, basename=None, verbose=0):
   if len(handles): handles.clear()
   handles['app'] = app
   handles['verbose'] = verbose
+  log_exts = ('hitcounts', 'info', 'mispreds')
   if basename:
-    for e in ('hitcounts', 'info', 'mispreds'): handles[e] = '.'.join((basename, e, 'log'))
+    for e in log_exts: handles[e] = '.'.join((basename, e, 'log'))
 
 def advise(m, prefix='Advise'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
 def exe(x, msg=None): return C.exe_cmd(x, msg=msg, debug=handles['verbose'] > 1)
@@ -66,10 +69,8 @@ def analyze_misp():
       if t_cov > threshold['indirect-target']:
         hint('de-virtualize above %s branch when target is %s (%s of cases)' % (i, t, percent(t_cov)))
 
-  misp1 = ext('mispreds').replace('.log', '-ptage.log')
-  exe("cat %s | ./ptage | tee %s | tail -11 | grep -E -v '=total|^\s+0'" % (ext('mispreds'), misp1),
-      '@ top significant (== # executions * # mispredicts) branches')
-  misp = C.file2lines(misp1); misp.pop()
+  exe(C.tail(ext('mispreds')), '@ top significant (== # executions * # mispredicts) branches')
+  misp = C.file2lines_pop(ext('mispreds'))
   while 1:
     b = C.str2list(misp.pop())
     verbose('misp', b, 1)
@@ -83,7 +84,7 @@ def analyze_misp():
     elif x86.is_branch(line, x86.INDIRECT):
       forward = -2
     advise('branch at %s has significance of %s, misp-ratio %s, %s' % (b[3].lstrip('0'), b[0], b[2],
-      ('non-cond:' + ('indirect' if forward is -2 else '?')) if forward < 0 else 'cond:forward=%d' % int(forward)))
+      ('non-cond:' + ('indirect' if forward == -2 else '?')) if forward < 0 else 'cond:forward=%d' % int(forward)))
     if forward == -2:
       verbose('indirect', line, 2)
       top_target(src)
@@ -111,7 +112,6 @@ def analyze(app, args, do=None):
   if do:
     for x in threshold.keys():
       if 'az-%s' % x in do: threshold[x] = do['az-%s' % x]
-  threshold['IpTB'] = 3 * pmu.cpu_pipeline_width()
 
   def examine(bottleneck):
     value = stats.get(bottleneck, app)
@@ -135,16 +135,17 @@ def analyze_ifetch():
   def loop_uops(loop, loop_size): return loop_size - sum(loop[x] for x in loop.keys() if x.endswith('-mf'))
   def l2s(l): return ', '.join(l)
   loops = stats.read_loops_info(ext('info'), as_loops=True)
+  sig_misp = stats.read_mispreds(ext('mispreds'), threshold['misp-sig-ifetch'])
   for l in sorted(loops.keys()):
     verbose('loop', (l, loops[l]), 2)
     if 'FL-cycles%' not in loops[l]: continue
-    cycles, issues, extra, hints = loops[l]['FL-cycles%'], [], [], set()
-    if cycles <= threshold['hot-loop']: continue
+    back, cycles, issues, extra, hints = loops[l]['back'].lstrip('0x'), loops[l]['FL-cycles%'], [], [], set()
+    if cycles <= threshold['hot-loop'] and back not in sig_misp: continue
     verbose('loop', (l, loops[l]), 1)
     loop_size = loops[l]['size'] if type(loops[l]['size']) == int else -1
     if 0 < loop_size < threshold['IpTB']:
       issues += ['tight in size']
-      extra += ['size-in-bytes=%d' % loops[l]['sizeIB']]
+      if 'sizeIB' in loops[l]: extra += ['size-in-bytes=%d' % loops[l]['sizeIB']]
       hints.add('unroll')
     if loops[l]['inner']:
       issues += ['inner-loop']
@@ -156,15 +157,18 @@ def analyze_ifetch():
     if int(loops[l]['ip'], 16) & 0x1F:
       issues += ['32-byte unaligned']
       hints.add('align')
+    if back in sig_misp:
+      issues += ['back=%s is costly mispredict' % loops[l]['back']]
+      hints.add('unroll')
     if len(issues) == 0: continue
-    advise('Hot %s is %s (%s of time, size= ~%d uops, %s);\n\t\t\t-> try to %s it' % (l,
+    advise('Hot %s is %s. Loop accounts for %s of time, size= ~%d uops, %s;\n\t\t\t-> try to %s it' % (l,
       l2s(issues), percent(cycles), loop_uops(loops[l], loop_size), l2s(extra), l2s(hints)))
     #if loop_size > 0 and loops[l]['taken'] == 0: loop_code(loops[l])
     if loop_size > 0: loop_code(loops[l])
 
 def gen_misp_report(data, header='Branch Misprediction Report (taken-only)'):
   if not data: return header.lower()
-  def filename(ext): return '%s.%s.log' % (data, ext)
+  def filename(ext='mispreds-tmp'): return '%s.%s.log' % (data, ext)
   def file2lines(ext): return C.file2lines(filename(ext), fail=True)
   takens_freq, mispreds = {}, {}
   for l in file2lines('takens')[:-1]:
@@ -175,7 +179,8 @@ def gen_misp_report(data, header='Branch Misprediction Report (taken-only)'):
     m = int(b[1])
     mispreds[ (' '.join(b[2:]), C.ratio(m, takens_freq[b[2]])) ] = m * takens_freq[b[2]]
   # significance := takens x mispredicts (based on taken-branch IP)
-  with open(filename('mispreds'), 'w') as f:
+  with open(filename(), 'w') as f:
     f.write('%s:\n' % header + ' '.join(('significance', '%7s' % 'misp-ratio', 'instruction address & ASM')) + '\n')
     for b in C.hist2slist(mispreds):
       if b[1] > 1: f.write('\t'.join(('%12s' % b[1], '%7s' % b[0][1], b[0][0]))+'\n')
+  C.exe_cmd("cat %s | %s > %s && rm -f %s" % (filename(), C.ptage(), filename('mispreds'), filename()))

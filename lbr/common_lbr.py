@@ -241,6 +241,7 @@ class LineInfo:
     'header':     is_header,
     'ilen':       get_ilen,
     'imm':        x86.is_imm,
+    'indirect':   is_type,
     'inst':       x86.get,
     'inst type':  line_inst,
     'ip':         line_ip,
@@ -306,6 +307,7 @@ class LineInfo:
   def header(self):         return self._get_info('header')
   def ilen(self):           return self._get_info('ilen')
   def is_imm(self):         return self._get_info('imm')
+  def is_indirect(self):    return self._get_info('indirect', arg=x86.INDIRECT)
   def inst(self):           return self._get_info('inst', arg='inst')
   def inst_type(self):      return self._get_info('inst type')
   def ip(self):             return self._get_info('ip')

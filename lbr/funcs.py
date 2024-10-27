@@ -13,7 +13,7 @@ __author__ = 'akhalil'
 
 import common as C
 import lbr.common_lbr as LC
-from lbr.loops import loops, is_in_loop
+from lbr.loops import loops, is_loop_exit
 import lbr.x86_fusion as x86_f, lbr.x86 as x86
 
 user_imix = C.env2list('LBR_FUNC_IMIX', ['zcnt'])
@@ -184,21 +184,6 @@ def process_function(lines, outer_funcs=[]):
     func.flows.add(flow)
     funcs_set.add(func)
 
-  def next_line(i):
-    while i + 1 < len(lines) and LC.line2info(lines[i+1]).is_label():
-      i += 1
-    return lines[i+1] if i + 1 < len(lines) else None
-  def prev_line(i):
-    while i > 0 and LC.line2info(lines[i-1]).is_label():
-      i -= 1
-    return lines[i-1] if i > 0 else None
-
-  def is_loop_exit(loop_ip, loop_back, ip, next_line=None):
-    if not next_line:  # last taken line in sample
-      return ip != loop_back
-    next_ip = LC.line_ip(next_line)
-    return not is_in_loop(next_ip, loop_ip)
-
   def update_flow(c, s):
     if not new_flow.flow.endswith('_') and new_flow.flow != '': new_flow.flow += '_'
     new_flow.flow += '%s%s_' % (c, s)
@@ -213,7 +198,7 @@ def process_function(lines, outer_funcs=[]):
     new_flow.code += line.strip() + '\n'
     line_ip = info.ip()
     hex_ip = LC.hex_ip(line_ip)
-    next = next_line(index)
+    next = LC.next_line(lines, index)
     if info.is_taken():
       new_flow.taken += 1
       new_flow.takens.add(hex_ip)
@@ -233,7 +218,7 @@ def process_function(lines, outer_funcs=[]):
       inner_funcs.extend([item for item in inner_funcs_add if item not in inner_funcs])
       continue
     if index > 1:
-      prev = prev_line(index)
+      prev = LC.prev_line(lines, index)
       if prev:
         if x86_f.is_jcc_fusion(prev, line): new_flow.op_jcc_mf += 1
         elif index == len(lines) - 1 or not x86_f.is_jcc_fusion(line, next):

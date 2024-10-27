@@ -229,6 +229,17 @@ def line_ip(line, sample=None):
     exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line.strip(), stack=True)
 def hex_ip(ip): return '0x%x' % ip if ip and ip > 0 else '-'
 
+# get next/prev lines by index w/o labels
+def next_line(sample, i, step=1):
+  while i + step < len(sample) and line2info(sample[i+step]).is_label():
+    i += 1
+  return sample[i+step] if i + step < len(sample) else None
+def prev_line(sample, i=None, step=1):
+  if not i: i = len(sample)
+  while i - step > 0 and line2info(sample[i-step]).is_label():
+    i -= 1
+  return sample[i-step] if i - step > 0 else None
+
 # line properties class with lazy evaluation
 class LineInfo:
 

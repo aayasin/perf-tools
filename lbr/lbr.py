@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.43 # see version line of do.py
+__version__= x86.__version__ + 2.44 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -82,6 +82,7 @@ lbr_events = []
 footprint = set()
 pages = set()
 indirects = set()
+ipc_ips = set()
 ips_after_uncond_jmp = set()
 
 def inc_pair(first, second='JCC', suffix='non-fusible'):
@@ -129,6 +130,11 @@ def edge_en_init(indirect_en):
       indirects.add(int(x, 16))
       for y in ('', '-misp'):
         for z in ('targets', 'paths'): hsts['indirect%s_%s_%s' % (y, x, z)] = {}
+  if os.getenv('LBR_IPC_IPS'):
+    for x in os.getenv('LBR_IPC_IPS').split(','):
+      assert x.startswith('0x'), 'invalid address: %s in LBR_IPC_IPS' % x
+      ipc_ips.add(int(x, 16))
+      hsts['IPC_' + x] = {}
   if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'], hsts_threshold['dsb-heatmap']  = {}, 0
 
 def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
@@ -424,7 +430,10 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         insts += 1
         if info.is_taken():
           inc(hsts[IPTB], insts); size += insts; insts = 0
-          if 'IPC' in line: inc(hsts['IPC'], LC.line_timing(line)[1])
+          if 'IPC' in line:
+            ipc = LC.line_timing(line)[1]
+            inc(hsts['IPC'], ipc)
+            if ip in ipc_ips: inc(hsts['IPC_' + LC.hex_ip(ip)], ipc)
       LC.glob['all'] += 1
       if size > 0:
         loop_srcline = None if ip in loops.loops and 'srcline' in loops.loops[ip] and loops.loops[ip]['srcline'] == srcline else srcline

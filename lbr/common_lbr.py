@@ -378,7 +378,7 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
   if d['num-buckets'] > 1:
     C.printc('%s histogram%s:' % (name, ' of loop %s' % hex_ip(loop_ipc) if loop_ipc else ''))
     sorted_keys = sorted(hist.keys(), key=sorter)
-    if name == 'IPC': print(print_ipc_hist(hist, sorted_keys, threshold))
+    if 'IPC' in name: print(print_ipc_hist(hist, sorted_keys, threshold))
     else:
       left, limit = 0, int(threshold * tot)
       for k in sorted_keys:

@@ -36,6 +36,11 @@ def loop_by_line(line, body=False):
             (not body and loop_ipc <= ip <= loops[loop_ipc]['back']):
       return loop_ipc
   return None
+def is_loop_exit(loop_ip, loop_back, ip, next_line=None):
+  if not next_line:  # last taken line in sample
+    return ip != loop_back
+  next_ip = LC.line_ip(next_line)
+  return not is_in_loop(next_ip, loop_ip)
 
 def tripcount(ip, loop_ipc, state):
   if state == 'new' and loop_ipc in loops:
@@ -144,20 +149,10 @@ inter_loops_dict = dict()
 def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
                 MOLD=4e4):  # Max Outer Loop Distance
   global bwd_br_tgts, loop_cands, contigous_loops, functions_in_loops, inter_loops, inter_loops_dict  # unlike nonlocal, global works in python2 too!
-  # lines[x+1]/lines[x+2] etc w/ no labels
-  def next_line(x, step=1):
-    while x + step < len(lines) and LC.line2info(lines[x+step]).is_label():
-      x += 1
-    return lines[x+step] if x + step < len(lines) else None
-  # lines[-1]/lines[-2] etc w/ no labels
-  def prev_line(i=-1):
-    while LC.line2info(lines[i]).is_label():
-      i -= 1
-    return lines[i]
   def find_block_ip(x=len(lines) - 2):
     while x >= 0:
       if LC.is_taken(lines[x]):
-        n = next_line(x)
+        n = LC.next_line(lines, x)
         if n is None: return 0, -1
         return LC.line2info(n).ip(), x
       x -= 1
@@ -174,7 +169,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       if LC.line2info(lines[at]).ip() == ip: return res
       at -= 1
     return False
-  prev_l = prev_line()
+  prev_l = LC.prev_line(lines)
   prev_i = LC.line2info(prev_l)
   def iter_update():
     # inc(loop['BK'], hex(line_ip(lines[-1])))
@@ -234,10 +229,10 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         if info_x.is_taken():
           break  # do not fill loop size/etc unless all in-body branches are non-taken
         if info_x.is_cond_br(): conds += [inst_ip]
-        next_l = next_line(x)
+        next_l = LC.next_line(lines, x)
         if x86_f.is_jcc_fusion(lines[x], next_l):
           op_jcc_mf += 1
-        elif x == len(lines) - 2 or not x86_f.is_jcc_fusion(next_l, next_line(x, 2)):
+        elif x == len(lines) - 2 or not x86_f.is_jcc_fusion(next_l, LC.next_line(lines, x, step=2)):
           if x86_f.is_ld_op_fusion(lines[x], next_l): ld_op_mf += 1
           elif x86_f.is_mov_op_fusion(lines[x], next_l): mov_op_mf += 1
         if x86_f.is_vec_ld_op_fusion(lines[x], next_l): ld_op_mf += 1

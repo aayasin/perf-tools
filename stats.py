@@ -115,12 +115,50 @@ def is_metric(s):
   return s[0].isupper() and not s.isupper() and \
          not s.lower().endswith(('instructions', 'pairs', 'branches', 'insts-class', 'insts-subclass'))
 
-def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
+def read_histos(info, as_histos=False, groups=False):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
   histo = None
+  g = 'LBR.Histo'
+  def add(k, v):
+    if as_histos:
+      if histo not in d: d[histo] = {}
+      d[histo][k] = v
+    else: d[k] = (v, g) if groups else v
+  def rgx(): return histo == 'inst-per-leaf-func-name'
   for l in C.file2lines(info):
     if 'IPC histogram of' in l: break  # stops upon detailed loops stats
+    if 'WARNING' in l: pass
+    l = l.strip()
+    if 'histogram:' in l:  # histogram start
+      histo = '%s' % l.split()[0].replace(C.color.DARKCYAN, '')
+      continue
+    if 'summary:' in l:  # histogram end
+      if not histo: histo = l.split()[0]
+      l_list = l.split('{')[1][:-1].split(',')
+      for e in l_list:
+        e_list = re.split(r'(?<!:):(?!:)', e) if rgx() else e.split(':')
+        k = e_list[0].strip()
+        v = convert(e_list[1].strip())
+        if not as_histos: k = '%s%s_%s' % ((g + '.') if not groups else '', histo, k)
+        add(k, v)
+      histo = None
+      continue
+    if histo:  # histogram line
+      l_list = re.split(r'\s{2,}', l) if rgx() else l.split()
+      k = l_list[0]
+      if k == 'IPC': continue # skip IPC histo header
+      k = k[:-1]
+      if not as_histos: k = '%s%s_[%s]' % ((g + '.') if not groups else '', histo, k)
+      v = convert(l_list[1])
+      add(k, v)
+  return d
+
+def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
+  assert os.path.isfile(info), 'Missing file: %s' % info
+  d = {}
+  for l in C.file2lines(info):
+    if 'histogram' in l: break  # stops upon global histograms
     s = v = None
     g = 'LBR.'
     if 'WARNING' in l: pass
@@ -129,26 +167,6 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
       s = l[0].strip()#' '.join(l[0].split()) # re.sub('  +', ' ', l[0])
       if sep: s = C.chop(re.sub(r'[\s\-]+', sep, s))
       v = convert(l[1])
-    # extract global histograms
-    # TODO: Amiri - handle inst-per-leaf-func-name which fails parsing
-    if 'histogram:' in l and 'inst-per-leaf-func-name' not in l:  # histogram start
-      histo = '%s_' % l.split()[0].replace(C.color.DARKCYAN, '')
-      continue
-    if histo and 'summary:' in l:  # histogram end
-      g += 'Histo'
-      l_list = l.split('{')[1][:-1].split(',')
-      for e in l_list:
-        e_list = e.split(':')
-        value = convert(e_list[1].strip())
-        k = '%s%s%s' % ((g + '.') if not groups else '', histo, e_list[0].strip())
-        d[k] = (value, g) if groups else value
-      histo = None
-      continue
-    if histo:  # histogram line
-      g += 'Histo'
-      l_list = l.split()
-      s = '%s%s[%s]' % ((g + '.') if not groups else '', histo, l_list[0][:-1])
-      v = convert(l_list[1])
     if not v is None:
       if groups and g == 'LBR.':
         if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
@@ -157,6 +175,7 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
         elif s.startswith('proxy count'): g += 'Proxy'
         else: g += 'Event'
       d[s] = (v, g) if groups else v
+  d.update(read_histos(info, groups=groups))
   if read_loops: d.update(read_loops_info(info, loop_id, sep=sep, groups=groups))
   return d
 
@@ -168,7 +187,7 @@ def rollup(c, perf_stat_file=None):
   if os.path.exists(vl6): sDB[c].update(read_toplev(vl6))
   if os.path.exists(info):
     sDB[c].update(read_toplev(info))
-    sDB[c]['sig-misp'] = (read_mispreds(info.replace('.info', '.mispreds'), 'list'))
+    sDB[c]['sig-misp'] = (read_mispreds(info.replace('.info', '.mispreds')), 'list')
   if debug > 1: print_DB(c)
 
 def read_mispreds(mispreds_file, sig_threshold=1.0):

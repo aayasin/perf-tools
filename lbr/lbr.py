@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.44 # see version line of do.py
+__version__= x86.__version__ + 2.45 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -188,24 +188,7 @@ def edge_stats(line, lines, xip, size):
   if new_line:
     footprint.add(ip >> 6)
     pages.add(ip >> 12)
-  # lines[-1]/lines[-2] etc w/ no labels
-  def prev_line(i=-1):
-    while LC.is_label(lines[i]):
-      i -= 1
-    return lines[i]
-  xline = prev_line()
-  xinfo = LC.line2info(xline)
-  if 'dsb-heatmap' in hsts and (xinfo.is_taken() or new_line):
-    inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
-  if 'indirect-x2g' in hsts and LC.is_type(x86.INDIRECT, xline):
-    ilen = xinfo.ilen() or 2
-    if abs(ip - (xip + ilen)) >= 2 ** 31:
-      inc(hsts['indirect-x2g'], xip)
-      if 'MISP' in xline: inc(hsts['indirect-x2g-misp'], xip)
-  if xip and xip in indirects:
-    inc(hsts['indirect_%s_targets' % LC.hex_ip(xip)], ip)
-    if 'MISP' in xline: inc(hsts['indirect-misp_%s_targets' % LC.hex_ip(xip)], ip)
-    #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
+  xline, xinfo = None, None
   # MRN with index reg detection
   mrn_dst = info.dst()
   # CHECK: is this RIP only (64-bit) or applies to EIP too?!
@@ -216,7 +199,7 @@ def edge_stats(line, lines, xip, size):
   if LC.is_type("inc-dec", line) and info.is_memory() and info.is_mem_idx():
     inc_stat('%s non-MRNable' % ('INC' if 'inc' in info.inst() else 'DEC'))
   elif mrn_cond(line) and (info.is_mem_store() or info.is_mem_rmw()) and not re.match("[a-d]h", mrn_dst):
-    x = len(lines)-1
+    x = len(lines) - 1
     while x > 0:
       info_x = LC.line2info(lines[x])
       if mrn_cond(lines[x]) and info_x.is_mem_load():
@@ -224,49 +207,63 @@ def edge_stats(line, lines, xip, size):
         if mrn_src and mrn_src[0] == mrn_dst:
           inc_pair('LD', 'ST', suffix='non-MRNable')
           break
-      x-=1 
+      x -= 1
   if info.inst() in x86.V2II2V:
-    vecs = ['xmm','ymm','zmm']
+    vecs = ['xmm', 'ymm', 'zmm']
     v2ii2v_srcs = info.srcs()
     v2ii2v_dst = info.dst()
     if v2ii2v_srcs:
       if C.any_in(vecs, ''.join(v2ii2v_srcs)): inc_stat('V2I transition-Penalty')
       elif C.any_in(vecs, v2ii2v_dst): inc_stat('I2V transition-Penalty')
     elif v2ii2v_dst: inc_stat('V2I transition-Penalty')
-  if xinfo.is_cond_br() and xinfo.is_taken():
-    LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
-  # checks all lines but first
-  if info.is_cond_br():
-    if info.is_taken(): LC.glob['cond_taken-not-first'] += 1
-    else: LC.glob['cond_non-taken'] += 1
-    if x86_f.is_jcc_fusion(xline, line):
-      LC.glob['cond_fusible'] += 1
-      if size > 1 and xinfo.is_test_cmp() and LC.is_type(x86.LOAD, prev_line(-2)):
-        inc_pair('LD-CMP', suffix='fusible')
-    else:
-      LC.glob['cond_non-fusible'] += 1
-      if xinfo.is_mem_imm():
-        inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if xinfo.is_test_cmp() else 'OTHER',
-                                      '' if xinfo.is_mem_imm() else 'NO'))
+  if size > 1:
+    xline = LC.prev_line(lines)
+    xinfo = LC.line2info(xline)
+    if 'dsb-heatmap' in hsts and (xinfo.is_taken() or new_line):
+      inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
+    if 'indirect-x2g' in hsts and LC.is_type(x86.INDIRECT, xline):
+      ilen = xinfo.ilen() or 2
+      if abs(ip - (xip + ilen)) >= 2 ** 31:
+        inc(hsts['indirect-x2g'], xip)
+        if 'MISP' in xline: inc(hsts['indirect-x2g-misp'], xip)
+    if xip and xip in indirects:
+      inc(hsts['indirect_%s_targets' % LC.hex_ip(xip)], ip)
+      if 'MISP' in xline: inc(hsts['indirect-misp_%s_targets' % LC.hex_ip(xip)], ip)
+      #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
+    if xinfo.is_cond_br() and xinfo.is_taken():
+      LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
+    # checks all lines but first
+    if info.is_cond_br():
+      if info.is_taken(): LC.glob['cond_taken-not-first'] += 1
+      else: LC.glob['cond_non-taken'] += 1
+      if x86_f.is_jcc_fusion(xline, line):
+        LC.glob['cond_fusible'] += 1
+        if size > 2 and xinfo.is_test_cmp() and LC.is_type(x86.LOAD, LC.prev_line(lines, step=2)):
+          inc_pair('LD-CMP', suffix='fusible')
       else:
-        counted = False
-        for x in LC.user_jcc_pair:
-          if LC.is_type(x.lower(), xline):
-            counted = inc_pair(x)
-            break
-        if counted: pass
-        elif xinfo.is_cond_br(): counted = inc_pair('JCC')
-        elif LC.is_type(x86.COMI, xline): counted = inc_pair('COMI')
-        if size > 1 and x86_f.is_jcc_fusion(prev_line(-2), line):
-          def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
-          if LC.is_type(x86.MOV, xline): inc_pair2('MOV')
-          elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
-  # check erratum for line (with no consideration of macro-fusion with previous line)
-  if LC.is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
+        LC.glob['cond_non-fusible'] += 1
+        if xinfo.is_mem_imm():
+          inc_pair('%s_MEM%sIDX_IMM' % ('CMP' if xinfo.is_test_cmp() else 'OTHER',
+                                        '' if xinfo.is_mem_imm() else 'NO'))
+        else:
+          counted = False
+          for x in LC.user_jcc_pair:
+            if LC.is_type(x.lower(), xline):
+              counted = inc_pair(x)
+              break
+          if counted: pass
+          elif xinfo.is_cond_br(): counted = inc_pair('JCC')
+          elif LC.is_type(x86.COMI, xline): counted = inc_pair('COMI')
+          if size > 2 and x86_f.is_jcc_fusion(LC.prev_line(lines, step=2), line):
+            def inc_pair2(x): return inc_pair(x, suffix='non-fusible-IS')
+            if LC.is_type(x86.MOV, xline): inc_pair2('MOV')
+            elif re.search(r"lea\s+([\-0x]+1)\(%[a-z0-9]+\)", xline): inc_pair2('LEA-1')
+    # check erratum for line (with no consideration of macro-fusion with previous line)
+    if LC.is_jcc_erratum(line, None if size == 1 else xline): inc_stat('JCC-erratum')
   if 'ret' in info.inst(): edge_leaf_func_stats(lines, line)
-  if size <= 1: return # a sample with >= 2 instructions after this point
+  if size <= 2: return # a sample with >= 2 instructions after this point
   if not x86_f.is_jcc_fusion(xline, line):
-    x2line = prev_line(-2)
+    x2line = LC.prev_line(lines, step=2)
     if x86_f.is_ld_op_fusion(x2line, xline): inc_pair('LD', 'OP', suffix='fusible')
     elif x86_f.is_mov_op_fusion(x2line, xline): inc_pair('MOV', 'OP', suffix='fusible')
     if x86_f.is_vec_ld_op_fusion(lines[-2], lines[-1]): inc_pair('VEC LD', 'OP', suffix='fusible')
@@ -435,7 +432,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
             inc(hsts['IPC'], ipc)
             if ip in ipc_ips: inc(hsts['IPC_' + LC.hex_ip(ip)], ipc)
       LC.glob['all'] += 1
-      if size > 0:
+      if size > 1:
         loop_srcline = None if ip in loops.loops and 'srcline' in loops.loops[ip] and loops.loops[ip]['srcline'] == srcline else srcline
         loops.detect_loop(ip, lines, loop_ipc, takens, loop_srcline)
       if skip_bad: tc_state = loops.loop_stats(line, loop_ipc, tc_state)

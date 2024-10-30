@@ -295,12 +295,28 @@ def cpu_msrs():
 def cpu_peak_kernels(widths=(4, 5, 6, 8)):
   return ['peak%dwide' % x for x in widths]
 
-def cpu_pipeline_width():
+def cpu_pipeline_width(all_widths=None):
+  full_widths = {'dsb':('IDQ.DSB_UOPS',4), 'mite':('IDQ.MITE_UOPS',4), 'decoders':('INST_DECODED.DECODERS',4), 'ms':('IDQ.MS_UOPS',4),
+                 'issued':('UOPS_ISSUED.ANY',4), 'executed':('UOPS_EXECUTED.CORE',8), 'retired':('UOPS_RETIRED.ALL',4)}
+  if all_widths: # TODO: eventually read from pmu-tools.
+    if goldencove() or redwoodcove():
+      full_widths = {'dsb':('IDQ.DSB_UOPS',8), 'mite':('IDQ.MITE_UOPS',6), 'decoders':('INST_DECODED.DECODERS',6), 'ms':('IDQ.MS_UOPS',4),
+                     'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.CORE',12),'retired':('UOPS_RETIRED.SLOTS',8)}
+    return full_widths
   width = 4
   if icelake(): width = 5
   elif goldencove() or redwoodcove(): width = 6
   elif lunarlake(): width = 8
   return width
+
+def widths_2_cmasks(widths):
+  events = ""
+  for i in widths:
+    e = widths[i][0]
+    for j in range(int(widths[i][1])):
+      event_cmask = e + ':c' + str(j+1)
+      events += perf_event(event_cmask).replace(e, event_cmask) + ','
+  return events[:-1]
 
 # deeper uarch stuff
 

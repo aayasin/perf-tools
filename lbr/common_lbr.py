@@ -229,6 +229,17 @@ def line_ip(line, sample=None):
     exit(line, sample, 'line_ip()', msg="expect <address> at left of '%s'" % line.strip(), stack=True)
 def hex_ip(ip): return '0x%x' % ip if ip and ip > 0 else '-'
 
+# get next/prev lines by index w/o labels
+def next_line(sample, i, step=1):
+  while i + step < len(sample) and line2info(sample[i+step]).is_label():
+    i += 1
+  return sample[i+step] if i + step < len(sample) else None
+def prev_line(sample, i=None, step=1):
+  if not i: i = len(sample)
+  while i - step > 0 and line2info(sample[i-step]).is_label():
+    i -= 1
+  return sample[i-step] if i - step > 0 else None
+
 # line properties class with lazy evaluation
 class LineInfo:
 
@@ -241,6 +252,7 @@ class LineInfo:
     'header':     is_header,
     'ilen':       get_ilen,
     'imm':        x86.is_imm,
+    'indirect':   is_type,
     'inst':       x86.get,
     'inst type':  line_inst,
     'ip':         line_ip,
@@ -306,6 +318,7 @@ class LineInfo:
   def header(self):         return self._get_info('header')
   def ilen(self):           return self._get_info('ilen')
   def is_imm(self):         return self._get_info('imm')
+  def is_indirect(self):    return self._get_info('indirect', arg=x86.INDIRECT)
   def inst(self):           return self._get_info('inst', arg='inst')
   def inst_type(self):      return self._get_info('inst type')
   def ip(self):             return self._get_info('ip')

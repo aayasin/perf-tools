@@ -297,25 +297,26 @@ def cpu_peak_kernels(widths=(4, 5, 6, 8)):
 
 def cpu_pipeline_width(all_widths=None):
   width=4
-  full_widths={'dsb':('IDQ.DSB_UOPS',4),'mite':('IDQ.MITE_UOPS',4),'decoders':('INST_DECODED.DECODERS',4),'ms':('IDQ.MS_UOPS',4),'issued':('UOPS_ISSUED.ANY',4),'executed':('UOPS_EXECUTED.CORE',8),'retired':('UOPS_RETIRED.ALL',4)}
-  if all_widths is None:
-    if icelake(): width = 5
-    elif goldencove() or redwoodcove(): width = 6
-    elif lunarlake(): width = 8
-    return width
-  else: #TODO we will eventually read from pmu-tools.
-    if goldencove() or redwoodcove(): full_widths={'dsb':('IDQ.DSB_UOPS',8),'mite':('IDQ.MITE_UOPS',6),'decoders':('INST_DECODED.DECODERS',6),'ms':('IDQ.MS_UOPS',4),'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.CORE',12),'retired':('UOPS_RETIRED.SLOTS',8)}
+  full_widths = {'dsb':('IDQ.DSB_UOPS',4), 'mite':('IDQ.MITE_UOPS',4), 'decoders':('INST_DECODED.DECODERS',4), 'ms':('IDQ.MS_UOPS',4),
+                 'issued':('UOPS_ISSUED.ANY',4), 'executed':('UOPS_EXECUTED.CORE',8), 'retired':('UOPS_RETIRED.ALL',4)}
+  if all_widths: # TODO: eventually read from pmu-tools.
+    if goldencove() or redwoodcove():
+      full_widths = {'dsb':('IDQ.DSB_UOPS',8), 'mite':('IDQ.MITE_UOPS',6), 'decoders':('INST_DECODED.DECODERS',6), 'ms':('IDQ.MS_UOPS',4),
+                     'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.CORE',12),'retired':('UOPS_RETIRED.SLOTS',8)}
     return full_widths
+  if icelake(): width = 5
+  elif goldencove() or redwoodcove(): width = 6
+  elif lunarlake(): width = 8
+  return width
 
 def widths_2_cmasks(widths):
-    evts=""
-    for i in widths:
-      for j in range(int(widths[i][1])):
-        evt_name = widths[i][0]
-        evt_cmask = str(j+1)
-        evts += str(perf_event(evt_name+':c'+evt_cmask)).replace(evt_name,evt_name+':c'+evt_cmask)+','
-    evts = evts[:-1]
-    return evts
+  events = ""
+  for i in widths:
+    e = widths[i][0]
+    for j in range(int(widths[i][1])):
+      event_cmask = e + ':c' + str(j+1)
+      events += perf_event(event_cmask).replace(e, event_cmask) + ','
+  return events[:-1]
 
 # deeper uarch stuff
 

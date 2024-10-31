@@ -412,7 +412,6 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   perf, toplev, ocperf, genretlat, env = get_perf_toplev()
   base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
   logs = {'stat': None, 'code': base + '-code.log', 'tma': None}
-  process_win = bool(args.windows_file)
   def prepend_PERF(cmd): return env + cmd.replace(env, '') if 'PERF=' in cmd else cmd
   def profile_exe(cmd, msg, step, mode='redirect', tune='', fail=0):
     if do['help'] < 0:
@@ -982,7 +981,6 @@ def parse_args():
   ap.add_argument('-o', '--output', help='basename to use for output files')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
-  ap.add_argument('-w', '--windows-file', default=None, help='windows file to process in process-win command')
   x = ap.parse_args()
   return x
 

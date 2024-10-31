@@ -21,9 +21,9 @@ $CC -S jumpy5p14.c
 $PY ./gen-kernel.py -i "addps %xmm1,%xmm2" "vsubps %ymm1,%ymm2,%ymm3" -n10 > sse2avx.c
 #$CC -o sse2avx sse2avx.c
 
-$PY ./gen-kernel.py -i NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak4wide.c
-$PY ./gen-kernel.py -i NOP NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak5wide.c
-$PY ./gen-kernel.py -i NOP#3 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 > peak6wide.c
+$PY ./gen-kernel.py -i NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 --init-regs rax > peak4wide.c
+$PY ./gen-kernel.py -i NOP NOP 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 --init-regs rax > peak5wide.c
+$PY ./gen-kernel.py -i NOP#3 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 --init-regs rax > peak6wide.c
 $PY ./gen-kernel.py jumpy-seq -i NOP JMP -a3 -n30 > dsb-jmp.c
 $PY ./gen-kernel.py jumpy-seq -i JG -a 6 -n 20000  > jcc20k.c
 $PY ./gen-kernel.py jumpy-random -a 6 -i JMP -n 1024 > rfetch64k.c
@@ -45,8 +45,8 @@ $PY ./gen-kernel.py -i 'mov 0x0(%rsp),%r12' 'test %r12,%r12' 'jg Lbl_end' 'inc %
 $PY ./gen-kernel.py -i 'cmpq $0x0,0x0(%rsp)' 'jg Lbl_end' 'inc %rsp' 'dec %rsp' -n 1 > ld-cmp-jcc-2i-imm-inc.c
 $PY ./gen-kernel.py -i 'cmpq %r12,0x0(%rsp)' 'jg Lbl_end' 'inc %r12' 'dec %r12' -p 'movq $0x0,%r12' -n 1 > ld-cmp-jcc-2i-reg-inc.c
 $PY ./gen-kernel.py -p "mov %rsp,%rdx" "sub \$0x40000,%rdx" -i "cmpl \$0,0x40000(,%rdx,1)" -n 100 > cmp0-mem-index.c
-$PY ./gen-kernel.py -i 'vshufps $0xff,%ymm0,%ymm1,%ymm2' 'vshufps $0xff,%ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' > vshufps.c
-$PY ./gen-kernel.py -i 'vpshufb %ymm0,%ymm1,%ymm2' 'vpshufb %ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' > vpshufb.c
+$PY ./gen-kernel.py -i 'vshufps $0xff,%ymm0,%ymm1,%ymm2' 'vshufps $0xff,%ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' --init-regs rax > vshufps.c
+$PY ./gen-kernel.py -i 'vpshufb %ymm0,%ymm1,%ymm2' 'vpshufb %ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' --init-regs rax > vpshufb.c
 $PY ./gen-kernel.py -i 'mov 0x0(%rsp),%r12' 'add %r13,%r12' NOP -n 14 > ld-op-nop.c
 $PY ./gen-kernel.py -i 'mov %r13,%r12' 'add %r14,%r12' NOP -n 14 > mov-op-nop.c
 $PY ./gen-kernel.py -i 'mov 0x0(%rsp),%r12' NOP 'add %r13,%r12' -n 14 > ld-nop-op.c

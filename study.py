@@ -11,11 +11,11 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.87
+__version__= 0.95
 
 import common as C, pmu, stats
 import os, sys, time, re
-from lbr import stat_name
+from lbr.lbr import stat_name
 
 def dump_sample():
   print(r"""#!/bin/bash
@@ -44,23 +44,30 @@ grep -F Puzzle, $log # replace this to grep a score (performance result) of your
 DM=C.env2str('STUDY_MODE', 'imix-loops')
 STUDY_PROF_MASK = 0x1911a
 Conf = {
-  'Events': {'imix-loops': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r10c4:BR_INST_RETIRED.COND_NTAKEN', #'r11c4:BR_INST_RETIRED.COND'
-    'imix-dsb': 'r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r0262:DSB_FILL.OTHER_CANCEL,r01470261:DSB2MITE_SWITCHES.COUNT,'
+  # TODO: remaining hardcoded events to use pmu.perf_event(+ CMask support)
+  'Events': {'imix-loops': 'BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN', #'r11c4:BR_INST_RETIRED.COND'
+    'imix-dsb': 'L2_RQSTS.CODE_RD_MISS,BACLEARS.ANY,DSB_FILL.OTHER_CANCEL,r01470261:DSB2MITE_SWITCHES.COUNT,'
                 'FRONTEND_RETIRED.DSB_MISS,FRONTEND_RETIRED.ANY_DSB_MISS,BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN,'
                 'branches,IDQ.MS_CYCLES_ANY,ASSISTS.ANY,INT_MISC.CLEARS_COUNT,MACHINE_CLEARS.COUNT,MACHINE_CLEARS.MEMORY_ORDERING,UOPS_RETIRED.MS:c1',  # 4.6-nda+
     'dsb-align':  '{instructions,cycles,ref-cycles,IDQ_UOPS_NOT_DELIVERED.CORE,UOPS_ISSUED.ANY,IDQ.DSB_UOPS,FRONTEND_RETIRED.ANY_DSB_MISS},'
                   '{instructions,cycles,INT_MISC.CLEARS_COUNT,DSB2MITE_SWITCHES.PENALTY_CYCLES,INT_MISC.CLEAR_RESTEER_CYCLES,ICACHE_DATA.STALLS}',
-    'dsb-glc':  '{IDQ.DSB_UOPS,r2424:L2_RQSTS.CODE_RD_MISS,r0160:BACLEARS.ANY,r01470261:DSB2MITE_SWITCHES.COUNT,'
+    'dsb-glc':  '{IDQ.DSB_UOPS,L2_RQSTS.CODE_RD_MISS,BACLEARS.ANY,r01470261:DSB2MITE_SWITCHES.COUNT,'
                 'FRONTEND_RETIRED.ANY_DSB_MISS,UOPS_ISSUED.ANY,INT_MISC.CLEARS_COUNT,INST_RETIRED.MACRO_FUSED}',
+    'dsb-bw':   '{r010879:IDQ.DSB_UOPS-c1,r020879:IDQ.DSB_UOPS-c2,r030879:IDQ.DSB_UOPS-c3,IDQ.DSB_UOPS,UOPS_ISSUED.ANY,UOPS_RETIRED.SLOTS},'
+                '{r040879:IDQ.DSB_UOPS-c4,r050879:IDQ.DSB_UOPS-c5,r060879:IDQ.DSB_UOPS-c6,r070879:IDQ.DSB_UOPS-c7}',
     #r02c0:INST_RETIRED.NOP,r10c0:INST_RETIRED.MACRO_FUSED,'\
     #,r01e5:MEM_UOP_RETIRED.LOAD,r02e5:MEM_UOP_RETIRED.STA'
-    'cond-misp': 'r01c4:BR_INST_RETIRED.COND_TAKEN,r01c5:BR_MISP_RETIRED.COND_TAKEN'
-                 ',r10c4:BR_INST_RETIRED.COND_NTAKEN,r10c5:BR_MISP_RETIRED.COND_NTAKEN',
-    'openmp': 'r0106,r10d1:MEM_LOAD_RETIRED.L2_MISS,r3f24:L2_RQSTS.MISS,r70ec:CPU_CLK_UNHALTED.PAUSE'
+    'cond-misp': 'BR_INST_RETIRED.COND_TAKEN,BR_MISP_RETIRED.COND_TAKEN'
+                 ',BR_INST_RETIRED.COND_NTAKEN,BR_MISP_RETIRED.COND_NTAKEN',
+    # TODO: remove if once event-list is updated
+    'mem-bw':   '' if pmu.icelake() or pmu.alderlake() else ','.join([pmu.perf_event('L2_LINES_OUT.'+x) for x in ('USELESS_HWPF', 'NON_SILENT', 'SILENT')]),
+    'openmp': 'r0106,MEM_INST_RETIRED.ALL_LOADS,MEM_LOAD_RETIRED.L2_MISS,L2_RQSTS.MISS,CPU_CLK_UNHALTED.PAUSE'
               ',syscalls:sys_enter_sched_yield',
   },
-  'Pebs': {'all-misp': '-b -e %s/event=0xc5,umask=0,name=BR_MISP_RETIRED/ppp -c 20003' % pmu.pmu(),
-    'cond-misp': '-b -e %s/event=0xc5,umask=0x11,name=BR_MISP_RETIRED.COND/ppp -c 20003' % pmu.pmu(),
+  'Pebs': {
+    'dsb-bw': # not in eventlist pmu.event('FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4', 3),
+              '-b -e %s/event=0xc6,umask=%d,frontend=0x400206,name=FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4/uppp%s'
+              ' -c 100003' % (pmu.pmu(), 3 if pmu.redwoodcove_on() else 1, ' -W' if pmu.retlat() else ''),
   },
   'Toplev': {'imix-loops': ' --frequency --metric-group +Summary',
   },
@@ -68,6 +75,9 @@ Conf = {
     'openmp': [[':perf-stat-ipc:"\'stat -e instructions,cycles,r0106\'"']],
   },
 }
+Conf['Events']['all-misp'] = Conf['Events']['cond-misp']
+for x in ('all-misp', 'cond-misp'): Conf['Pebs'][x] = '-b -e %s -c 20003' % pmu.event(x, 3)
+
 def modes_list():
   ms = []
   for x in Conf.keys(): ms += list(Conf[x].keys())
@@ -76,12 +86,13 @@ def modes_list():
 
 def parse_args():
   def conf(x): return Conf[x][DM] if DM in Conf[x] else None
-  ap = C.argument_parser('analyze two or more modes (configs)', mask=STUDY_PROF_MASK,
+  ap = C.argument_parser('study two or more modes (configs)', mask=STUDY_PROF_MASK,
          defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
   ap.add_argument('config', nargs='*', default=[])
-  ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM)
+  ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM,
+                  help='Must prepend your study.py command with STUDY_MODE=<mode> for now')
   ap.add_argument('-t', '--attempt', default='1')
-  C.add_hex_arg(ap, '-s', '--stages', 0x1f, 'stages in study')
+  C.add_hex_arg(ap, '-s', '--stages', 0x3f, 'stages in study')
   ap.add_argument('--dump', action='store_const', const=True, default=False)
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
@@ -105,9 +116,10 @@ def parse_args():
                          |                        | multiplying w/ LBR factor | insts >= lbr-thresh%  |
       LBR.Metric, Metric | metric                 | -                         | -                     | starts with uppercase and doesn't include
       , Info.*           |                        |                           |                       | 'instructions'/'pairs'/'branches'/'insts-class'/'insts-subclass'
-      LBR.Event, Event   | event (counter)        | >= diff-thresh            | -                     |
+      LBR.Event, Event   | event (counter)        | >= diff-threshold[0]      | -                     |
       LBR.Proxy          | info.log proxy stat    | -                         | -                     |
-      LBR.Loop           | info.log per-loop stat | -                         | -                     | exclude it with -sl (--skip-loops)
+      LBR.Loop           | info.log per-loop stat | -                         | -                     | show it with -sl (--show-loops)
+      TMA                | tree node or Bottleneck| >= diff-threshold[1]      |                       | Metric of value in 0 .. 100
       
   side-by-side args"""
   side_by_side = ap.add_argument_group(description)
@@ -116,16 +128,16 @@ def parse_args():
     side_by_side.add_argument('-%s%s' % (l[0][0], l[1][0]), '--%s' % name, default=default, type=type(default), help=help)
   side_by_side.add_argument('--loop-id', default='imix-ID', choices=['imix-ID', 'srcline'],
                             help="loop stat to use as loop ID")
-  add_arg('diff-threshold', 10000.0, "diff threshold to filter top & bottom tables")
+  side_by_side.add_argument('-dt', '--diff-threshold', nargs='*', default=[1e4, 2.0],
+                            help="diff thresholds to filter top & bottom tables")
   add_arg('round-factor', 3, "round factor for calculations")
   add_arg('table-size', 10, "top & bottom tables size")
   side_by_side.add_argument('-w', '--table-width', nargs='*', default=[30],
                             help="fields widths in tables, non-specified column will use the final width")
-  side_by_side.add_argument('-sl', '--skip-loops', action='store_true',
-                            help="skip loops stats")
+  side_by_side.add_argument('-sl', '--show-loops', action='store_true', help="show loops' stats")
   side_by_side.add_argument('-sa', '--show-all', action='store_true',
                             help='show stats with None or zero values')
-  side_by_side.add_argument('--skip', nargs='*', default=[],
+  side_by_side.add_argument('--skip', nargs='*', default=['dsb-heatmap', '_2T', 'topdown-', 'perf_metrics_'],
                             help='stats sub-names to skip, e.g. "--skip cond" will skip all stats including "cond"')
   add_arg('lbr-threshold', 0.01, "info.log global stats are included in top & bottom tables "
                                  "if stat/all instructions in info.log > this thresh%%")
@@ -141,7 +153,7 @@ def parse_args():
   fassert(args.profile_mask & 0x100, 'args.pm=0x%x' % args.profile_mask)
   assert args.repeat > 2, "stats module requires '--repeat 3' at least"
   if DM in ('dsb-align', ): pass
-  else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN events")
+  else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN, USELESS_HWPF events")
   if args.stages & 0x4 and len(args.config) == 2:
     assert sys.version_info >= (3, 0), "stage 4 requires Python 3 or above."
     for element in args.table_width:
@@ -151,7 +163,7 @@ def parse_args():
 args = None
 def app(flavor):
   if args.attempt == '-1': return args.app
-  return "'%s %s %s'" % (args.app, flavor, 't%s' % args.attempt if args.attempt.isdigit() else args.attempt)
+  return "'%s %s%s'" % (args.app, flavor, ' t%s' % args.attempt if args.attempt.isdigit() else args.attempt)
 
 def compare_stats(app1, app2):
   app1_str, app2_str = C.command_basename(app1), C.command_basename(app2)
@@ -171,6 +183,7 @@ def compare_stats(app1, app2):
   def hide(key, group, value1, value2):
     return (not args.show_all and (not value1 or not value2 or ':var' in key)) or \
            C.any_in(args.skip, key) or (args.groups and (not group or not C.any_in(args.groups, group)))
+  def is_TMA(group): return 1 if group == 'TMA' or 'Bottleneck' in group else 0
   # filtering what stats get into top & bottom tables
   # see description in study.py -h
   def filter(key, group, value1, value2, diff, ratio):
@@ -181,16 +194,17 @@ def compare_stats(app1, app2):
       if value1: value1 = value1 * lbr_factor1
       if value2: value2 = value2 * lbr_factor2
       diff = calc(value1, value2, op='diff')
-    info_metric = group and 'Info' in group and stats.is_metric(key)
-    diff_cond = isinstance(diff, (int, float)) and \
-                (group and C.any_in(('Metric', 'LBR.Metric', 'LBR.Proxy', 'LBR.Loop'), group)
-                 or info_metric or abs(diff) >= args.diff_threshold)
+    info_metric = group and group != 'Info.Bottleneck' and 'Info' in group and stats.is_metric(key)
+    diff_cond = isinstance(diff, (int, float)) and group and (
+            C.any_in(('Metric', 'LBR.Metric', 'LBR.Proxy', 'LBR.Loop'), group) # ignore diff
+            or info_metric
+            or abs(diff) >= float(args.diff_threshold[is_TMA(group)]))
     ratio_cond = isinstance(ratio, (int, float)) and not (not value1 and value2 == 0)
     return diff_cond and ratio_cond
   # filtering what stats get into strings table
   def filter_string(key, group, value1, value2):
     return (isinstance(value1, str) or isinstance(value2, str)) and value1 != value2 and \
-        not key == 'app' and not group == 'LBR.Loop'
+        not key == 'app' and not group == 'LBR.Loop' and not group == 'LBR.Histo'
   # line format in tables
   def format_line(k, g, v1, v2, d, r):
     def fv(v): return round(v, args.round_factor) if isinstance(v, (int, float)) else str(v)
@@ -248,8 +262,8 @@ def compare_stats(app1, app2):
   info1, info2 = get_info_file(app1), get_info_file(app2)
   # adding info files stats
   if info1 and info2:
-    stats.sDB[app1_str].update(stats.read_info(info1, read_loops=not args.skip_loops, loop_id=args.loop_id))
-    stats.sDB[app2_str].update(stats.read_info(info2, read_loops=not args.skip_loops, loop_id=args.loop_id))
+    stats.sDB[app1_str].update(stats.read_info(info1, read_loops=args.show_loops, loop_id=args.loop_id))
+    stats.sDB[app2_str].update(stats.read_info(info2, read_loops=args.show_loops, loop_id=args.loop_id))
     lbr_all_insts_key = stat_name('ALL', ratio_of=('ALL', ))
     lbr_all_insts1, lbr_all_insts2 = stats.get(lbr_all_insts_key, app1), stats.get(lbr_all_insts_key, app2)
     msg = "LBR run & stats aren't complete, check "
@@ -296,7 +310,7 @@ def compare_stats(app1, app2):
     print('String diffs:')
     print_list(strings_stats)
   # print table of loops with regressed IPC
-  if not args.skip_loops: print_regressed_ipcs()
+  if args.show_loops: print_regressed_ipcs()
 
 def main():
   do0 = C.realpath('do.py')
@@ -309,19 +323,20 @@ def main():
   x = 'tune'
   a = getattr(args, x) or []
   extra = ' :sample:3' if C.any_in(['dsb', 'misp'], args.mode) else ''
-  if 'misp' in args.mode: extra += ' :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode]
+  if args.mode in Conf['Pebs'].keys(): extra += ' :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode]
   if pmu.skylake(): extra += ' :perf-stat-add:-1'
   elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
-  a.insert(0, [':batch:1 :help:0 :lbr-verbose:1 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s ' % (
+  a.insert(0, [':batch:1 :help:0 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s ' % (
     int(pmu.cpu('corecount')/2), extra)])
   do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
 
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
+  elif args.verbose == -1: do += ' --print-only'
   do = do.replace('{', '"{').replace('}', '}"')
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
 
-  C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'EVENTMAP')
+  C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'FORCECPU', 'EVENTMAP')
                       ] + sys.argv + ['# version %.2f' % __version__]), '.study.cmd')
   if args.stages & 0x1:
     enable_it=0
@@ -329,9 +344,13 @@ def main():
       exe('%s disable-smt disable-aslr -v1' % do0)
       enable_it=1
     if args.stages & 0x8: exe(do_cmd('version log'))
-    if args.profile_mask == STUDY_PROF_MASK and C.any_in(('misp', 'dsb-glc'), args.mode): args.profile_mask |= 0x200
-    for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
-    if enable_it: exe('%s enable-smt -v1' % do0)
+    if args.profile_mask == STUDY_PROF_MASK and C.any_in(('misp', 'dsb'), args.mode): args.profile_mask |= 0x200
+    try:
+      for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
+    # command failed and exited w/ error
+    except SystemExit as e: sys.exit(e)
+    finally:
+      if enable_it: exe('%s enable-smt -v1' % do0)
 
   if args.stages & 0x2:
     jobs = []
@@ -359,6 +378,10 @@ def main():
   if args.stages & 0x10:
     if args.stages & 0x2: time.sleep(60)
     exe(' '.join((do_cmd('tar'), '-a', args.app)))
+
+  if args.stages & 0x20:
+    for x in args.config:
+      exe(' '.join((do_cmd('analyze'), '-a', app(x))))
 
 if __name__ == "__main__":
   args = parse_args()

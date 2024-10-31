@@ -23,7 +23,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument('--CC', default='gcc -g -O2', help='compiler and flags', required=False)
 parser.add_argument('--GEN', type=int, default=1, help='1 = generate kernel source code; 0 = skip this step; Default = 1', required=False)
 parser.add_argument('--PY', default='python3', help='Python version', required=False)
-parser.add_argument('--RF', type=int, default=1, help='1 = generate rfetch kernels; 0 = skip this step; Default = 1', required=False)
+parser.add_argument('--RF', type=int, default=0, help='1 = generate rfetch kernels; 0 = skip this step; Default = 1', required=False)
 args = parser.parse_args()
 
 kernels = []
@@ -52,7 +52,7 @@ if args.GEN:
 
     gen_kernel("-i 'addps %xmm1,%xmm2' 'vsubps %ymm1,%ymm2,%ymm3' -n10", 'sse2avx')
 
-    gen_kernel("-i NOP#{nopCount} 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6".format(nopCount=(pipelineWidth-3)), 'peak'+str(pipelineWidth)+'wide')
+    gen_kernel("-i NOP#{nopCount} 'test %rax,%rax' 'jle Lbl_end' -n 1 -a 6 --init-regs rax".format(nopCount=(pipelineWidth-3)), 'peak'+str(pipelineWidth)+'wide')
     gen_kernel("jumpy-seq -i NOP JMP -a3 -n30", 'dsb-jmp')
     gen_kernel("jumpy-seq -i JG -a 6 -n 20000", 'jcc20k')
     gen_kernel("jumpy-random -a 6 -i JMP -n 1024", 'rfetch64k')
@@ -78,8 +78,8 @@ if args.GEN:
     gen_kernel("-i 'cmpq $0x0,0x0(%rsp)' 'jg Lbl_end' 'inc %rsp' 'dec %rsp' -n 1", 'ld-cmp-jcc-2i-imm-inc')
     gen_kernel("-i 'cmpq %r12,0x0(%rsp)' 'jg Lbl_end' 'inc %r12' 'dec %r12' -p 'movq $0x0,%r12' -n 1", 'ld-cmp-jcc-2i-reg-inc')
     gen_kernel("-p 'mov %rsp,%rdx' 'sub $0x40000,%rdx' -i 'cmpl $0,0x40000(,%rdx,1)' -n 100", 'cmp0-mem-index')
-    gen_kernel("-i 'vshufps $0xff,%ymm0,%ymm1,%ymm2' 'vshufps $0xff,%ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx'", 'vshufps')
-    gen_kernel("-i 'vpshufb %ymm0,%ymm1,%ymm2' 'vpshufb %ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx'", 'vpshufb')
+    gen_kernel("-i 'vshufps $0xff,%ymm0,%ymm1,%ymm2' 'vshufps $0xff,%ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' --init-regs rax", 'vshufps')
+    gen_kernel("-i 'vpshufb %ymm0,%ymm1,%ymm2' 'vpshufb %ymm3,%ymm4,%ymm5' NOP 'mov (%rsp),%rbx' 'test %rax, %rax' 'jle Lbl_end' 'inc %rcx' --init-regs rax", 'vpshufb')
     gen_kernel("-i 'mov 0x0(%rsp),%r12' 'add %r13,%r12' NOP -n 14", 'ld-op-nop')
     gen_kernel("-i 'mov %r13,%r12' 'add %r14,%r12' NOP -n 14", 'mov-op-nop')
     gen_kernel("-i 'mov 0x0(%rsp),%r12' NOP 'add %r13,%r12' -n 14", 'ld-nop-op')
@@ -88,7 +88,13 @@ if args.GEN:
     gen_kernel("-i 'incq (%rsp,1)' 'decq (%rsp,1)' -n16", 'incdec-mrn')
     gen_kernel("-i 'movq (%rsp,%rdx,1), %rcx' 'addq $1, (%rsp,%rdx,1)' -n16" , 'ldst-mrn-cancel')
     gen_kernel("-i 'movq (%rsp,1), %rcx' 'addq $1, (%rsp,1)' -n16", 'ldst-mrn')
-
+    gen_kernel("-i 'movups (%rsp),%xmm1' 'andps %xmm2, %xmm1' NOP -n 14", 'v-ld-op-nop')
+    gen_kernel("-i 'movdqa %xmm1,%xmm2' 'andps %xmm3, %xmm2' NOP -n 14", 'v-mov-op-nop')
+    gen_kernel("-i 'movups (%rsp),%xmm1' NOP 'andps %xmm2, %xmm1' -n 14", 'v-ld-nop-op')
+    gen_kernel("-i 'movdqa %xmm1,%xmm2' NOP 'andps %xmm3, %xmm2' -n 14", 'v-mov-nop-op')
+    gen_kernel("-i 'cvtsd2si %xmm0,%r8d' -n64 ",'v2i')
+    gen_kernel("-i 'comiss 0x100(%rsp),%xmm0' -n64 ",'i2v')
+    gen_kernel("-i 'movw $0x1, %ax' -n4000 ",'lcp')
     kernels.append("memcpy")
     kernels.append("pagefault")
     kernels.append("tripcount-mean")

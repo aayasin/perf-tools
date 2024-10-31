@@ -12,12 +12,10 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.96
+__version__= 1.01
 
 import common as C, pmu, tma
 import csv, re, os.path, sys
-from lbr import print_stat
-from kernels import x86
 
 def get_file(app, ext):
   for filename in os.listdir(os.getcwd()):
@@ -31,6 +29,15 @@ def get_stat_log(s, perf_stat_file):
 
 def get(s, app):
   return get_stat_int(s, C.command_basename(app))
+
+def get_val(s, c):
+  val = None
+  try:
+    val = sDB[c][s][0]
+  except KeyError:
+    C.warn('KeyError for stat: %s, in config: %s' % (s, c))
+  if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, c, str(val)))
+  return val
 
 def print_metrics(app):
   c = C.command_basename(app)
@@ -47,13 +54,7 @@ stats = {'verbose': 0}
 def get_stat_int(s, c, stat_file=None, val=-1):
   if not c in sDB and s in ('CPUs_Utilized', ): return read_perf(stat_file)[s][0]
   rollup(c, stat_file)
-  val = None
-  try:
-    val = sDB[c][s][0]
-  except KeyError:
-    C.warn('KeyError for stat: %s, in config: %s' % (s, c))
-  if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, stat_file, str(val)))
-  return val
+  return get_val(s, c)
 
 def rollup_all(stat=None):
   sDB['ALL'], csv_file, reload = {}, 'rollup.csv', None 
@@ -77,10 +78,14 @@ def rollup_all(stat=None):
 def convert(v, adjust_percent=True):
   if not type(v) is str: return v
   v = v.strip()
-  if v.isdigit(): return int(v)  # e.g. 13
-  if v.replace('.', '', 1).isdigit(): return float(v)  # e.g. 1.13
+  m = 1
+  if v.startswith('-'):
+    m = -1
+    v = v.lstrip('-')
+  if v.isdigit(): return m * int(v)  # e.g. 13
+  if v.replace('.', '', 1).isdigit(): return m * float(v)  # e.g. 1.13
   v2 = v.replace(',', '')
-  if v2.isdigit() or v2.replace('.', '', 1).isdigit(): return convert(v2)  # e.g. 12,122,321 -> 12122321
+  if v2.isdigit() or v2.replace('.', '', 1).isdigit(): return m * convert(v2)  # e.g. 12,122,321 -> 12122321
   if '%' in v:  # e.g. 1.3% -> 1.3 or 0.013
     v = float(v.replace('%', ''))
     return v / 100 if adjust_percent else v
@@ -93,7 +98,7 @@ def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=Tr
   if loops != '':  # loops stats found
     for loop in loops.split('\n'):
       if loop_id == 'srcline' and 'srcline:' not in loop:
-        C.warn('Must run with srcline for loops stats, run with --tune :loop-srcline:1')
+        C.warn('Must run with srcline for loops stats, run with --tune :srcline:1')
         break
       key = loop.split(':')[0].strip()
       loop_attrs = re.split(r',(?![^\[]*\])', loop[loop.index('[') + 1:-1])
@@ -108,13 +113,52 @@ def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=Tr
 
 def is_metric(s):
   return s[0].isupper() and not s.isupper() and \
-         not re.search(r"(instructions|pairs|branches|insts-class|insts-subclass)$", s.lower())
+         not s.lower().endswith(('instructions', 'pairs', 'branches', 'insts-class', 'insts-subclass'))
+
+def read_histos(info, as_histos=False, groups=False):
+  assert os.path.isfile(info), 'Missing file: %s' % info
+  d = {}
+  histo = None
+  g = 'LBR.Histo'
+  def add(k, v):
+    if as_histos:
+      if histo not in d: d[histo] = {}
+      d[histo][k] = v
+    else: d[k] = (v, g) if groups else v
+  def rgx(): return histo == 'inst-per-leaf-func-name'
+  for l in C.file2lines(info):
+    if 'IPC histogram of' in l: break  # stops upon detailed loops stats
+    if 'WARNING' in l: pass
+    l = l.strip()
+    if 'histogram:' in l:  # histogram start
+      histo = '%s' % l.split()[0].replace(C.color.DARKCYAN, '')
+      continue
+    if 'summary:' in l:  # histogram end
+      if not histo: histo = l.split()[0]
+      l_list = l.split('{')[1][:-1].split(',')
+      for e in l_list:
+        e_list = re.split(r'(?<!:):(?!:)', e) if rgx() else e.split(':')
+        k = e_list[0].strip()
+        v = convert(e_list[1].strip())
+        if not as_histos: k = '%s%s_%s' % ((g + '.') if not groups else '', histo, k)
+        add(k, v)
+      histo = None
+      continue
+    if histo:  # histogram line
+      l_list = re.split(r'\s{2,}', l) if rgx() else l.split()
+      k = l_list[0]
+      if k == 'IPC': continue # skip IPC histo header
+      k = k[:-1]
+      if not as_histos: k = '%s%s_[%s]' % ((g + '.') if not groups else '', histo, k)
+      v = convert(l_list[1])
+      add(k, v)
+  return d
 
 def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
   for l in C.file2lines(info):
-    if 'IPC histogram of' in l: break  # stops upon detailed loops stats
+    if 'histogram' in l: break  # stops upon global histograms
     s = v = None
     g = 'LBR.'
     if 'WARNING' in l: pass
@@ -124,23 +168,36 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
       if sep: s = C.chop(re.sub(r'[\s\-]+', sep, s))
       v = convert(l[1])
     if not v is None:
-      if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
-        g += 'Glob'
-      elif is_metric(s): g += 'Metric'
-      elif s.startswith('proxy count'): g += 'Proxy'
-      else: g += 'Event'
+      if groups and g == 'LBR.':
+        if re.search('([cC]ount) of', s) and C.any_in(['cond', 'inst', 'pairs'], s):
+          g += 'Glob'
+        elif is_metric(s): g += 'Metric'
+        elif s.startswith('proxy count'): g += 'Proxy'
+        else: g += 'Event'
       d[s] = (v, g) if groups else v
+  d.update(read_histos(info, groups=groups))
   if read_loops: d.update(read_loops_info(info, loop_id, sep=sep, groups=groups))
   return d
 
 def rollup(c, perf_stat_file=None):
   if c in sDB: return
-  perf_stat_file, info = perf_stat_file or c + '.perf_stat-r3.log', c + '.toplev-mvl2.log'
+  perf_stat_file, info, vl6 = perf_stat_file or c + '.perf_stat-r3.log', c + '.toplev-mvl2.log', c + '.toplev-vl6.log'
   # TODO: call do.profile to get file names
   sDB[c] = read_perf(perf_stat_file)
-  sDB[c].update(read_toplev(c + '.toplev-vl6.log'))
-  if os.path.exists(info): sDB[c].update(read_toplev(info))
+  if os.path.exists(vl6): sDB[c].update(read_toplev(vl6))
+  if os.path.exists(info):
+    sDB[c].update(read_toplev(info))
+    sDB[c]['sig-misp'] = (read_mispreds(info.replace('.info', '.mispreds')), 'list')
   if debug > 1: print_DB(c)
+
+def read_mispreds(mispreds_file, sig_threshold=1.0):
+  misp, sig = C.file2lines_pop(mispreds_file), []
+  while True:
+    b = C.str2list(misp.pop())
+    val = b[0][:-1]
+    if not C.is_num(val) or float(val) < sig_threshold: break
+    sig += [b[3].lstrip('0')]
+  return sig
 
 def print_DB(c):
   d = {}
@@ -174,6 +231,8 @@ def read_perf(f):
     if e == 'ref-cycles':
       d['TSC'] = (get_TSC(f), 'Event')
       d['CPUs_Utilized'] = (v / d['TSC'][0], group)
+    if e == 'L2_LINES_OUT.SILENT': d['Useless_HWPF'] = (
+      d['L2_LINES_OUT.USELESS_HWPF'][0] / (d['L2_LINES_OUT.SILENT'][0] + d['L2_LINES_OUT.NON_SILENT'][0]), group)
   if f is None: return calc_metric(None) # a hack!
   if debug > 3: print('reading %s' % f)
   lines = C.file2lines(f)
@@ -203,7 +262,7 @@ def parse_perf(l):
   name = name2 = name3 = group = group2 = group3 = var = None
   val = val2 = val3 = -1
   def get_group(n): return 'Metric' if is_metric(n) else 'Event'
-  if not re.match(r'^\s*[0-9P]', l): pass
+  if not re.match(r'^\s*[0-9P]', l) or len(items) == 1: pass
   elif 'Performance counter stats for' in l:
     name = 'app'
     val = l.split("'")[1]
@@ -216,7 +275,7 @@ def parse_perf(l):
   else:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
-    if name.count('_') >= 1 and name.islower() and not re.match('^(cpu_core/|perf_metrics|unc_|sys)', name): # hack ocperf lower casing!
+    if name.count('_') >= 1 and name.islower() and not name.startswith(('cpu_core/', 'perf_metrics', 'unc_', 'sys')): # hack ocperf lower casing!
       base_event = name.split(':')[0]
       Name = name.replace(base_event, pmu.toplev2intel_name(base_event))
       assert ':C1' not in Name # Name = Name.replace(':C1', ':c1')
@@ -261,16 +320,20 @@ def read_toplev(filename, metric=None):
   for l in C.file2lines(filename, fail=True):
     try:
       if not re.match(r"^(|core )(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
+      l = l.replace('% ', '%_')
       items = l.strip().split()
       if debug > 5: print('debug:', len(items), items, l)
       if items[0] == 'core': items.pop(0)
-      if l.startswith('Info'):
-        d[items[1]] = (convert(items[3]), items[0])  # (value, group)
-      elif '<==' in l:
-        d['Critical-Group'] = (Key2group[items[0]], None)
-        d['Critical-Node'] = (items[1], None)
-      elif l.startswith('warning'):
+      if l.startswith('warning'):
         d['zero-counts'] = (l.split(':')[2].strip(), None)
+      elif 'Uncore_Frequency' not in l:
+        name, group = items[1], items[0]
+        if not l.startswith('Info') and not l.startswith('Bottleneck'):
+          name, group = items[1].split('.')[-1], 'TMA'
+        d[name] = (convert(items[3]), group)  # (value, group)
+        if '<==' in l:
+          d['Critical-Group'] = (Key2group[items[0]], None)
+          d['Critical-Node'] = (items[1], None)
     except ValueError:
       C.warn("cannot parse: '%s'" % l)
     except AttributeError:
@@ -351,7 +414,10 @@ def csv2stat(filename):
     return filename.replace(x.group(1), '')
   d = patch_metrics(d)
   base = basename()
-  if not nomux(): d.update(read_perf_toplev(base + 'toplev-mvl2-perf.csv'))
+  tl_info = base + 'toplev-mvl2-perf.csv'
+  if not nomux():
+    if not os.path.isfile(tl_info): C.warn('file is missing: ' + tl_info)
+    else: d.update(read_perf_toplev(tl_info))
   # add info.log globals stats
   info = r"%s-janysave_type-er20c4ppp-c([0-9]+)\.perf\.data\.info\.log" % (basename()[:-1])
   info_files = [f for f in os.listdir() if re.match(info, f)]
@@ -378,7 +444,7 @@ def perf_log2stat(log, smt_on, d={}):
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
     if debug > 3: print('reading %s' % f)
     for l in C.file2lines(f):
-      if re.match('^\s*$|perf stat ', l): continue # skip empty lines
+      if re.match('^\s*$', l) or 'perf stat ' in l: continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val
       if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2
@@ -395,73 +461,6 @@ def perf_log2stat(log, smt_on, d={}):
       out.write('%s %s\n' % (x, str(d[x])))
   print('wrote:', stat)
   return stat
-
-def inst_fusions(hitcounts, info):
-  stats_data = {'LD-OP': 0,
-                'MOV-OP': 0}
-  def calc_stats():
-    block = hotness_key = None
-    hotness = lambda s: C.str2list(s)[0]
-    is_mov = lambda l: 'mov' in l and not x86.is_mem_store(l)
-    cands_log = hitcounts.replace("hitcounts", "fusion-candidates")
-    def find_cand(lines):
-      patch = lambda s: s.replace(s.split()[0], '')
-      if len(lines) < 3: return None  # need 3 insts at least
-      mov_line = patch(lines[0])
-      dest_reg = x86.get('dst', mov_line)
-      dest_subs = x86.sub_regs(dest_reg)
-      # dest reg in 2nd line -> no candidate
-      # a. if dest reg is dest in 2nd line and fusion occurs -> not candidate
-      # b. if dest reg is dest in 2nd line and no fusion ->
-      # no candidate and disables next OPs to be candidates because dest reg got modified
-      # c. if dest reg is src in 2nd line -> dest reg value is used before OP, cancels candidate
-      if C.any_in(dest_subs, lines[1]): return None
-      to_check = lines[2:]
-      for i, line in enumerate(to_check):
-        line = patch(line)
-        if x86.get('dst', line) == dest_reg:  # same dest reg
-          # jcc macro-fusion disables candidate
-          if i < len(to_check) - 1 and x86.is_jcc_fusion(line, patch(to_check[i+1])): return None
-          ld_fusion, mov_fusion = x86.is_ld_op_fusion(mov_line, line), x86.is_mov_op_fusion(mov_line, line)
-          if not ld_fusion and not mov_fusion: return None
-          # check if dest reg was used as src before OP or OP src reg was ever modified
-          srcs = x86.get('srcs', line)
-          assert len(srcs) == 1
-          src_reg = srcs[0]
-          for x in range(1, i + 2):
-            if re.search(x86.CMOV, x86.get('inst', lines[x])): return None  # CMOV will use wrongly modified RFLAGS
-            if x86.is_sub_reg(x86.get('dst', lines[x]), src_reg): return None  # OP src reg was modified before OP
-            if C.any_in(dest_subs, lines[x]): return None  # dest reg used before OP
-          # candidate found
-          new_hotness = int(hotness(lines[0]))
-          if ld_fusion: stats_data['LD-OP'] += new_hotness
-          else: stats_data['MOV-OP'] += new_hotness
-          # append candidate block to log
-          header, tail = lines[0][:25] + "\n", lines[i+2][:25] + "zz - block end\n"  # headers to differentiate blocks
-          block_list = [header] + lines[0:i+3] + [tail]
-          C.fappend(''.join(block_list), cands_log, end='')
-      return None
-    if os.path.exists(cands_log): os.remove(cands_log)
-    # for each hotness block, create a list of the lines then check
-    with open(hitcounts, "r") as hits:
-      for line in hits:
-        def restart(): return [[line], hotness(line)] if is_mov(line) else [None, None]
-        # check blocks starting with not store MOV
-        if not is_mov(line) and not block: continue
-        if not block:  # new block first line found
-          block, hotness_key = restart()
-          continue
-        # append lines from the same basic block (by hotness)
-        if hotness(line) == hotness_key: block.append(line)
-        else:  # basic block end, check candidates
-          for i, block_line in enumerate(block):
-            if is_mov(block_line): find_cand(block[i:])
-          hotness_key, block = restart()  # restart for next block
-  assert C.exe_one_line(C.grep(' ALL instructions:', info)), 'invalid %s' % info
-  total = int(C.exe_one_line(C.grep(' ALL instructions:', info)).split(':')[1].strip())
-  calc_stats()
-  for stat, value in stats_data.items():
-    print_stat('%s fusible-candidate' % stat, value, ratio_of=('ALL', total), log=info)
 
 def main():
   a1 = C.arg(1)

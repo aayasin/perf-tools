@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.43
+__version__ = 0.54
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -26,35 +26,39 @@ BIT_TEST  = 'bt[^crs]'
 CALL_RET  = '(call|ret)'
 CISC_CMP  = r'(cmp[^x]|test).*\(' # CMP or TEST with memory (CISC)
 CMOV      = r"cmov"
-COMI      = r"v?u?comi",
+COMI      = r"v?u?comi"
 COND_BR   = 'j[^m][^ ]*'
 EXTRACT   = 'xtr' # covers legacy, AVX* and x87 flavors
 IMUL      = r"imul.*"
 INDIRECT  = r"(jmp|call).*%"
-JMP_RET   = r"(jmp|ret)"
 JUMP      = '(j|%s|sys%s|(bnd|notrack) jmp)' % (CALL_RET, CALL_RET)
 LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"v?mov[a-z0-9]*\s+[^,]*\("
 LOAD_ANY  = r"[a-z0-9]+\s+[^,]*\("  # use is_mem_load()
 MOV       = r"v?mov"
+MOVS_ZX   = r"%s(s|zx)" % MOV
 STORE     = r"\s+\S+\s+[^\(\),]+,"  # use is_mem_store()
-TEST_CMP  = r"(test|cmp).?\s"
+TEST_CMP  = r"(test|cmp).?\s" 
 
-MEM_IDX = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
+MEM_IDX   = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
 
 def inst_patch(i='JMP'):
   assert i == 'JMP'
   r = ';'.join(['s/%s jmp/%s-jmp/' % (x, x) for x in ('bnd', 'notrack')])
   return "sed '%s'" % r
 
+def is_type(t, l): return re.match(r"\s+\S+\s+%s" % t, l) is not None
+def is_branch(l, subtype=JUMP): return is_type(subtype, l)
+def is_jmp_ret(line): return C.any_in(['jmp', 'ret'], get('inst', line))
+def is_call_ret(line): return C.any_in(['call', 'ret'], get('inst', line))
 def is_imm(line): return '$' in line
 def is_memory(line): return '(' in line and 'lea' not in line and 'nop' not in line
 def is_mem_imm(line): return is_memory(line) and is_imm(line)
 def is_mem_load(line): return is_memory(line) and (is_type(LOAD_ANY, line) or C.any_in(('broadcast', 'insert', 'gather'), line)) 
-def is_type(t, l): return re.match(r"\s+\S+\s+%s" % t, l) is not None 
 def is_mem_store(line): return is_memory(line) and is_type(STORE, line) and C.any_in(('mov', EXTRACT, 'scatter'), line)
 def is_mem_rmw(line): return is_memory(line) and is_type(STORE, line) and not C.any_in(('mov', EXTRACT, 'scatter'), line)
 def is_test_load(line): return is_type(CISC_CMP, line) or is_type(BIT_TEST, line)
+def is_mem_idx(line): return re.search(MEM_IDX, line)
 
 def get_mem_inst(line):
   assert '(' in line, line
@@ -138,6 +142,11 @@ def get(what, line):
   if is_memory(check) or is_imm(check) or check.startswith('%') or check.startswith('0x'): return res[1]
   return ' '.join(res[1:3])
 
+REGS_32 = ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp', 'esp'] + \
+          ['r' + str(n) + 'd' for n in range(8, 16)]
+REGS_64 = [x.replace('e', 'r') for x in REGS_32 if x.startswith('e')] + \
+          [x.replace('d', '') for x in REGS_32 if x.startswith('r')]
+
 # 64-bit, 32-bit & 16-bit sub regs for 32/64 bit regs
 def sub_regs(reg):
   subs = [reg, reg, None]
@@ -150,71 +159,26 @@ def sub_regs(reg):
   return subs
 def is_sub_reg(sub_reg, orig): return sub_reg in sub_regs(orig)
 
-# CMP, TEST, AND, ADD and SUB may be macro-fused if they compare reg-reg, reg-imm, reg-mem, mem-reg,
-# means no mem-imm fusion
-# TEST and AND fuse with all JCCs
-# CMP, ADD and SUB fuse with [JC, JB, JAE/JNB], [JE, JZ, JNE, JNZ], [JNA/JBE, JA/JNBE] and
-# [JL/JNGE, JGE/JNL, JLE/JNG, JG/JNLE]
-# INC and DEC fuse with [JE, JZ, JNE, JNZ] and [JL/JNGE, JGE/JNL, JLE/JNG, JG/JNLE] on reg and not memory
-M_FUSION_INSTS = ['cmp', 'test', 'add', 'sub', 'inc', 'dec', 'and']
-def is_jcc_fusion(line1, line2):
-  match = re.search(COND_BR, line2)
-  if not match: return False
-  inst = get('inst', line1)
-  if not C.any_in(M_FUSION_INSTS, inst): return False
-  if C.any_in(['inc', 'dec'], inst) and is_memory(line1): return False
-  if is_memory(line1) and is_imm(line1): return False
-  if C.any_in(['test', 'add'], inst): return True
-  JCC_GROUP1 = ['je', 'jz', 'jne', 'jnz', 'jl', 'jnge', 'jge', 'jnl', 'jle', 'jng', 'jg', 'jnle']
-  JCC_GROUP2 = ['jc', 'jb', 'jae', 'jnb', 'jna', 'jbe', 'ja', 'jnbe']
-  jcc = match.group(0)
-  if jcc in JCC_GROUP1: return True
-  if jcc in JCC_GROUP2 and C.any_in(['cmp', 'add', 'sub'], inst): return True
-  return False
-
-REGS_32 = ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp', 'esp'] + \
-          ['r' + str(n) + 'd' for n in range(8, 16)]
-REGS_64 = [x.replace('e', 'r') for x in REGS_32 if x.startswith('e')] + \
-          [x.replace('d', '') for x in REGS_32 if x.startswith('r')]
-
-def is_mov_op_fusion(line1, line2):
-  if 'lock' in line1 or 'lock' in line2: return False
-  # MOV reg-reg
-  inst = get('inst', line1)
-  if re.search(CMOV, inst) or 'mov' not in inst: return False
-  if is_memory(line1) or is_imm(line1): return False
-  inst = get('inst', line2)
-  if not C.any_in(['add', 'sub', 'and', 'or', 'xor', 'imul', 'inc', 'dec', 'not',
-                   'neg', 'btc', 'btr', 'bts', 'shl', 'sal', 'sar', 'shr', 'rol', 'ror', 'shrd'], inst):
-    return False
-  # 32 or 64 bit dest
-  dest_reg = get('dst', line1)
-  if dest_reg not in REGS_32 and dest_reg not in REGS_64: return False
-  if is_memory(line2): return False  # no mem in OP
-  if not dest_reg == get('dst', line2): return False  # same dest
-  if len(get('srcs', line2)) > 1: return False  # no three operand OPs
-  # no reg-reg shift or rotate
-  if not is_imm(line2) and C.any_in(['shl', 'sal', 'sar', 'shr', 'rol', 'ror', 'shrd'], inst): return False
-  # no 64-bit fusion in imul
-  if 'imul' in inst and dest_reg in REGS_64: return False
-  return True
-
-def is_ld_op_fusion(line1, line2):
-  if 'lock' in line1 or 'lock' in line2: return False
-  if not re.search(LOAD, line1) or re.search(CMOV, get('inst', line1)): return False
-  if not C.any_in(['add', 'sub', 'and', 'or', 'xor', 'imul'], get('inst', line2)): return False
-  if '(%rip' in line1: return False  # not RIP relative
-  if re.search(MEM_IDX, line1): return False  # no index register
-  # 32 or 64 bit dest
-  dest_reg = get('dst', line1)
-  if dest_reg not in REGS_32 and dest_reg not in REGS_64: return False
-  if is_memory(line2) or is_imm(line2): return False  # reg-reg OP
-  srcs = get('srcs', line2)
-  if len(srcs) > 1: return False  # no three operand OPs
-  assert len(srcs) == 1
-  op_src, op_dest = srcs[0], get('dst', line2)
-  if not dest_reg == op_dest: return False  # same dest
-  if op_src == op_dest: return False  # different OP regs
-  # no 64-bit fusion in imul
-  if 'imul' in line2 and op_dest in REGS_64: return False
-  return True
+cvt_suff  = ['sd2si', 'si2sd', 'si2ss', 'ss2si', 'tss2si']
+suff      = ['b', 'd', 'q', 'w']
+V2II2V    = [x + y for y in ['', 'x'] for x in ['aeskeygenassist', 'lock cmpxchg16b']] + \
+            ['comis' + x for x in ['d', 'dq', 's', 'sl']] + \
+            ['cvt' + x for x in (['sd2siq', 'ss2sil', 'tsd2siq', 'tss2sil'] + cvt_suff)] + \
+            ['fcmov' + x for x in ['b', 'be', 'e', 'nb', 'nbe', 'ne', 'nu', 'u']] + \
+            ['fld' + x for x in ['cw', 'env']] + ['fn' + x for x in ['init', 'stcw', 'stenv', 'stsw']] + \
+            ['fp' + x for x in ['atan', 'rem', 'rem1', 'tan']] + ['fsin' + x for x in ['', 'cos']] + \
+            ['fyl2x' + x for x in ['', 'p1']] + ['kmov' + x for x in (suff + ['bb', 'dl', 'qq', 'ww'])] + \
+            ['mov' + x for x in ['d', 'mskpd', 'mskps', 'q']] + \
+            ['pcmp' + x + 'str' + y for y in ['i', 'ix', 'm', 'mx'] for x in ['e', 'i']] + \
+            [x + y for y in suff for x in ['pextr', 'pinsr']] + ['ucomis' + x for x in ['d', 's']] + \
+            ['vcomis' + x for x in ['d','h','s']] + \
+            ['vcvt' + x for x in (['sd2usi', 'sh2si', 'sh2usi', 'si2sh', 'ss2usi', 'tsd2si', 'tsd2usi', 'tsh2si',
+                                   'tsh2usi', 'tss2usi', 'usi2sd', 'usi2sh', 'usi2ss'] + cvt_suff)] + \
+            ['vgather' + x for x in ['dps', 'qpd']] + ['vmov' + x for x in ['d', 'mskpd', 'mskps', 'q', 'w']] + \
+            ['vpcmp' + x + 'str' + y for y in ['i', 'm'] for x in ['e', 'i']] + \
+            [y + x for x in suff for y in ['vpinsr', 'vpextr']] + \
+            ['vpgather' + x for x in ['dd','dq','qd']] + ['vpscatter' + x for x in ['dd', 'qd', 'qq']] + \
+            ['vscatter' + x for x in ['dpd', 'dps', 'qpd']] + ['vtest' + x for x in ['pd', 'ps']] + \
+            ['vucomis' + x for x in ['d', 'h', 's']] + [y + x for x in ['', '64', 's'] for y in ['xrstor', 'xsave']] + \
+            ['emms', 'enqcmd', 'extractps', 'f2xm1', 'fbld', 'fbstp', 'fcos', 'frstor', 'fscale', 'ldmxcsr', 'maskmovq', \
+             'pmovmskb', 'ptest', 'rep', 'stmxcsr', 'sttilecfg', 'vextractps', 'vldmxcsr', 'vpmovmskb', 'vptest', 'vstmxcsr']

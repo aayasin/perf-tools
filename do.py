@@ -410,7 +410,6 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   perf, toplev, ocperf, genretlat, env = get_perf_toplev()
   base = '%s%s.perf' % (out, C.chop(do['perf-record'], ' :/,='))
   logs = {'stat': None, 'code': base + '-code.log', 'tma': None}
-  process_win = bool(args.windows_file)
   def prepend_PERF(cmd): return env + cmd.replace(env, '') if 'PERF=' in cmd else cmd
   def profile_exe(cmd, msg, step, mode='redirect', tune='', fail=0):
     if do['help'] < 0:
@@ -516,7 +515,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
     if perf_script.first and not en(8) and not do['batch']: C.warn('LBR profile-step is disabled')
     perf_script.first = False
-    if windows_file: x = x.replace(x.split('|')[0], 'cat %s ' % windows_file)
+    if windows_file: x = x.replace(x.split('|')[0], '%scat %s ' % (C.zprefix(windows_file), windows_file))
     return exe(' '.join((perf, 'script', perf_ic(data, perf_script.comm), x)) if not windows_file else x, msg, redir_out=None, export=export, fail=fail)
   perf_script.first = True
   perf_script.comm = do['comm']
@@ -780,7 +779,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
           cmd += " | tee >(%s %s %s %s >> %s) %s | GREP_INST | %s " % (
             lbr_env, C.realpath('lbr_stats'), do['lbr-stats-tk'], ev, info, misp, clean)
           if do['imix'] & 0x1:
-            cmd += r"| tee >(sort| sed -e 's/\s\+/\\t/g' -e 's/\\t\+/\t/g' | sed -E 's/ilen:\s*[0-9]+//g' | uniq -c | sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
+            cmd += r"| tee >(sort| sed -e 's/\s\+/\t/g' | sed -E 's/ilen:\s*[0-9]+//g' | uniq -c | sort -k2 | tee %s | cut -f-2 | sort -nu | ./ptage > %s) " % (hits, ips)
             msg += ', hitcounts'
           if do['imix'] & 0x2:
             cmd += "| cut -f2- | tee >(cut -d' ' -f1 | %s > %s.perf-imix-no.log) " % (sort2up, out)
@@ -980,7 +979,6 @@ def parse_args():
   ap.add_argument('-o', '--output', help='basename to use for output files')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
-  ap.add_argument('-w', '--windows-file', default=None, help='windows file to process in process-win command')
   x = ap.parse_args()
   return x
 

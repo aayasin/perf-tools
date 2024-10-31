@@ -7,7 +7,7 @@
 # warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 import common as C
-from lbr.x86 import JUMP, COND_BR
+from lbr.x86 import JUMP, COND_BR, rem_xed_sfx
 import os, re, pmu
 
 __author__ = 'akhalil'
@@ -21,7 +21,6 @@ INTRO_MESSAGE = '\
 
 UICA = C.Globals['uica']
 FIX_OUT = "| sed -E 's/8;;|https:\/\/[^ ]*\.html//g' | col -b "
-CHOP = ['movupsx', 'vmovupsx', 'prefetcht2z', 'vmovapsy', 'vmovdqax']
 
 def run_uica(hitcounts, uica_log, loop, loop_ipc):
   if not os.path.exists(UICA): C.error('uiCA is not installed! Please run ./build-uica.sh to install it.')
@@ -34,17 +33,15 @@ def run_uica(hitcounts, uica_log, loop, loop_ipc):
     line = l
     if '0x' in l and (re.search(JUMP, l) or re.search(COND_BR, l)):
       line = l.replace(l.split()[-1], 'end')
-    inst = line.split()[0]
-    if inst in CHOP or inst.endswith('ssl'): line = line.replace(inst, inst[:-1])
-    if inst in ['est', 'zcnt']: line = line.replace(inst, 't' + inst)
-    return line
+    return rem_xed_sfx(line)
   input_list = C.exe_output(C.grep('0%x' % int(loop_ipc, 16), hitcounts, '-A%d' % (loop['size'] - 1)) +
-                       ' | awk \'{for (i=3; i<=NF; i++) printf "%s ", $i; print ""}\' | sed \'s/ ilen:.*$//\'').split(';')
+                       ' | awk \'{for (i=2; i<=NF; i++) printf "%s ", $i; print ""}\' | sed \'s/ ilen:.*$//\'').split(';')
   input = 'l: '
   for l in input_list[:-1]:
     line = patch(l)
-    input += line + ';'
-  input += input_list[-1].replace(input_list[-1].split()[-1], 'l')
+    input += line.replace(line.split()[0], '') + ';'
+  spl = input_list[-1].split()
+  input += input_list[-1].replace(spl[0], '').replace(spl[-1], 'l')
   input += ';end:'
   in_file = ".uica_in_%s.asm" % loop_ipc
   o_file = in_file.replace('.asm', '.o')

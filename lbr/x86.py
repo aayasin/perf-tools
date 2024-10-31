@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.54
+__version__ = 0.55
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -182,3 +182,10 @@ V2II2V    = [x + y for y in ['', 'x'] for x in ['aeskeygenassist', 'lock cmpxchg
             ['vucomis' + x for x in ['d', 'h', 's']] + [y + x for x in ['', '64', 's'] for y in ['xrstor', 'xsave']] + \
             ['emms', 'enqcmd', 'extractps', 'f2xm1', 'fbld', 'fbstp', 'fcos', 'frstor', 'fscale', 'ldmxcsr', 'maskmovq', \
              'pmovmskb', 'ptest', 'rep', 'stmxcsr', 'sttilecfg', 'vextractps', 'vldmxcsr', 'vpmovmskb', 'vptest', 'vstmxcsr']
+
+def rem_xed_sfx(line):
+  inst = get('inst', line)
+  if ('xmm' in line and inst.endswith('x')) or ('ymm' in line and inst.endswith('y')) or \
+          (('zmm' in line or is_memory(line)) and inst.endswith('z')) or (inst.endswith('sl') and not inst.endswith('lsl')):
+      return line.replace(inst, inst[:-1])
+  return line

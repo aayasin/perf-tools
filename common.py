@@ -241,9 +241,11 @@ def csv2dict(f):
     d[k] = l.split(',')[1]
   return d
 
+def zprefix(file): return 'z' if file.endswith(('.gz', '.zip')) else ''
+
 # (colored) grep with 0 exit status
 def grep(what, file='', flags='', color=False):
-  cmd = "grep -E %s '%s' %s" % (flags, what, file)
+  cmd = "%sgrep -E %s '%s' %s" % (zprefix(file), flags, what, file)
   if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('grep', 'grep --color')
   return "(%s || true)" % cmd
 

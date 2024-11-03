@@ -11,17 +11,16 @@
 #
 # TODO list:
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
-#   move profile code to a seperate module, arg for output dir
+#   move profile code to a separate module, arg for output dir
 #   quiet mode
 #   convert verbose to a bitmask
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.57
+__version__ = 3.58
 
-import argparse, os.path, re, sys
-
+import argparse, os.path, sys
 import analyze, common as C, pmu, stats, tma
 from lbr import x86
 from lbr.stats import inst_fusions
@@ -709,9 +708,8 @@ def profile(mask, toplev_args=['mvl6', None]):
                 "Try to use a newer or a different compiler" % err)
     def report_info(info, err, hists=['IPC', 'IpTB']):
       if do['srcline']: check_err(err)
-      hist_cmd = ''
-      for h in hists: hist_cmd += " && %s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % h, info, '-A33'), h)
-      exe(' '.join((C.grep("code footprint|^(loop|function)#[1-5]:", info), hist_cmd)), "@top loops, functions & more in " + info)
+      exe(' && '.join([C.grep("code footprint|^(loop|function)#[1-5]:", info)] +
+          [stats.grep_histo(h, info) for h in hists]), "@top loops, functions & more in " + info)
     lbr_hdr = '# LBR-based Statistics:'
     if not isfile(info) or do['reprocess'] > 1 or do['reprocess'] < 0:
       if do['size']: static_stats()
@@ -760,7 +758,8 @@ def profile(mask, toplev_args=['mvl6', None]):
         if args.verbose > 2: do['lbr-verbose'] |= 0x800
         if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=0x%x" % (do['lbr-verbose'] | C.env2int('LBR_VERBOSE', base=16))
         if type(do['lbr-indirects']) == int:
-          do['lbr-indirects'] = get_indirects('%s.indirects.log' % data, int(do['lbr-indirects']))
+          do['lbr-indirects'] = (get_indirects('%s.indirects.log' % data, int(do['lbr-indirects'])) + ',' +
+                                 get_indirects('%s.tk-mispreds.log' % data, int(do['lbr-indirects']))).rstrip(',')
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         open(err, 'w').close()
         misp, cmd, msg = '', perf_F(), '@info'
@@ -893,7 +892,7 @@ def profile(mask, toplev_args=['mvl6', None]):
     exe(' '.join((perf, 'script', x)), msg=None, redir_out=None)
     print('firefox %s.svg &' % perf_data)
 
-  if en(21):
+  if 0 and en(21): # TODO jon:
     widths = pmu.cpu_pipeline_width('all_widths')
     evts = pmu.widths_2_cmasks(widths)
     if do['interval'] < 1000: C.warn('Adjusting your %dms interval to 1000ms' % do['interval'])
@@ -932,7 +931,7 @@ def do_logs(cmd, ext=[], tag=''):
       if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
     if isfile('run.sh'): files += ['run.sh']
     exe('tar -czvf %s ' % r + ' '.join(files), 'tar into %s' % r, log=False)
-    print_cmd('tar -czvf %s setup*.log .%s*.cmd .%s*.{%s}' % (r, s, s, ','.join(log_files[1:])))
+    print_cmd('tar -czvf %s setup*.log .%s*.cmd %s*.{%s}' % (r, s, s, ','.join(log_files[1:])))
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + ' *-out.txt *perf.data* $(find -name __pycache__) results.tar.gz')
 
 def build_kernel(dir='./kernels/'):

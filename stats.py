@@ -111,6 +111,9 @@ def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=Tr
         else: d['%s%s%s' % (key, sep if sep else ' ', stat_name)] = (val, 'LBR.Loop') if groups else val
   return d
 
+def grep_histo(histo, info):
+  return "%s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % histo, info, '-A33'), histo)
+
 def is_metric(s):
   return s[0].isupper() and not s.isupper() and \
          not s.lower().endswith(('instructions', 'pairs', 'branches', 'insts-class', 'insts-subclass'))
@@ -192,7 +195,7 @@ def rollup(c, perf_stat_file=None):
 
 def read_mispreds(mispreds_file, sig_threshold=1.0):
   misp, sig = C.file2lines_pop(mispreds_file), []
-  while True:
+  while len(misp):
     b = C.str2list(misp.pop())
     val = b[0][:-1]
     if not C.is_num(val) or float(val) < sig_threshold: break

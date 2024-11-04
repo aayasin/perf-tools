@@ -2,6 +2,7 @@ strace -o strace.log -s999 my-command
 
 sed 's/^[[:space:]]*//'
 sed -E 's/\[[0-9]+\]//'
+sort -n *.hitcounts.log | egrep -v '\s(j|call|ret)' | cut -c1-8 | uniq | tail -39 | tr '\n' '|' | sed 's/[[:space:]]*//g;s/|$//'
 
 git fetch origin && git rebase origin/master
 git add do.py && git rebase --continue

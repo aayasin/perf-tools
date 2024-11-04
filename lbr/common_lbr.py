@@ -379,7 +379,7 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
   d = {}
   d['type'] = 'str' if C.any_in(('name', 'paths'), name) else 'hex' if C.any_in(('indir', 'Function'), name) else 'number'
   d['mode'] = str(C.hist2slist(hist)[-1][0])
-  keys = [sorter(x) for x in hist.keys()] if sorter else [float(x) for x in list(hist.keys())] if name == 'IPC' else list(hist.keys())
+  keys = [sorter(x) for x in hist.keys()] if sorter else [float(x) for x in list(hist.keys())] if 'IPC' in name else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
   do_tripcount_mean = name == 'tripcount' and d['mode'] == '32+'
   if do_tripcount_mean and tripcount_mean_func:

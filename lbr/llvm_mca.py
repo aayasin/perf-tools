@@ -9,6 +9,7 @@
 import common as C
 import lbr.common_lbr as LC
 import pmu
+from lbr.x86 import rem_xed_sfx
 import os
 import re
 import argparse
@@ -32,39 +33,26 @@ LLVM = C.Globals['llvm-mca']
 repl = (("movsxd", "movslq"),
         ("movsxb", "movsbl"),
         ("movzxb", "movzbl"),
-        ("movupsx", "movups"),
-        ("movapsx", "movaps"),
-        ("movapsx", "movaps"),
         ("movslql", "movslq"),
         ("movsxw", "movsx"),
-        ("movdqux", "movdqu"),
-        ("movapdx", "movapd"),
         ("movzxw", "movzbl"),
         ("nopw  %ax, (%rax,%rax,1)", "nopw (%rax,%rax)"),
         ("nopl  %eax, (%rax)", "nopl (%rax)"),
         ("nopl  %eax, (%rax,%rax,1)", "nopl (%rax,%rax,1)"),
-        ('addssl', 'addss'),
         ('divsdq', 'divsd'),
-        ('lddqux', 'lddqu'),
         ('movdl', 'movd'),
-        ('movdqax', 'movdqa'),
         ('movhpsq', 'movhps'),
         ('movlpsq', 'movlps'),
         ('movqq', 'movq'),
         ('movsbb', 'movsb'),
         ('movsdq', 'movsd'),
-        ('movssl', 'movss'),
         ('stosqq', 'stosq'),
         ('ucomisdq', 'ucomisd'),
-        ('ucomissl', 'ucomiss'),
-        ('mulssl', 'mulss'),
         ('movsqq', 'movsq')
 )
 
 # map AVX insts to MCInst by removing last letter
-avxrepl = ('vpcmpeqby', 'vmovdqay', 'vmovupdy', 'vpermpdy', 'vmovdquy', 'vmovqq', 'paddwx', 'pmullwx',
-           'prefetcht0z', 'prefetcht2z', 'vmovdl', 'vmovdqax', 'vmovapsy', 'vpandx', 'vpavgbx', 'vpcmpeqbx',
-           'vpsubusbx', 'vpxorx', 'vfmadd132pdy', 'vfmadd213pdy', 'vfmadd231pdy')
+avxrepl = ('vmovqq', 'vmovdl')
 
 rerepl = ((r"(jmpq?|callq?)\s+(\(|%)", r"\1\t*\2"),)
 
@@ -119,14 +107,13 @@ def lbrmca(input_file_path, args='', llvm_log=None, loop_ipc=None):
   with open(input_file_path, 'r') as input_file:
     for l in input_file.readlines():
       if not LC.is_empty(l):
-        s = ' '.join(l.split()[1:]) + '\n'
+        s = ' '.join(rem_xed_sfx(l).split()[1:]) + '\n'
         for o, r in repl:
           s = s.replace(o, r)
         for o in avxrepl:
           s = s.replace(o, o[:-1])
         for o, r in rerepl:
           s = re.sub(o, r, s)
-        if s.startswith(('est', 'zcnt')): s = 't' + s
         n = s.split()
         if len(n) > 2 and n[0] == "movsx":
           s = s.replace("movsx", "movs" + regsuf(n[1]) + regsuf(n[2]))

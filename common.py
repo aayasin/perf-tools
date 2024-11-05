@@ -170,7 +170,7 @@ def exe_one_line(x, field=None, debug=False, fail=0):
   return res
 
 def ptage(r=2): return 'PTAGE_R=%d %s/ptage' % (r, dirname())
-def tail(f=''): return "tail -11 %s | grep -E -v '=total|^\s+0'" % f
+def tail(f=''): return "tail -11 %s | %s" % (f, grep('=total|^\s+0', flags='-v'))
 
 def par_jobs_file(commands, name=None, verbose=False, shell='bash'):
   if not name: name = './.p%d.sh' % os.getpid()
@@ -241,9 +241,11 @@ def csv2dict(f):
     d[k] = l.split(',')[1]
   return d
 
+def zprefix(file): return 'z' if file.endswith(('.gz', '.zip')) else ''
+
 # (colored) grep with 0 exit status
 def grep(what, file='', flags='', color=False):
-  cmd = "grep -E %s '%s' %s" % (flags, what, file)
+  cmd = "%sgrep -E %s '%s' %s" % (zprefix(file), flags, what, file)
   if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('grep', 'grep --color')
   return "(%s || true)" % cmd
 

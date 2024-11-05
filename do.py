@@ -509,7 +509,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       if perf_script.first: C.info('processing first %d samples only' % samples)
       export += ' LBR_STOP=%d' % samples
       x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (3*K*samples))
-    if do['perf-filter'] and not perf_script.comm and not windows_file:
+    if do['perf-filter'] and not perf_script.comm:
       perf_script.comm = get_comm(data)
       if perf_script.first and args.mode != 'profile': C.info("filtering on command '%s' in next post-processing" % perf_script.comm)
     instline = r'^\s+[0-9a-f]+\s'
@@ -917,7 +917,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       pipeline_view(csv_file,widths) 
 
   if do['help'] < 0: profile_mask_help()
-  elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)) and not windows_file:
+  elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)):
     stats.csv2stat(C.toplev_log2csv(logs['tma']))
     d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])
       ), 'num_not_counted_stats', 'num_not_supported_stats', 'DurationTimeInMilliSeconds'

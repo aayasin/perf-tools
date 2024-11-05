@@ -171,7 +171,9 @@ test-tripcount-mean: lbr/lbr.py do.py lbr/x86.py
 	$(call check_tripcount,1,90,110)
 	$(call check_tripcount,2,60,80)
 
-test-windows:
+test-windows: blender_barbershop_arls_baseline-c4000003.perf.script.gz
+	wget https://github.com/user-attachments/assets/967ec1db-a481-4923-8517-def77e20b58d && mv 967ec1db-a481-4923-8517-def77e20b58d $<
+	$(DO) process-win -a $<
 	python < scripts/test-windows.py
 
 clean-all: clean

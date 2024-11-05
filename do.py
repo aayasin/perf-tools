@@ -486,7 +486,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if ret: C.error('perf_stat() failed (despite multiple attempts)')
     return log
   def samples_count(d):
-    if windows_file: return int(C.exe_one_line(C.grep('BR_INST_RETIRED.NEAR_TAKENpdir', windows_file, '-c')))
+    if windows_file: return int(C.exe_one_line(C.grep(pmu.lbr_event(win=True), windows_file, '-c')))
     return 1e5 if args.mode == 'profile' else int(exe_1line(
     '%s script -i %s -D 2>/dev/null | %sgrep -F RECORD_SAMPLE | wc -l' % (perf, d,
     ('tee >(tail -50 > %s.debug.log) | ' % d) if do['debug'] else '') ))
@@ -506,16 +506,17 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       if perf_script.first: C.info('processing first %d samples only' % samples)
       export += ' LBR_STOP=%d' % samples
       x = x.replace('GREP_INST', 'head -%d | GREP_INST' % (3*K*samples))
-    if do['perf-filter'] and not perf_script.comm and not windows_file:
+    if do['perf-filter'] and not perf_script.comm:
       perf_script.comm = get_comm(data)
       if perf_script.first and args.mode != 'profile': C.info("filtering on command '%s' in next post-processing" % perf_script.comm)
     instline = r'^\s+[0-9a-f]+\s'
     if 'taken branches' in msg: instline += '.*#'
     x = x.replace('GREP_INST', "grep -E '%s'" % instline)
+    x = x.replace(x.split('|')[0], '%scat %s ' % (C.zprefix(windows_file), windows_file)) if windows_file \
+      else ' '.join((perf, 'script', perf_ic(data, perf_script.comm), x))
     if perf_script.first and not en(8) and not do['batch']: C.warn('LBR profile-step is disabled')
     perf_script.first = False
-    if windows_file: x = x.replace(x.split('|')[0], '%scat %s ' % (C.zprefix(windows_file), windows_file))
-    return exe(' '.join((perf, 'script', perf_ic(data, perf_script.comm), x)) if not windows_file else x, msg, redir_out=None, export=export, fail=fail)
+    return exe(x, msg, redir_out=None, export=export, fail=fail)
   perf_script.first = True
   perf_script.comm = do['comm']
   def record_name(flags): return '%s%s' % (out, C.chop(flags, (C.CHOP_STUFF, 'cpu_core', 'cpu')))
@@ -686,7 +687,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     return perf_data, n
   
   if en(8) and do['sample'] > 1:
-    assert C.any_in((pmu.lbr_event()[:-1], 'instructions:ppp', 'cycles:p ', 'BR_INST_RETIRED.NEAR_TAKENpdir'), do['perf-lbr']) \
+    assert C.any_in(pmu.lbr_unfiltered_events(cut=True), do['perf-lbr']) \
            or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
     data, nsamples = perf_record('lbr', 8)
     info, comm = '%s.info.log' % data, get_comm(data) if not windows_file else None
@@ -722,7 +723,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if not isfile(info) or do['reprocess'] > 1 or do['reprocess'] < 0:
       if do['size']: static_stats()
       print_info('# processing %s%s\n' % (data, C.flag2str(" filtered on ", comm)))
-      if do['lbr-branch-stats'] and not windows_file:
+      if do['lbr-branch-stats']:
         exe(perf + r" report %s | grep -A13 'Branch Statistics:' | tee -a %s | grep -E -v ':\s+0\.0%%|CROSS'" %
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
@@ -913,7 +914,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       pipeline_view(csv_file,widths) 
 
   if do['help'] < 0: profile_mask_help()
-  elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)) and not windows_file:
+  elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)):
     stats.csv2stat(C.toplev_log2csv(logs['tma']))
     d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])
       ), 'num_not_counted_stats', 'num_not_supported_stats', 'DurationTimeInMilliSeconds'
@@ -1098,6 +1099,10 @@ def main():
   if 'process-win' in args.command:
     windows_file = args.app
     args.output = args.app = args.app.split('-')[0]  # <app>-c<SAF>.perf.script
+    # update related tunables/args
+    do['perf-filter'] = do['lbr-branch-stats'] = 0
+    args.profile_mask = 0x100
+    args.mode = 'process'
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   if args.mode == 'process':

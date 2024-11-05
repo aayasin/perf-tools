@@ -1098,8 +1098,8 @@ def main():
   do_cmd = '%s # version %s' % (C.argv2str(), version())
   if 'process-win' in args.command:
     windows_file = args.app
-    args.output = args.app = args.app.split('-')[0]  # <app>-c<SAF>.perf.script
     # update related tunables/args
+    args.output = args.app = args.app.split('-')[0]  # <app>-c<SAF>.perf.script
     do['perf-filter'] = do['lbr-branch-stats'] = 0
     args.profile_mask = 0x100
     args.mode = 'process'

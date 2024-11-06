@@ -1074,8 +1074,9 @@ def run_commands(commands, windows_file=None):
     elif c == 'process-win':
       if not windows_file: error('use -a to provide windows file to process')
       # <app>-c<SAF>.perf.script
-      do['perf-lbr'] = '-j any,save_type -e BR_INST_RETIRED.NEAR_TAKENpdir -c %s' % windows_file.split('-')[1].split('.')[0][1:]
-      do['perf-filter'] = 0
+      # update related tunables
+      do['perf-lbr'] = '-j any,save_type -e %s -c %s' % (pmu.lbr_event(win=True), windows_file.split('-')[1].split('.')[0][1:])
+      do['perf-filter'] = do['lbr-branch-stats'] = 0
       profile(0x100, windows_file=windows_file)
     else: C.error("Unknown command: '%s' !" % c)
 
@@ -1101,9 +1102,8 @@ def main():
   do_cmd = '%s # version %s' % (C.argv2str(), version())
   if 'process-win' in args.command:
     windows_file = args.app
-    # update related tunables/args
+    # update related args
     args.output = args.app = args.app.split('-')[0]  # <app>-c<SAF>.perf.script
-    do['perf-filter'] = do['lbr-branch-stats'] = 0
     args.profile_mask = 0x100
     args.mode = 'process'
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')

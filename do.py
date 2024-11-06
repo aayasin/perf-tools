@@ -21,7 +21,6 @@ __author__ = 'ayasin'
 __version__ = 3.68
 
 import argparse, os.path, sys
->>>>>>> new do.py command to process windows profiles (#97)
 
 import argparse, os.path, sys
 import analyze, common as C, pmu, stats, tma

@@ -21,8 +21,6 @@ __author__ = 'ayasin'
 __version__ = 3.68
 
 import argparse, os.path, sys
-
-import argparse, os.path, sys
 import analyze, common as C, pmu, stats, tma
 from lbr import x86
 from lbr.stats import inst_fusions

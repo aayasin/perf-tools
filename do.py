@@ -18,9 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.68
-
-import argparse, os.path, sys
+__version__ = 3.69
 
 import argparse, os.path, sys
 import analyze, common as C, pmu, stats, tma
@@ -98,7 +96,7 @@ do = {'run':        C.RUN_DEF,
   'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c %d' % (pmu.lbr_event(), pmu.lbr_period()),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(globs['ldlat-def']),
-  'perf-pebs':      '-b -e %s -c 1000003' % pmu.event('dsb-miss', 3),
+  'perf-pebs':      pmu.event_period('dsb-miss', 1000000),
   'perf-pebs-top':  0,
   'perf-pt':        "-e '{intel_pt//u,%su}' -c %d -m,64M" % (pmu.lbr_event(), pmu.lbr_period()), # noretcomp
   'perf-record':    ' -g ', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
@@ -743,7 +741,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
             "| tee >(grep MISPRED | %s | tee >(grep -E -v 'call|jmp|ret' | %s > %s.cond-tk-mispreds.log) | %s > %s.tk-mispreds.log) "
             "%s| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
             (clean, sort2uf, data, sort2uf, data, slow_cmd, clean, sort2uf, data, sort2uf, data, sort2uf, data),
-            '@processing taken branches', data)
+            '@processing %staken branches' % ('' if do['imix'] & 0x10 else 'all '), data)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'cond-tk-mispreds'))
           if do['imix'] & 0x20 and args.mode != 'profile':
@@ -1122,7 +1120,7 @@ def main():
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
-    if not do['comm']: do['perf-filter'] = 1
+    if not do['comm']: do['perf-filter'] = 0
     args.profile_mask &= ~0x4 # disable system-wide profile-step
   if args.delay:
     if profiling(): C.info('delay profiling by %d seconds' % args.delay)

@@ -66,11 +66,12 @@ def amd():
 
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
+def period(n): return n + (1 if goldencove_on() else 0)
 
 def lbr_event(win=False):
   # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
   return 'BR_INST_RETIRED.NEAR_TAKENpdir' if win else ('rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'))
-def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
+def lbr_period(): return period(700000)
 def lbr_unfiltered_events(cut=False):
     e = lbr_event()
     return (e[:-1] if cut else e, 'instructions:ppp', 'cycles:p', 'BR_INST_RETIRED.NEAR_TAKENpdir')
@@ -89,6 +90,10 @@ def event(x, precise=0):
   e = aliases[x] if x in aliases else perf_event(x)
   if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
   return perf_format(e)
+
+def event_period(e, p, precise=True, lbr=True):
+  ev = event(e, (3 if goldencove_on() else 2) if precise else 0)
+  return '%s-e %s -c %d' % ('-b ' if lbr else '', ev, period(p))
 
 def find_event_name(x):
   e = C.flag_value(x, '-e')

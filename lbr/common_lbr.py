@@ -38,7 +38,7 @@ def exit(x, sample, label, n=0, msg=str(debug), stack=False):
   print_sample(sample, n)
   C.error(msg) if x else sys.exit(0)
 
-def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 3))
+paths_range = range(3, C.env2int('LBR_PATH_HISTORY', 4))
 
 stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
@@ -132,6 +132,7 @@ def is_empty(line):   return line.strip() == ''
 def has_timing(line): return line.endswith('IPC')
 
 def line_timing(line):
+  if 'cycles' not in line: return 0, 0
   # note: this ignores timing of 1st LBR entry (has cycles but not IPC)
   assert 'cycles' in line and 'IPC' in line, 'Could not match IPC in:\n%s' % line
   # PRED 1 cycles [59] 6.00 IPC

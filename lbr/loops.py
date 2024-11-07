@@ -175,7 +175,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     # inc(loop['BK'], hex(line_ip(lines[-1])))
     assert ip == loop_ipc
     if 'IPC' not in loop: loop['IPC'] = {}
-    for x in LC.paths_range():
+    for x in LC.paths_range:
       if 'paths-%d' % x not in loop: loop['paths-%d' % x] = {}
       inc(loop['paths-%d' % x], ';'.join([LC.hex_ip(a) for a in lbr_takens[-x:]]))
     if not LC.has_timing(prev_l): return
@@ -372,7 +372,7 @@ def print_loop(ip, num=0, print_to=sys.stdout, detailed=False):
   elif not len(loop['attributes']): loop['attributes'] = '-'
   elif ';' in loop['attributes']: loop['attributes'] = ';'.join(sorted(loop['attributes'].split(';')))
   dell = ['hotness', 'srcline', 'FL-cycles%', 'size', 'imix-ID', 'back', 'entry-block', 'IPC', 'tripcount']
-  for x in LC.paths_range(): dell += ['paths-%d' % x]
+  for x in LC.paths_range: dell += ['paths-%d' % x]
   #if 'taken' in loop and loop['taken'] <= loop['Conds']: dell += ['taken']
   if 'takens' in loop:
     for i in range(len(loop['takens'])):

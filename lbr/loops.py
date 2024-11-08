@@ -175,10 +175,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     # inc(loop['BK'], hex(line_ip(lines[-1])))
     assert ip == loop_ipc
     if 'IPC' not in loop: loop['IPC'] = {}
-    if len(lbr_takens) == 1 or lbr_takens[-2] != loops[ip]['back']:
-      for x in LC.paths_range:
-        if 'entry-paths-%d' % x not in loop: loop['entry-paths-%d' % x] = {}
-        inc(loop['entry-paths-%d' % x], ';'.join([LC.hex_ip(a) for a in lbr_takens[-x:]]))
+    if len(lbr_takens) == 1 or lbr_takens[-2] != loops[ip]['back']: LC.paths_inc('entry', loop, lbr_takens)
     if not LC.has_timing(prev_l): return
     cycles, takens = 0, []
     begin, at = find_block_ip()
@@ -305,6 +302,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         if l < ip < loops[l]['back'] < xip or ip < l < xip < loops[l]['back']:
           # [prev ip before shared block, loop1 ip, loop2 ip]
           inter_loops_dict[str(ip)] = [xip, l, ip]
+      # TODO: entry-block seems redundant with addition of entry-paths histo
       loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'imix-ID': None,
                    'attributes': ';entered_by_indirect' if indirect_jmp_enter() else '',
                    'entry-block': 0 if xip > ip else find_block_ip()[0],  # 'BK': {hex(xip): 1, },

@@ -38,8 +38,6 @@ def exit(x, sample, label, n=0, msg=str(debug), stack=False):
   print_sample(sample, n)
   C.error(msg) if x else sys.exit(0)
 
-paths_range = range(3, C.env2int('LBR_PATH_HISTORY', 4))
-
 stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
@@ -403,3 +401,44 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
   if do_tripcount_mean: d['num-buckets'] = '-'
   d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) is str else k) for k in hist.keys()) if weighted else tot
   return d
+
+glob_hist_threshold = C.env2int('LBR_GLOB_HIST_THR', 3) / 100.0
+hsts_threshold = {}
+def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
+
+def print_glob_hist(hist, name, weighted=False, threshold=glob_hist_threshold):
+  if name in hsts_threshold: threshold = hsts_threshold[name]
+  d = print_hist((hist, name, None, None, None, weighted), threshold)
+  if not type(d) is dict: return d
+  if d['type'] == 'hex': d['mode'] = hex_ip(int(d['mode']))
+  del d['type']
+  print('%s histogram summary: %s' % (name, hist_fmt(d)))
+  return d['total']
+
+paths_range = range(3, C.env2int('LBR_PATH_HISTORY', 4))
+def paths_inc(name, home, lbr_takens, extra=None): # extra = (ip, sample)
+  path = None
+  for x in paths_range:
+    h = '%s-paths-%d' % (name, x)
+    if h not in home: home[h] = {}
+    path = ';'.join([hex_ip(a) for a in lbr_takens[-x:]])
+    C.inc(home[h], path)
+  if extra and path and verbose & 0x10:
+    i = get_taken_idx(extra[1], paths_range[-1])
+    if i > 0: i -= 1 # one more line (hope for a label)
+    info_lines('address %s via path %s' % (extra[0], path), extra[1][i:] + [''])
+
+def paths_print(home):
+  for k in home.keys():
+    if 'paths' in k: print_glob_hist(home[k], k)
+
+def get_taken_idx(sample, n):
+  i = len(sample) - 1
+  while i >= 0:
+    if is_taken(sample[i]):
+      n += 1
+      if n==0: break
+    i -= 1
+  return i
+
+def info_lines(info, lines1): C.info_p(info, '\t\n'.join(['\t'] + lines1))

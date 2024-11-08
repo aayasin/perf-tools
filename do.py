@@ -18,7 +18,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.69
+__version__ = 3.70
 
 import argparse, os.path, sys
 import analyze, common as C, pmu, stats, tma
@@ -50,6 +50,7 @@ if 'generic' in pmu.name() and not globs['force-cpu']:
   C.error('\n'.join(("You are using an old Linux kernel not enabled for your platform",
                      "pmu: "+pmu.name(), "kernel: "+globs['uname-a'])))
 
+DSB = 'ANY_DSB_MISS'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'az-hot-loop':    .05,
@@ -77,7 +78,7 @@ do = {'run':        C.RUN_DEF,
   'lbr-branch-stats': 1,
   'lbr-indirects':  20,
   'lbr-jcc-erratum': 0,
-  'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
+  'lbr-stats':      '- 0 10 0 ' + DSB,
   'lbr-stats-tk':   '- 0 20 1',
   'lbr-verbose':    0,
   'ldlat':          int(globs['ldlat-def']),
@@ -820,11 +821,12 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if pmu.retlat(): assert ' -W' in do['perf-pebs'] or do['forgive'] > 1, "Expect use of Timed PEBS"
     if 'frontend' in do['perf-pebs'] and pmu.granite() and pmu.cpu('kernel-version') < (6, 4):
       error('Linux kernel version is too old for GNR: %s' % str(pmu.cpu('kernel-version')))
-    data = perf_record('pebs', 9, pmu.find_event_name(do['perf-pebs']))[0]
+    pebs_event = pmu.find_event_name(do['perf-pebs'])
+    data = perf_record('pebs', 9, pebs_event)[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
     if '_COST' in do['perf-pebs']: pass
     elif do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data),
-                              "@ top-10 IPs, Insts of %s" % pmu.find_event_name(do['perf-pebs']), data)
+                              "@ top-10 IPs, Insts of %s" % pebs_event, data)
     else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
     if pmu.retlat() and ' -W' in do['perf-pebs']:
       perf_script("-F retire_lat,ip | sort | uniq -c | awk '{print $1*$2 \"\\t\" $2 \"\\t\" $3 }' | grep -v ^0"
@@ -844,19 +846,16 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
       if top < 0 and isfile(logs['code']):
         exe("grep -w -5 '%s:' %s" % (top_ip, logs['code']), '@code around IP: %s' % top_ip)
-      elif not is_dsb: pass
       elif top == 1:
         # asserts in skip_sample() only if piped!!
-        perf_script("%s | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
-          perf_F(ilen=True), C.realpath('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
-      else:
-        perf_script("%s | ./lbr_stats %s | tee -a %s.ips.log" % (perf_F(ilen=True), do['lbr-stats'], data),
-                  "@ stats on PEBS event", data)
-      if top > 1:
+        perf_script("%s | tee >(%s %s 0 0 0 %s > %s.ip%s.log) | ./lbr_stats %s | tee -a %s.info.log" % (perf_F(ilen=True),
+          C.realpath('lbr_stats'), top_ip, pebs_event, data, top_ip,
+          do['lbr-stats'], data), "@ stats on %s" % pebs_event, data)
+      elif top > 1:
         cmd = ''
         while top > 0:
           top_ip = exe_1line("grep -E '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
-          cmd += ' | tee >(%s %s >> %s.ctxt.log) ' % (C.realpath('lbr_stats'), top_ip, data)
+          cmd += ' | tee >(%s %s >> %s.ip%s.log) ' % (C.realpath('lbr_stats'), top_ip, data, top_ip)
           top -= 1
         perf_script("%s %s > /dev/null" % (perf_F(ilen=True), cmd), "@ stats on PEBS", data)
     if '_COST' not in do['perf-pebs']: handle_top()
@@ -1139,6 +1138,9 @@ def main():
       C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)
     globs['cmds_file'] = open(cmds_file, 'w')
     globs['cmds_file'].write('# %s\n' % do_cmd)
+  if do['perf-pebs'].isupper(): do['perf-pebs'] = pmu.event_period(do['perf-pebs'])
+  if DSB not in do['perf-pebs'] and DSB in do['lbr-stats']:
+    do['lbr-stats'] = do['lbr-stats'].replace(DSB, pmu.find_event_name(do['perf-pebs']))
   if args.verbose > 5: C.printc(str(args))
   if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1

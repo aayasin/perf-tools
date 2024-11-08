@@ -66,7 +66,8 @@ def amd():
 
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
-def period(n): return n + (1 if goldencove_on() else 0)
+def default_period(): return 2000003
+def period(n): return n + (1 if (n % 10 == 0) and goldencove_on() else 0)
 
 def lbr_event(win=False):
   # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
@@ -91,7 +92,7 @@ def event(x, precise=0):
   if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
   return perf_format(e)
 
-def event_period(e, p, precise=True, lbr=True):
+def event_period(e, p=default_period(), precise=True, lbr=True):
   ev = event(e, (3 if goldencove_on() else 2) if precise else 0)
   return '%s-e %s -c %d' % ('-b ' if lbr else '', ev, period(p))
 
@@ -150,8 +151,6 @@ def get_events(tag='MTL'):
     elif rate == 3: return MTLraw.replace('0000', '0').replace('20011', '131').replace('100021', '131')
     else: C.error('pmu.get_events(%s): unsupported rate=%d' % (tag, rate))
   return TPEBS[tag].replace(',', ':p,') + ':p'
-
-def default_period(): return 2000003
 
 # perf_events add-ons
 def perf_format(es):

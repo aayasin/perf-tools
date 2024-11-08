@@ -612,7 +612,7 @@ def print_all(nloops=10, loop_ipc=0):
     if loop_ipc in loops.loops:
       lp = loops.loops[loop_ipc]
       tot = loops.print_loop_hist(loop_ipc, 'IPC')
-      for x in LC.paths_range: loops.print_loop_hist(loop_ipc, 'paths-%d' % x, sortfunc=lambda x: x[::-1])
+      for x in LC.paths_range: loops.print_loop_hist(loop_ipc, 'entry-paths-%d' % x, sortfunc=lambda x: x[::-1])
       if LC.glob['loop_iters']: lp['cyc/iter'] = '%.2f' % (LC.glob['loop_cycles'] / LC.glob['loop_iters'])
       lp['FL-cycles%'] = ratio(LC.glob['loop_cycles'], LC.stat['total_cycles'])
       if 'Cond_polarity' in lp and len(lp['Cond_polarity']) == 1:

@@ -692,7 +692,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   if en(8) and do['sample'] > 1:
     assert C.any_in(pmu.lbr_unfiltered_events(cut=True), do['perf-lbr']) \
            or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
-    data, nsamples = perf_record('lbr', 8)
+    msg = None if pmu.lbr_event() in do['perf-lbr'] else pmu.find_event_name(do['perf-lbr'])
+    data, nsamples = perf_record('lbr', 8, msg)
     info, comm = '%s.info.log' % data, get_comm(data) if not windows_file else None
     clean = r"sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def print_info(x):

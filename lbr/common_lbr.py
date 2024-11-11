@@ -150,7 +150,7 @@ def is_header(line):
     assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()
     if '::' in p: pass
     elif ': ' in p: line = patch(': ')
-    elif ':' in p: line = patch(':')
+    elif ':' in p: line = line.replace(p, p.replace(':', '-'))
   #    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
   return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
 # kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
@@ -169,6 +169,9 @@ def is_label(line):
   return line.endswith(':') or (len(spl) == 1 and line.endswith(']')) or \
       (len(spl) > 1 and spl[-2].endswith(':')) or \
       (':' in line and line.split(':')[-1].isdigit())
+
+def is_tag(line):
+  return C.any_in(('not reaching sample ...', ), line)
 
 def is_srcline(line): return 'srcline:' in line or is_label(line)
 def get_srcline(line):
@@ -257,6 +260,7 @@ class LineInfo:
     'ip hex':     line_ip_hex,
     'jmp ret':    x86.is_jmp_ret,
     'label':      is_label,
+    'tag':        is_tag,
     'memory':     x86.is_memory,
     'mem idx':    x86.is_mem_idx,
     'mem imm':    x86.is_mem_imm,
@@ -322,6 +326,7 @@ class LineInfo:
   def ip(self):             return self._get_info('ip')
   def ip_hex(self):         return self._get_info('ip hex')
   def is_label(self):       return self._get_info('label')
+  def is_tag(self):         return self._get_info('tag')
   def is_jmp_ret(self):     return self._get_info('jmp ret')
   def is_memory(self):      return self._get_info('memory')
   def is_mem_idx(self):     return self._get_info('mem idx')

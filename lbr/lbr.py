@@ -176,7 +176,7 @@ def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
 
 def edge_stats(line, lines, xip, size):
   info = LC.line2info(line)
-  if info.is_label(): return
+  if info.is_label() or info.is_tag(): return
   # An instruction may be counted individually and/or per imix class
   for x in LC.Insts:
     if LC.is_type(x, line):

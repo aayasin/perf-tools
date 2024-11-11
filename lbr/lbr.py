@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.57 # see version line of do.py
+__version__= x86.__version__ + 2.58 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -381,7 +381,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           # else: note a truncated tripcount, i.e. unknown in 1..31, is not accounted for by default.
         if mispred_ip and valid < 2: valid = 0
         if func: funcs.detect_functions(lines[func:])
-        if ip_filter: LC.paths_inc(ip_filter, hsts, takens, (ip_filter, lines))
+        if ip_filter: LC.paths_inc(ip_filter, hsts, takens, lines)
         if LC.debug and LC.debug == timestamp:
           exit((line.strip(), len(lines)), lines, 'sample-of-interest ended')
         break
@@ -585,9 +585,6 @@ def print_common(total):
 def print_all(nloops=10, loop_ipc=0):
   total = sum(LC.stat['IPs'].values()) if LC.glob['ip_filter'] else LC.stat['total']
   if not loop_ipc: print_common(total)
-  if total and (LC.stat['bad'] + LC.stat['bogus']) / float(total) > 0.5:
-    if LC.verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
-    else: C.error('Too many LBR bad/bogus samples in profile')
   for x in hsts.keys(): LC.print_glob_hist(hsts[x], x)
   sloops = sorted(loops.loops.items(), key=lambda x: loops.loops[x[0]]['hotness'])
   if loop_ipc:
@@ -629,7 +626,10 @@ def print_all(nloops=10, loop_ipc=0):
     for l in ploops:
       loops.print_loop(l[0], nloops)
       nloops -=  1
-    if 'lbr-cov' in LC.stat and LC.stat['lbr-cov'] < 1: C.error('LBR poor coverage (%.2f%%) of overall time' % LC.stat['lbr-cov'])
+  if total and (LC.stat['bad'] + LC.stat['bogus']) / float(total) > 0.5:
+    if LC.verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
+    else: C.error('Too many LBR bad/bogus samples in profile')
+  if 'lbr-cov' in LC.stat and LC.stat['lbr-cov'] < 1: C.error('LBR poor coverage (%.2f%%) of overall time' % LC.stat['lbr-cov'])
   # print functions
   if not loop_ipc:
     funcs_list = sorted(funcs.funcs, reverse=True)

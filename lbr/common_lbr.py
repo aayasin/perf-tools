@@ -201,12 +201,11 @@ def is_jcc_erratum(line, previous=None):
   next_ip = ip + length
   return not ip >> 5 == next_ip >> 5
 
-def print_sample(sample, n=10):
+def print_sample(sample, n=10, std=sys.stderr):
   if not len(sample): return
-  C.printf('\n'.join(('sample#%d' % stat['total'], sample[0], '\n')))
+  C.printf('\n'.join(('sample#%d' % stat['total'], sample[0], '\n')), std=std)
   size = int(sample[0].split('#size=')[1])
-  if len(sample) > 1: C.printf('\n'.join((sample[-min(n, size):] if n else sample[1:]) + ['\n']))
-  sys.stderr.flush()
+  if len(sample) > 1: C.printf('\n'.join((sample[-min(n, size):] if n else sample[1:]) + ['\n']), std=std)
 
 def str2int(ip, plist):
   try:
@@ -394,7 +393,8 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
       left, limit = 0, int(threshold * tot)
       for k in sorted_keys:
         if not limit or hist[k] >= limit and hist[k] > 1:
-          bucket = ('%70s' % k) if d['type'] == 'str' else '%5s' % (hex_ip(k) if d['type'] == 'hex' else k)
+          bucket = ('%150s' if 'callchain' in name else '%70s') % k if d['type'] == 'str' else (
+                    '%5s' % (hex_ip(k) if d['type'] == 'hex' else k))
           print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
         else: left += hist[k]
       if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * threshold))
@@ -416,21 +416,34 @@ def print_glob_hist(hist, name, weighted=False, threshold=glob_hist_threshold):
   return d['total']
 
 paths_range = range(3, C.env2int('LBR_PATH_HISTORY', 4))
-def paths_inc(name, home, lbr_takens, extra=None): # extra = (ip, sample)
+def paths_inc(name, home, lbr_takens, sample=None): # name is an IP
+  def inc(h, v):
+    if h not in home: home[h] = {}
+    C.inc(home[h], v)
   path = None
   for x in paths_range:
-    h = '%s-paths-%d' % (name, x)
-    if h not in home: home[h] = {}
     path = ';'.join([hex_ip(a) for a in lbr_takens[-x:]])
-    C.inc(home[h], path)
-  if extra and path and verbose & 0x10:
-    i = get_taken_idx(extra[1], paths_range[-1])
+    inc('%s-paths-%d' % (name, x), path)
+  if sample and path and verbose & 0x10:
+    # log path (IP-list of takens) to name
+    i = get_taken_idx(sample, -paths_range[-1])
     if i > 0: i -= 1 # one more line (hope for a label)
-    info_lines('address %s via path %s' % (extra[0], path), extra[1][i:] + [''])
+    info_lines('address %s via path %s' % (name, path), sample[i:] + [''])
+    # log callchain (labels) to name
+    callchain, j = '', len(sample) - 1
+    while j >= i:
+      info_j = line2info(sample[j])
+      func = sample[j].strip()[:-1] if info_j.is_label() else None
+      if not func and info_j.is_call_ret() and j < (len(sample) - 1) and not line2info(sample[j+1]).is_label(): func = '?'
+      if func:
+        sep = '' if not len(callchain) else (';' if '@plt' in func else ' -> ')
+        callchain = func + sep + callchain
+      j -= 1
+    inc('callchain names to ' + name, callchain)
 
 def paths_print(home):
   for k in home.keys():
-    if 'paths' in k: print_glob_hist(home[k], k)
+    if any(x in k for x in ['paths', 'callchain']): print_glob_hist(home[k], k)
 
 def get_taken_idx(sample, n):
   i = len(sample) - 1

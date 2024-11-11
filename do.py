@@ -10,6 +10,8 @@
 # Misc utilities for CPU performance profiling on Linux
 #
 # TODO list:
+#   let bottlenecks-view use instructions,cycles to watch IPC
+#   add a tunable of string to pass to all perf stat/record and toplev profile-steps
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a separate module, arg for output dir
 #   quiet mode
@@ -18,9 +20,9 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.70
+__version__ = 3.71
 
-import argparse, os.path, sys
+import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
 from lbr import x86
 from lbr.stats import inst_fusions
@@ -834,30 +836,37 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
                 " END {printf \"%%8d %%18s\\n\", sum, ip}' | sort -n | ./ptage > %s.ips-retlat.log)"
         " | sort -n | ./ptage | tee %s.lat-retlat.log | tail -11" % (data, data), "@ top-10 (retire-latency, IPs) pairs", data)
       exe(C.tail(data + '.ips-retlat.log'), "@ top-10 IPs by retire-latency")
-    is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
       if pmu.cpu('smt-on') and not do['batch'] and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')
-      else:
-        is_dsb = 1
-        perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
-                    (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
+      else: perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
+                        (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
+    def log_funcs(funcs_log):
+      if not isfile(funcs_log): return
+      sed_cut = "sed s/::/#/g | cut -d: -f3 | sed 's/, num-buckets//;s/\-> ? \-> //g;s/ \-> ?//g;s/ \-> /|/g;s/;/|/g' | sed s/#/::/g"
+      top = do['perf-pebs-top']
+      while top > 0:
+        top_ip = exe_1line("tail -%d %s.ips.log | head -1" % (top + 1, data), 2)
+        ip_log = '%s.ip%s.log' % (data, top_ip)
+        x = exe_1line("%s | %s" % (C.grep('callchain names .* summary', ip_log), sed_cut)).strip('|')
+        x = re.sub(r'\+\d+', '', x)
+        if x != '?':
+          for c in '()[]*+': x = x.replace(c, '\\' + c)
+          exe('echo modules of functions in mode callchain: >> %s && %s >> %s' % (ip_log, C.grep(x, funcs_log), ip_log))
+        top -= 1
     def handle_top():
       top = do['perf-pebs-top']
       top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
       if top < 0 and isfile(logs['code']):
         exe("grep -w -5 '%s:' %s" % (top_ip, logs['code']), '@code around IP: %s' % top_ip)
-      elif top == 1:
-        # asserts in skip_sample() only if piped!!
-        perf_script("%s | tee >(%s %s 0 0 0 %s > %s.ip%s.log) | ./lbr_stats %s | tee -a %s.info.log" % (perf_F(ilen=True),
-          C.realpath('lbr_stats'), top_ip, pebs_event, data, top_ip,
-          do['lbr-stats'], data), "@ stats on %s" % pebs_event, data)
-      elif top > 1:
+      elif top >= 1:
         cmd = ''
         while top > 0:
-          top_ip = exe_1line("grep -E '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
-          cmd += ' | tee >(%s %s >> %s.ip%s.log) ' % (C.realpath('lbr_stats'), top_ip, data, top_ip)
+          top_ip = exe_1line("tail -%d %s.ips.log | head -1" % (top + 1, data), 2)
+          cmd += ' | tee >(%s %s 0 0 0 %s > %s.ip%s.log) ' % (C.realpath('lbr_stats'), top_ip, pebs_event, data, top_ip)
           top -= 1
-        perf_script("%s %s > /dev/null" % (perf_F(ilen=True), cmd), "@ stats on PEBS", data)
+        perf_script("%s %s | ./lbr_stats %s | tee %s.info.log | grep sequential" % (perf_F(ilen=True), cmd,
+          do['lbr-stats'], data), "@ stats on %s" % pebs_event, data)
+        log_funcs(logs['code'].replace('code.log', 'funcs.log'))
     if '_COST' not in do['perf-pebs']: handle_top()
 
   if en(10):

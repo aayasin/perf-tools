@@ -9,12 +9,15 @@
 
 # studies multiple flavors of an application (with parallel post-processing)
 #
+# TODO:
+# * print-only flag (to be hoised from do.py to argument_parser in common.py)
+#
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.95
+__version__= 0.97
 
 import common as C, pmu, stats
-import os, sys, time, re
+import sys, time, re
 from lbr.lbr import stat_name
 
 def dump_sample():
@@ -49,6 +52,8 @@ Conf = {
     'imix-dsb': 'L2_RQSTS.CODE_RD_MISS,BACLEARS.ANY,DSB_FILL.OTHER_CANCEL,r01470261:DSB2MITE_SWITCHES.COUNT,'
                 'FRONTEND_RETIRED.DSB_MISS,FRONTEND_RETIRED.ANY_DSB_MISS,BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN,'
                 'branches,IDQ.MS_CYCLES_ANY,ASSISTS.ANY,INT_MISC.CLEARS_COUNT,MACHINE_CLEARS.COUNT,MACHINE_CLEARS.MEMORY_ORDERING,UOPS_RETIRED.MS:c1',  # 4.6-nda+
+    'code-l2pf':  'L2_RQSTS.CODE_RD_MISS,L2_RQSTS.CODE_RD_HIT,BACLEARS.ANY,ITLB_MISSES.WALK_COMPLETED,'
+                  'FRONTEND_RETIRED.LATENCY_GE_64,BR_INST_RETIRED.COND_TAKEN,BR_INST_RETIRED.COND_NTAKEN,cycles:k',
     'dsb-align':  '{instructions,cycles,ref-cycles,IDQ_UOPS_NOT_DELIVERED.CORE,UOPS_ISSUED.ANY,IDQ.DSB_UOPS,FRONTEND_RETIRED.ANY_DSB_MISS},'
                   '{instructions,cycles,INT_MISC.CLEARS_COUNT,DSB2MITE_SWITCHES.PENALTY_CYCLES,INT_MISC.CLEAR_RESTEER_CYCLES,ICACHE_DATA.STALLS}',
     'dsb-glc':  '{IDQ.DSB_UOPS,L2_RQSTS.CODE_RD_MISS,BACLEARS.ANY,r01470261:DSB2MITE_SWITCHES.COUNT,'
@@ -59,15 +64,16 @@ Conf = {
     #,r01e5:MEM_UOP_RETIRED.LOAD,r02e5:MEM_UOP_RETIRED.STA'
     'cond-misp': 'BR_INST_RETIRED.COND_TAKEN,BR_MISP_RETIRED.COND_TAKEN'
                  ',BR_INST_RETIRED.COND_NTAKEN,BR_MISP_RETIRED.COND_NTAKEN',
-    # TODO: remove if once event-list is updated
-    'mem-bw':   '' if pmu.icelake() or pmu.alderlake() else ','.join([pmu.perf_event('L2_LINES_OUT.'+x) for x in ('USELESS_HWPF', 'NON_SILENT', 'SILENT')]),
-    'openmp': 'r0106,MEM_INST_RETIRED.ALL_LOADS,MEM_LOAD_RETIRED.L2_MISS,L2_RQSTS.MISS,CPU_CLK_UNHALTED.PAUSE'
-              ',syscalls:sys_enter_sched_yield',
+    'mem-bw':   ','.join([pmu.perf_event('L2_LINES_OUT.'+x) for x in ('USELESS_HWPF', 'NON_SILENT', 'SILENT')]),
+    'openmp':   'r0106,MEM_INST_RETIRED.ALL_LOADS,MEM_LOAD_RETIRED.L2_MISS,L2_RQSTS.MISS,CPU_CLK_UNHALTED.PAUSE'
+                ',syscalls:sys_enter_sched_yield',
   },
   'Pebs': {
-    'dsb-bw': # not in eventlist pmu.event('FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4', 3),
-              '-b -e %s/event=0xc6,umask=%d,frontend=0x400206,name=FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4/uppp%s'
-              ' -c 100003' % (pmu.pmu(), 3 if pmu.redwoodcove_on() else 1, ' -W' if pmu.retlat() else ''),
+    'dsb-bw': # not in eventlist pmu.pevent('FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4'),
+            ('-b -e %s/event=0xc6,umask=%d,frontend=0x400206,name=FRONTEND_RETIRED.LATENCY_GE_2_BUBBLES_GE_4/uppp%s'
+              ' -c 100003' % (pmu.pmu(), 3 if pmu.redwoodcove_on() else 1, ' -W' if pmu.retlat() else ''), ),
+    'code-l2pf':  ['FRONTEND_RETIRED.L2_MISS', 'FRONTEND_RETIRED.LATENCY_GE_64', 'FRONTEND_RETIRED.LATENCY_GE_128'] +
+                  (['FRONTEND_RETIRED.UNKNOWN_BRANCH'] if pmu.goldencove_on() else []),
   },
   'Toplev': {'imix-loops': ' --frequency --metric-group +Summary',
   },
@@ -75,8 +81,14 @@ Conf = {
     'openmp': [[':perf-stat-ipc:"\'stat -e instructions,cycles,r0106\'"']],
   },
 }
-Conf['Events']['all-misp'] = Conf['Events']['cond-misp']
-for x in ('all-misp', 'cond-misp'): Conf['Pebs'][x] = '-b -e %s -c 20003' % pmu.event(x, 3)
+
+def init_Conf():
+  def event(e, period=20000): return pmu.event_period(e, period)
+  Conf['Events']['all-misp'] = Conf['Events']['cond-misp']
+  for x in ('all-misp', 'cond-misp'): Conf['Pebs'][x] = (event(x), )
+  for m in Conf['Pebs'].keys():
+    for i, e in enumerate(Conf['Pebs'][m]):
+      if e.isupper(): Conf['Pebs'][m][i] = event(e, 200 if m == 'code-l2pf' else 3000)
 
 def modes_list():
   ms = []
@@ -86,6 +98,7 @@ def modes_list():
 
 def parse_args():
   def conf(x): return Conf[x][DM] if DM in Conf[x] else None
+  init_Conf()
   ap = C.argument_parser('study two or more modes (configs)', mask=STUDY_PROF_MASK,
          defs={'events': Conf['Events'][DM], 'toplev-args': conf('Toplev'), 'tune': conf('Tune')})
   ap.add_argument('config', nargs='*', default=[])
@@ -146,6 +159,10 @@ def parse_args():
   args = ap.parse_args()
   if args.dump: dump_sample()
   C.printc('mode: %s' % DM)
+  if args.verbose > 9:
+    for k in Conf.keys(): print(k, '::\n', C.dict2str(Conf[k]))
+  # this is needed unless PEBS profile-step becomes default in do.py
+  if args.profile_mask == STUDY_PROF_MASK and args.mode in Conf['Pebs'].keys(): args.profile_mask |= 0x200
   def fassert(x, msg): assert x or args.forgive, msg
   assert len(args.config), "at least 2 modes are required"
   fassert(len(args.config) > 1, "at least 2 modes are required (or use --forgive)")
@@ -153,6 +170,7 @@ def parse_args():
   fassert(args.profile_mask & 0x100, 'args.pm=0x%x' % args.profile_mask)
   assert args.repeat > 2, "stats module requires '--repeat 3' at least"
   if DM in ('dsb-align', ): pass
+  elif DM in ('code-l2pf', ) and not pmu.goldencove_on(): C.warn('Better study code-l2pf on GLC or newer PMU')
   else: fassert(pmu.v5p(), "PMU version >= 5 is required for COND_[N]TAKEN, USELESS_HWPF events")
   if args.stages & 0x4 and len(args.config) == 2:
     assert sys.version_info >= (3, 0), "stage 4 requires Python 3 or above."
@@ -313,6 +331,7 @@ def compare_stats(app1, app2):
   if args.show_loops: print_regressed_ipcs()
 
 def main():
+  lbr_cycles = '--tune :perf-lbr:"\'-j any,save_type -e cycles:p -c %d\'"' % 2e6
   do0 = C.realpath('do.py')
   do = do0 + ' profile'
   for x in C.argument_parser(None):
@@ -320,10 +339,8 @@ def main():
     if a: do += ' --%s %s' % (x, "'%s'" % a if ' ' in a else a)
   if args.repeat != 3: do += ' -r %d' % args.repeat
 
-  x = 'tune'
+  x, extra = 'tune', ''
   a = getattr(args, x) or []
-  extra = ' :sample:3' if C.any_in(['dsb', 'misp'], args.mode) else ''
-  if args.mode in Conf['Pebs'].keys(): extra += ' :perf-pebs:"\'%s\'" :perf-pebs-top:-1' % Conf['Pebs'][args.mode]
   if pmu.skylake(): extra += ' :perf-stat-add:-1'
   elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
   a.insert(0, [':batch:1 :help:0 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s ' % (
@@ -335,6 +352,13 @@ def main():
   do = do.replace('{', '"{').replace('}', '}"')
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
+  def pebs_cmds(x, mode):
+    l = []
+    if args.mode in Conf['Pebs'].keys():
+      for e in Conf['Pebs'][args.mode]:
+        tune = '--tune :sample:3 :perf-pebs:"\'%s\'" :perf-pebs-top:10' % e
+        l += [' '.join([do, '-a', app(x), tune, '-pm 200 --mode', mode])]
+    return l
 
   C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'FORCECPU', 'EVENTMAP')
                       ] + sys.argv + ['# version %.2f' % __version__]), '.study.cmd')
@@ -344,9 +368,12 @@ def main():
       exe('%s disable-smt disable-aslr -v1' % do0)
       enable_it=1
     if args.stages & 0x8: exe(do_cmd('version log'))
-    if args.profile_mask == STUDY_PROF_MASK and C.any_in(('misp', 'dsb'), args.mode): args.profile_mask |= 0x200
     try:
-      for x in args.config: exe(' '.join([do, '-a', app(x), '-pm', '%x' % args.profile_mask, '--mode profile']))
+      for x in args.config:
+        exe(' '.join([do, '-a', app(x), '-pm', '%x' % (args.profile_mask & ~0x200), '--mode profile']))
+        if args.profile_mask & 0x100: exe(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode profile']))
+        if args.profile_mask & 0x200 and args.mode in Conf['Pebs'].keys():
+          for c in pebs_cmds(x, 'profile'): exe(c)
     # command failed and exited w/ error
     except SystemExit as e: sys.exit(e)
     finally:
@@ -358,6 +385,9 @@ def main():
       if int(step, 16) & args.profile_mask:
         for x in args.config:
           jobs.append(' '.join([do, '-a', app(x), '-pm', step, '--mode process']))
+          if step == '100': jobs.append(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode process']))
+        if step == '200' and args.mode in Conf['Pebs'].keys():
+          for c in pebs_cmds(x, 'process'): jobs.append(c)
     if len(jobs):
       jobs.append(jobs.pop(0))
       name = './.%s.sh' % C.command_basename(args.app + ' t%s' % args.attempt)

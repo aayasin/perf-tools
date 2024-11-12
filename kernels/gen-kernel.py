@@ -11,24 +11,24 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.84
+__version__ = 0.85
 # TODO:
 # - functions/calls support
+# - make r9/r10 a list-of-2 arg so user can change them
 
-import argparse, sys
+import argparse, os, re, sys
+import jumpy as J, references
 
-import os
 sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/..')
 import common as C
-
-import jumpy as J, references
 from lbr.x86 import x86_asm, INST_1B, INST_UNIQ
 
 ap = argparse.ArgumentParser()
 ap.add_argument('-n', '--unroll-factor', type=int, default=3, help='# times to repeat instruction(s), aka unroll-factor')
 ap.add_argument('-r', '--registers', type=int, default=0, help="# of registers to traverse via '@' if > 0")
 ap.add_argument('--registers-max', type=int, default=16, help="max # of registers in the instruction-set")
-ap.add_argument('-i', '--instructions', nargs='+', default=[INST_UNIQ], help='Instructions for the primary loop (Loop). NOP#3 denotes NOP three times e.g.')
+ap.add_argument('-i', '--instructions', nargs='+', default=[INST_UNIQ], help='Instructions for the primary loop (Loop). '
+                'NOP#3 denotes NOP three times. Instructions are read from filename.txt, if solely provided.')
 ap.add_argument('-l', '--loops', type=int, default=1, help='# of nested loops')
 ap.add_argument('-p', '--prolog-instructions', nargs='+', default=[], help='Instructions prior to the Loop')
 ap.add_argument('-e', '--epilog-instructions', nargs='+', default=[], help='Instructions post the Loop')
@@ -55,6 +55,20 @@ prefetch = J.init(args.mode, args.unroll_factor, args.mode_args) if jumpy() else
 if args.registers > 0:
   if '@' not in ' '.join(args.instructions): error("expect '@' in --instructions")
   if args.registers > args.registers_max:    error("invalid value for --registers! must be < %d"%args.registers_max)
+
+if len(args.instructions) == 1 and args.instructions[0].endswith('.txt'):
+  f, insts, ip_idx = args.instructions[0], [], 0
+  print('// reading instructions from file: %s' % f)
+  lines = C.file2lines(f, True)
+  for i in lines[:-1]:
+    if i.startswith('j') and '0x' in i: i = ' '.join((i.split()[0], 'Lbl_end'))
+    x = re.search('([0-9a-fx]+)\(%[re]ip', i)
+    if x:
+      i = i.replace(x.group(1), '0x%x' % (0x100 + ip_idx))
+      ip_idx += 16
+    insts += [i]
+  args.instructions = insts
+  args.unroll_factor = 1
 
 for i in args.instructions:
   if '%r9' in i or '%r10' in i: error("can't use registers r9 and r10, please use other registers")

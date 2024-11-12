@@ -13,7 +13,7 @@ __author__ = 'akhalil'
 
 import common as C
 import lbr.common_lbr as LC
-from lbr.loops import loops
+from lbr.loops import loops, is_loop_exit
 import lbr.x86_fusion as x86_f, lbr.x86 as x86
 
 user_imix = C.env2list('LBR_FUNC_IMIX', ['zcnt'])
@@ -51,17 +51,17 @@ class Function:
 
   def __str__(self, detailed=False, index=None):
     ipcs = sorted(self.ipc_histo.keys())
-    summ = f"{{ip: 0x{self.ip}, hotness: {self.hotness}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}" \
+    summ = f"{{ip: {self.ip}, hotness: {self.hotness}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}" \
       f"{f', srcline: {self.srcline}' if self.srcline else ''}" \
       f"{ipc_values(self.ipc_histo) if ipcs else ''}" \
       f", flows-num: {self.flows_num}"
     flows = sorted(self.flows)
     if detailed:
-      result = C.printc(f'flows of function at 0x{self.ip}:', log_only=True)
+      result = C.printc(f'flows of function at {self.ip}:', log_only=True)
       for i, f in enumerate(reversed(flows)): result += '\n' + str(f)
       if ipcs:
         result += '\n\n'
-        result += C.printc(f'IPC histogram of function at 0x{self.ip}:\n', log_only=True)
+        result += C.printc(f'IPC histogram of function at {self.ip}:\n', log_only=True)
         result += LC.print_ipc_hist(self.ipc_histo, ipcs)
       result += f'\n\nFunction#{index}: {summ}}}\n\n'
     else:
@@ -105,7 +105,7 @@ class Flow:
   def __str__(self):
     ipcs = self.ipc_histo.keys()
     result = '' if self.code == '' else f'\n{self.code}\n'
-    result += f"flow {self.flow}: [hotness: {self.hotness}, func-ip: 0x{self.func_ip}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}, " \
+    result += f"flow {self.flow}: [hotness: {self.hotness}, func-ip: {self.func_ip}, FF-cycles%: {C.ratio(self.FF_cycles, LC.stat['total_cycles'])}, " \
       f"size: {self.size}, imix-ID: {self.imix_ID}, back: {self.back}, inner: {self.inner},{f' inner-functions: {self.inner_funcs},' if self.inner > 0 else ''}" \
       f" outer: {self.outer},{f' outer-functions: {self.outer_funcs},' if self.outer > 0 else ''} Conds: {self.conds}, " \
       f"op-jcc-mf: {self.op_jcc_mf}, mov-op-mf: {self.mov_op_mf}, ld-op-mf: {self.ld_op_mf}, taken: {self.taken}" \
@@ -137,10 +137,10 @@ def process_function(lines, outer_funcs=[]):
   lines.pop(0)
   info = LC.line2info(lines[0])
   srcline = info.srcline() if LC.is_srcline(lines[0]) else None
-  if info.is_label():
+  if info.is_label() or info.is_tag():
     if len(lines) == 1: return lines[0], [] # corner case 2 of call -> label -> sample end
     lines.pop(0)
-  ip = LC.line_ip_hex(lines[0])
+  ip = LC.hex_ip(LC.line_ip(lines[0]))
   new_func = Function(ip)
   new_func.srcline = srcline
   new_flow = Flow(ip)
@@ -150,7 +150,7 @@ def process_function(lines, outer_funcs=[]):
   insts_cnt = {}
   for i in types: insts_cnt[i] = 0
   cycles = 0
-  loop_code, loop_end = False, None
+  loop_ip, loop_end = None, None
 
   # finalize stats, add new or update current func/flow if exists
   def add_func(back=None):
@@ -184,6 +184,10 @@ def process_function(lines, outer_funcs=[]):
     func.flows.add(flow)
     funcs_set.add(func)
 
+  def update_flow(c, s):
+    if not new_flow.flow.endswith('_') and new_flow.flow != '': new_flow.flow += '_'
+    new_flow.flow += '%s%s_' % (c, s)
+
   global total_cycles
   inner_end = None
   for index, line in enumerate(lines):
@@ -193,45 +197,51 @@ def process_function(lines, outer_funcs=[]):
     new_flow.size += 1
     new_flow.code += line.strip() + '\n'
     line_ip = info.ip()
-    hex_ip = info.ip_hex()
+    hex_ip = LC.hex_ip(line_ip)
+    next = LC.next_line(lines, index)
     if info.is_taken():
       new_flow.taken += 1
       new_flow.takens.add(hex_ip)
-      if not loop_code:
+      if not loop_ip or is_loop_exit(loop_ip, loop_end, line_ip, next):
+        loop_ip = None
         c = LC.line_timing(line)[0]
         cycles += c
         total_cycles += c
+      if info.is_indirect() and next:  # taken indirect branch
+        update_flow('I', LC.hex_ip(LC.line_ip(next)))
     if 'ret' in line:  # function end
       add_func(hex_ip)
-      return line, [ip] + inner_funcs  # return last processed line & inner functions
+      return line, [ip] + inner_funcs if ip not in inner_funcs else inner_funcs  # return last processed line & inner functions
     if 'call' in line:  # inner function
-      resume_line, inner_funcs = process_function(lines[index:], outer_funcs=outer_funcs + [ip])
+      resume_line, inner_funcs_add = process_function(lines[index:], outer_funcs=outer_funcs + [ip])
       inner_end = lines.index(resume_line)
+      inner_funcs.extend([item for item in inner_funcs_add if item not in inner_funcs])
       continue
     if index > 1:
-      if x86_f.is_jcc_fusion(lines[index - 1], line): new_flow.op_jcc_mf += 1
-      elif index == len(lines) - 1 or not x86_f.is_jcc_fusion(line, lines[index + 1]):
-        if x86_f.is_mov_op_fusion(lines[index - 1], line) or x86_f.is_vec_mov_op_fusion(lines[index - 1], line):
-          new_flow.mov_op_mf += 1
-        elif x86_f.is_ld_op_fusion(lines[index - 1], line) or x86_f.is_vec_ld_op_fusion(lines[index - 1], line):
-          new_flow.ld_op_mf += 1
+      prev = LC.prev_line(lines, index)
+      if prev:
+        if x86_f.is_jcc_fusion(prev, line): new_flow.op_jcc_mf += 1
+        elif index == len(lines) - 1 or not x86_f.is_jcc_fusion(line, next):
+          if x86_f.is_mov_op_fusion(prev, line) or x86_f.is_vec_mov_op_fusion(prev, line):
+            new_flow.mov_op_mf += 1
+          elif x86_f.is_ld_op_fusion(prev, line) or x86_f.is_vec_ld_op_fusion(prev, line):
+            new_flow.ld_op_mf += 1
     t = info.inst_type()
     if t and t in types: insts_cnt[t] += 1
-    if line_ip in loops and not loop_code:
-      new_flow.flow += '_' + hex_ip + '_'
-      loop_code = True
-      loop_end = loops[line_ip]['back']
+    if line_ip in loops and not loop_ip:  # inner loop
+      loop_ip, loop_end = line_ip, loops[line_ip]['back']
     if info.is_cond_br():  # cond branch line
       new_flow.conds += 1
-      if loop_end and line_ip == loop_end and not info.is_taken():
-        loop_code = False
+      if loop_ip and line_ip == loop_end and not info.is_taken():  # inner loop end
+        update_flow('L', LC.hex_ip(loop_ip))
+        loop_ip = None
         continue
-      if not loop_code:
+      if not loop_ip:
         t = '1' if info.is_taken() else '0'
         new_flow.flow += t
   # reached sample end before function ends
   add_func()
-  return lines[-1], [ip] + inner_funcs  # return last processed line & inner functions
+  return lines[-1], [ip] + inner_funcs if ip not in inner_funcs else inner_funcs  # return last processed line & inner functions
 
 # supports functions observed in a single sample
 def detect_functions(lines):

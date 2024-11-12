@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.52 # see version line of do.py
+__version__ = 0.53 # see version line of do.py
 
 import common as C, pmu, stats, tma
 from lbr import x86
@@ -61,8 +61,9 @@ def analyze_misp():
   def lookup(x): return C.exe_one_line("grep %s %s" % (x, ext('hitcounts')), fail=1)
   info_d = stats.read_info(ext('info'))
   def top_target(src, i='indirect'):
-    # TODO work with hist struct
-    mode = i + '_0x%s_targets_mode' % src
+    h = i + '_0x%s_targets' % src
+    mode = h + '_mode'
+    exe(stats.grep_histo(h, ext('info')))
     if mode in info_d:
       t = info_d[mode][0]
       t_cov = info_d[i + '_0x%s_targets_[%s]' % (src, t)][0] / info_d[i + '_0x%s_targets_total' % src][0]
@@ -116,7 +117,7 @@ def analyze(app, args, do=None):
   def examine(bottleneck):
     value = stats.get(bottleneck, app)
     flagged = value > threshold[bottleneck]
-    atts = ('\n', 'exceeded', C.color.RED) if flagged else ('', 'within its threshold', C.color.DARKCYAN)
+    atts = ('\n', 'exceeded', C.color.RED) if flagged else ('', 'within its threshold', C.color.GREEN)
     C.printc('%s%s = %s is %s' % (atts[0], bottleneck, value, atts[1]), atts[2])
     return flagged
 

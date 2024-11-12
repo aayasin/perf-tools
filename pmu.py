@@ -66,12 +66,16 @@ def amd():
 
 # events
 def pmu():  return 'cpu_core' if hybrid() else 'cpu'
+def default_period(): return 2000003
+def period(n): return n + (1 if (n % 10 == 0) and goldencove_on() else 0)
 
-def lbr_event():
+def lbr_event(win=False):
   # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
-  return 'rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp')
-def lbr_period(period=700000): return period + (1 if goldencove_on() else 0)
-def lbr_unfiltered_events(): return (lbr_event(), 'instructions:ppp', 'cycles:p')
+  return 'BR_INST_RETIRED.NEAR_TAKENpdir' if win else ('rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'))
+def lbr_period(): return period(700000)
+def lbr_unfiltered_events(cut=False):
+    e = lbr_event()
+    return (e[:-1] if cut else e, 'instructions:ppp', 'cycles:p', 'BR_INST_RETIRED.NEAR_TAKENpdir')
 
 def event(x, precise=0):
   def misp_event(sub): return perf_event('BR_MISP_RETIRED.%s%s' % (sub, '_COST' if retlat() else ''))
@@ -87,6 +91,10 @@ def event(x, precise=0):
   e = aliases[x] if x in aliases else perf_event(x)
   if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
   return perf_format(e)
+
+def event_period(e, p=default_period(), precise=True, lbr=True):
+  ev = event(e, (3 if goldencove_on() else 2) if precise else 0)
+  return '%s-e %s -c %d' % ('-b ' if lbr else '', ev, period(p))
 
 def find_event_name(x):
   e = C.flag_value(x, '-e')
@@ -143,8 +151,6 @@ def get_events(tag='MTL'):
     elif rate == 3: return MTLraw.replace('0000', '0').replace('20011', '131').replace('100021', '131')
     else: C.error('pmu.get_events(%s): unsupported rate=%d' % (tag, rate))
   return TPEBS[tag].replace(',', ':p,') + ':p'
-
-def default_period(): return 2000003
 
 # perf_events add-ons
 def perf_format(es):
@@ -295,12 +301,31 @@ def cpu_msrs():
 def cpu_peak_kernels(widths=(4, 5, 6, 8)):
   return ['peak%dwide' % x for x in widths]
 
-def cpu_pipeline_width():
+def cpu_pipeline_width(all_widths=None):
+  full_widths = {'dsb':('IDQ.DSB_UOPS',4), 'mite':('IDQ.MITE_UOPS',4), 'decoders':('INST_DECODED.DECODERS',4), 'ms':('IDQ.MS_UOPS',4),
+                 'issued':('UOPS_ISSUED.ANY',4), 'executed':('UOPS_EXECUTED.CORE',8), 'retired':('UOPS_RETIRED.ALL',4)}
+  if all_widths: # TODO: eventually read from pmu-tools.
+    if icelake():
+      full_widths = {'dsb':('IDQ.DSB_UOPS',6), 'mite':('IDQ.MITE_UOPS',5), 'decoders':('INST_DECODED.DECODERS',4), 'ms':('IDQ.MS_UOPS',4),
+                     'issued':('UOPS_ISSUED.ANY',5),'executed':('UOPS_EXECUTED.THREAD',10),'retired':('UOPS_RETIRED.SLOTS',8)}
+    elif goldencove() or redwoodcove():
+      full_widths = {'dsb':('IDQ.DSB_UOPS',8), 'mite':('IDQ.MITE_UOPS',6), 'decoders':('INST_DECODED.DECODERS',6), 'ms':('IDQ.MS_UOPS',4),
+                     'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.THREAD',12),'retired':('UOPS_RETIRED.SLOTS',8)}
+    return full_widths
   width = 4
   if icelake(): width = 5
   elif goldencove() or redwoodcove(): width = 6
   elif lunarlake(): width = 8
   return width
+
+def widths_2_cmasks(widths):
+  events = ""
+  for i in widths:
+    e = widths[i][0]
+    for j in range(int(widths[i][1])):
+      event_cmask = e + ':c' + str(j+1)
+      events += perf_event(event_cmask).replace(e, event_cmask) + ','
+  return events[:-1]
 
 # deeper uarch stuff
 

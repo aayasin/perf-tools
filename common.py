@@ -117,7 +117,7 @@ def log_callchain():
 # @debug: print the command before its execution
 # @redir_out:  redirect output of the (first non-piped) command as specified
 # @run:   do run the specified command
-# @log:   log the commands's output into log_stdio (if any)
+# @log:   log the command's output into log_stdio (if any)
 # @fail:  1: exit with error if command fails; 0: warn; -1: no-warn
 # @background: run the specified command in background (do not block)
 def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=1, background=False):
@@ -170,7 +170,7 @@ def exe_one_line(x, field=None, debug=False, fail=0):
   return res
 
 def ptage(r=2): return 'PTAGE_R=%d %s/ptage' % (r, dirname())
-def tail(f=''): return "tail -11 %s | grep -E -v '=total|^\s+0'" % f
+def tail(f=''): return "tail -11 %s | %s" % (f, grep('=total|^\s+0', flags='-v'))
 
 def par_jobs_file(commands, name=None, verbose=False, shell='bash'):
   if not name: name = './.p%d.sh' % os.getpid()
@@ -241,9 +241,11 @@ def csv2dict(f):
     d[k] = l.split(',')[1]
   return d
 
+def zprefix(file): return 'z' if file.endswith(('.gz', '.zip')) else ''
+
 # (colored) grep with 0 exit status
 def grep(what, file='', flags='', color=False):
-  cmd = "grep -E %s '%s' %s" % (flags, what, file)
+  cmd = "%sgrep -E %s '%s' %s" % (zprefix(file), flags, what, file)
   if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('grep', 'grep --color')
   return "(%s || true)" % cmd
 
@@ -270,9 +272,9 @@ def hist2str(h, top=20): return iter2str(hist2slist(h)[-top:])
 def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])
 def toplev_log2csv(f): return f.replace('.log', '-perf.csv')
 
-# chop - clean a list of charecters from a string
+# chop - clean a list of characters from a string
 # @s:     input string
-# @stuff: input charecters as string, or a first item in a tuple of strings
+# @stuff: input characters as string, or a first item in a tuple of strings
 CHOP_STUFF='/~<>=,;{}[]()|"\': '
 def chop(source, stuff=CHOP_STUFF):
   r, chars = source, stuff
@@ -323,7 +325,7 @@ def argv2str(start=0):
 def args_parse(d, args):
   for x in args.split(','):
     if len(x):
-      assert '=' in x, "expect '=' as deliminer in '%s'" % args
+      assert '=' in x, "expect '=' as delimiter in '%s'" % args
       arg, val = x.split('=')
       assert arg in d, "unknown option '%s' in '%s'!" % (arg, args)
       d[arg] = int(val) if val.isdigit() else val

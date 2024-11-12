@@ -970,6 +970,7 @@ def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   epilog = """environment variables:
     FORCECPU - force a specific CPU all over e.g. SPR, spr.
+    TMA_CPU - force model for TMA (in .stat filename).
     TRACEBACK - print traceback of calls on error.
   """
   ap = C.argument_parser(usg='do.py command [command ..] [options]',

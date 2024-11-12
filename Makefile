@@ -80,8 +80,8 @@ test-mt: run-mt
 
 AZ_PM = '112 --tune :az-Mispredictions:5 :az-Instruction_Fetch_BW:5' # stress for testing
 test-analyze:
-	$(MAKE) test-bc2     CMD='profile analyze' PM=$(AZ_PM)
-	$(MAKE) test-default CMD=analyze PM=$(AZ_PM) TEST_LBR_PERF=0
+	$(MAKE) test-bc2     CMD='profile analyze' PM=$(AZ_PM)          DO="$(DO)"
+	$(MAKE) test-default CMD=analyze PM=$(AZ_PM) TEST_LBR_PERF=0    DO="$(DO)"
 test-bc2:
 	$(DO2) -pm $(PM) | $(SHOW)
 
@@ -93,7 +93,7 @@ test-build:
 	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS -n '+Core_Bound*' -pm 22 | $(SHOW)
 	grep -q 'Backend_Bound.Core_Bound.Ports_Utilization.Ports_Utilized_1' datadep-20e6.toplev-vl2.log
 	grep Time datadep-20e6.toplev-vl2.log
-	$(SKIP_EX) || ( set -o pipefail; ./do.py profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
+	$(SKIP_EX) || ( set -o pipefail; $(DO) profile -a './kernels/datadep 20000001' -e FRONTEND_RETIRED.DSB_MISS --tune :interval:50 \
 	    -pm 20006 -r 1 | $(SHOW) ) # tests ocperf -e (w/ old perf tool) in all perf-stat steps, --repeat, :interval
 test-default:
 	$(DO1) -pm $(PM) $(DO_SUFF)
@@ -108,8 +108,7 @@ test-default-track-perf:
 	info=$$(ls -1tr *info.log | tail -1); grep ^LBR $$info; cp $$info perf-trk/$$(date +"%Y-%m-%d").$$info
 	$(DO1) --toplev-args ' --no-multiplex --frequency --metric-group +Summary' -pm 1010 # carefully tests MUX sensitive profile-steps
 	@echo 1 > $@
-test-edge-inst:
-	# TODO: rename this target to simply test-edge
+test-LBR-edge:
 	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp -c 3000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e cycles:p -c 2000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 
@@ -230,7 +229,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL)" \
     "echo 'testing prof-no-aux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
     "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command' && \
-     $(MAKE) test-default DO_SUFF=\"--tune :calibrate:1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
+     $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && \
      test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && test -f $(AP)-u.$(CPU).results.tar.gz" \
     "echo 'testing sys-wide non-MUX profile-steps' && \
@@ -242,7 +241,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing study script (errors only)' && $(MAKE) test-study" \
     "echo 'testing srcline stat' && $(MAKE) test-srcline" \
     "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
-    "echo 'testing sampling by instructions' && $(MAKE) test-edge-inst" \
+    "echo 'testing sampling by instructions' && $(MAKE) test-LBR-edge" \
     "$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1" \
     "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)" \
     "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL)" \

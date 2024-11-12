@@ -69,4 +69,5 @@ optional arguments:
                         num-iterations of kernel (default: 1e9)
 
 environment variables: FORCECPU - force a specific CPU all over e.g. SPR, spr.
-TRACEBACK - print traceback of calls on error.
+TMA_CPU - force model for TMA (in .stat filename). TRACEBACK - print traceback
+of calls on error.

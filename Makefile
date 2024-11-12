@@ -8,7 +8,7 @@ CPU = $(shell ./pmu.py CPU)
 DO = ./do.py # Use e.g. DO="do.py --perf /my/perf" to init things, or DO_SUFF to override things
 DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10
 DO2 = $(DO) $(CMD) -a 'workloads/BC.sh 3'
-FAIL = (echo "failed! $$?"; exit 1)
+FAIL = (echo 'failed! $$?'; exit 1)
 MAKE = make --no-print-directory
 METRIC = -m IpCall
 MGR = sudo $(shell python -c 'import common; print(common.os_installer())') -y -q
@@ -209,42 +209,50 @@ PT=perf-tools.1
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \
 	    $(PT) run-mem-bw setup-system-* test-{default-track-perf,dir,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
+	rm -f .prepush_state.cmd
 post-push:
 	$(CLONE) $(PT) && cd $(PT) && ./do.py setup-perf log && cd .. && rm -rf $(PT)   # tests a fresh clone
 
+PRE_PUSH_CMDS := \
+    "echo 'testing help of metric; version; prompts for sudo password' && $(DO) version log help -m GFLOPs --tune :msr:1" \
+    "echo 'testing sys-wide + topdown tree; MEM_Bandwidth in L5' && $(MAKE) test-mem-bw SHOW=\"grep --color -E '.*<=='\"" \
+    "echo 'testing perf -M IpCall & colored TMA, then toplev --drilldown' && $(MAKE) test-metric SHOW=\"grep --color -E '^|Ret.*<=='\"" \
+    "echo 'prompting for sudo soon' && $(DO) log" \
+    "echo 'testing topdown across-tree tagging; Mispredict' && $(MAKE) test-bc2 PM=40 SHOW=\"grep --color -E '^|Mispredict'\"" \
+    "echo 'testing topdown ~overlap in Threshold attribute' && echo skip: $(MAKE) test-false-sharin" \
+    "echo 'testing Bottlenecks View' && $(MAKE) test-bottlenecks AP=\"./kernels/cpuid $(CPUIDI)\"" \
+    "echo 'testing build command, perf -e, toplev --nodes; Ports_*' && $(MAKE) test-build SHOW=\"grep --color -E '^|build|DSB|Ports'\"" \
+    "echo 'testing load-latency profile-step + verbose:1' && rm -f run-mem-bw && $(MAKE) test-mem-bw RERUN='-pm 400 -v1'" \
+    "echo 'building CLTRAMP3D workload for upcoming tests' && $(MAKE) tramp3d-v4" \
+    "echo 'testing default profile-steps, tracks LBR speed' && $(MAKE) test-default-track-perf" \
+    "echo 'testing stats module' && $(MAKE) test-stats" \
+    "echo 'testing analyze module' && $(MAKE) test-analyze" \
+    "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL)" \
+    "echo 'testing prof-no-aux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
+    "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command' && \
+     $(MAKE) test-default DO_SUFF=\"--tune :calibrate:1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
+     -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && \
+     test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && test -f $(AP)-u.$(CPU).results.tar.gz" \
+    "echo 'testing sys-wide non-MUX profile-steps' && \
+     $(MAKE) test-default APP=./$(AP) CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \
+     :perf-lbr:\\\"'-a -j any,save_type -e r20c4:ppp -c 90001'\\\" :perf-filter:0 -o $(AP)-a\"" \
+    "echo 'testing default from another directory, toplev describe' && mkdir -p test-dir; cd test-dir; ln -sf ../common.py && \
+     make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1" \
+    "echo 'testing clean command' && cp -r test-dir test-dir0; cd test-dir0; ../do.py clean; ls -l" \
+    "echo 'testing study script (errors only)' && $(MAKE) test-study" \
+    "echo 'testing srcline stat' && $(MAKE) test-srcline" \
+    "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
+    "echo 'testing sampling by instructions' && $(MAKE) test-edge-inst" \
+    "$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1" \
+    "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)" \
+    "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL)" \
+    "time $(DO) profile -a \"openssl speed rsa2048\" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)" \
+    "echo 'testing default w/ python2 (errors only)' && $(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL)"
+
 pre-push: help
-	$(DO) version log help -m GFLOPs --tune :msr:1          # tests help of metric; version; prompts for sudo password
-	$(MAKE) test-mem-bw SHOW="grep --color -E '.*<=='"      # tests sys-wide + topdown tree; MEM_Bandwidth in L5
-	$(MAKE) test-metric SHOW="grep --color -E '^|Ret.*<=='" # tests perf -M IpCall & colored TMA, then toplev --drilldown
-	$(DO) log                                               # prompt for sudo soon after
-	$(MAKE) test-bc2 PM=40 SHOW="grep --color -E '^|Mispredict'"	# tests topdown across-tree tagging; Mispredict
-	echo skip: $(MAKE) test-false-sharing                              # tests topdown ~overlap in Threshold attribute
-	$(MAKE) test-bottlenecks AP="./kernels/cpuid $(CPUIDI)" # tests Bottlenecks View
-	$(MAKE) test-build SHOW="grep --color -E '^|build|DSB|Ports'" # tests build command, perf -e, toplev --nodes; Ports_*
-	rm -f run-mem-bw && $(MAKE) test-mem-bw RERUN='-pm 400 -v1'   # tests load-latency profile-step + verbose:1
-	$(MAKE) test-default-track-perf                         # tests default profile-steps, track LBR speed
-	$(MAKE) test-stats                                      # tests stats module
-	$(MAKE) test-analyze                                    # tests analyze module
-	$(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL) # tests --delay
-	$(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat   # tests prof-no-aux command
-	$(MAKE) test-default DO_SUFF="--tune :calibrate:1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1\
-	    -o $(AP)-u $(DO_SUFF)" CMD='suspend-smt profile tar' PM=23931a &&\
-	    test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log &&\
-	    test -f $(AP)-u.$(CPU).results.tar.gz # TODO jon: $(AP)-u.perf_stat-r1-I1000.pipeline.log\
-	    # tests unfiltered- calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command
-	$(MAKE) test-default APP=./$(AP) CMD="log profile" PM=313e DO_SUFF="--tune :perf-stat:\"' -a'\" :perf-record:\"' -a -g'\" \
-	    :perf-lbr:\"'-a -j any,save_type -e r20c4:ppp -c 90001'\" :perf-filter:0 -o $(AP)-a"   # tests sys-wide non-MUX profile-steps
-	mkdir -p test-dir; cd test-dir; ln -sf ../common.py && \
-	    make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1\
-	    # tests default from another directory, toplev describe
-	@cp -r test-dir{,0}; cd test-dir0; ../do.py clean; ls -l # tests clean command
-	$(MAKE) test-study                                      # tests study script (errors only)
-	$(MAKE) test-srcline                                    # tests srcline loop stat
-	$(MAKE) test-tripcount-mean                             # tests tripcount-mean calculation
-	$(MAKE) test-forcecpu                                   # tests force cpu option
-	$(MAKE) test-edge-inst					# tests sampling by instructions
-	$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1
-	$(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)          # tests default profile-steps (errors only)
-	$(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL) # tests setup-all, ideal-IPC
-	time $(DO) profile -a "openssl speed rsa2048" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)
-	$(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL) # tests default w/ python2 (errors only)
+	@for cmd in $(PRE_PUSH_CMDS); do \
+		if ! grep -Fxq "$$cmd" .prepush_state.cmd 2>/dev/null; then \
+			/bin/bash -c "$$cmd" || exit 1; \
+			echo "$$cmd" >> .prepush_state.cmd; \
+		fi; \
+	done

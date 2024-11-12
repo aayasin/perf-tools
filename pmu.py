@@ -305,9 +305,12 @@ def cpu_pipeline_width(all_widths=None):
   full_widths = {'dsb':('IDQ.DSB_UOPS',4), 'mite':('IDQ.MITE_UOPS',4), 'decoders':('INST_DECODED.DECODERS',4), 'ms':('IDQ.MS_UOPS',4),
                  'issued':('UOPS_ISSUED.ANY',4), 'executed':('UOPS_EXECUTED.CORE',8), 'retired':('UOPS_RETIRED.ALL',4)}
   if all_widths: # TODO: eventually read from pmu-tools.
-    if goldencove() or redwoodcove():
+    if icelake():
+      full_widths = {'dsb':('IDQ.DSB_UOPS',6), 'mite':('IDQ.MITE_UOPS',5), 'decoders':('INST_DECODED.DECODERS',4), 'ms':('IDQ.MS_UOPS',4),
+                     'issued':('UOPS_ISSUED.ANY',5),'executed':('UOPS_EXECUTED.THREAD',10),'retired':('UOPS_RETIRED.SLOTS',8)}
+    elif goldencove() or redwoodcove():
       full_widths = {'dsb':('IDQ.DSB_UOPS',8), 'mite':('IDQ.MITE_UOPS',6), 'decoders':('INST_DECODED.DECODERS',6), 'ms':('IDQ.MS_UOPS',4),
-                     'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.CORE',12),'retired':('UOPS_RETIRED.SLOTS',8)}
+                     'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.THREAD',12),'retired':('UOPS_RETIRED.SLOTS',8)}
     return full_widths
   width = 4
   if icelake(): width = 5

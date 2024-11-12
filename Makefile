@@ -109,7 +109,9 @@ test-default-track-perf:
 	$(DO1) --toplev-args ' --no-multiplex --frequency --metric-group +Summary' -pm 1010 # carefully tests MUX sensitive profile-steps
 	@echo 1 > $@
 test-edge-inst:
-	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
+	# TODO: rename this target to simply test-edge
+	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp -c 3000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
+	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e cycles:p -c 2000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 
 FSI = 400000000
 test-false-sharing: kernels/false-sharing
@@ -142,6 +144,7 @@ TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 TS_B = STUDY_MODE=all-misp ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --tune :forgive:2 $(DO_SUFF)
 TS_C = STUDY_MODE=dsb-bw ./$< cfg1 cfg2 -t2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
 TS_D = STUDY_MODE=mem-bw ./$< cfg1 cfg2 -t3 -a ./run.sh --tune :loops:0 -s27 -v1 $(DO_SUFF)
+TS_E = STUDY_MODE=code-l2pf ./$< s1 s2 -a ./$(AP) --tune :loops:0 -s3 -v1 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo $(TS_A) > $@
@@ -158,6 +161,8 @@ test-study: study.py stats.py run.sh do.py
 	$(TS_C) >> $@ 2>&1
 	@echo $(TS_D) >> $@
 	$(TS_D) >> $@ 2>&1
+	@echo $(TS_E) >> $@
+	$(TS_E) >> $@ 2>&1
 
 TMI = 80000000
 define check_tripcount

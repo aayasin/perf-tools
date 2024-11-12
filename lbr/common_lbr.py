@@ -38,8 +38,6 @@ def exit(x, sample, label, n=0, msg=str(debug), stack=False):
   print_sample(sample, n)
   C.error(msg) if x else sys.exit(0)
 
-def paths_range(): return range(3, C.env2int('LBR_PATH_HISTORY', 3))
-
 stat = {x: 0 for x in ('bad', 'bogus', 'total', 'total_cycles')}
 for x in ('IPs', 'events', 'takens'): stat[x] = {}
 stat['size'] = {'min': 0, 'max': 0, 'avg': 0, 'sum': 0}
@@ -132,6 +130,7 @@ def is_empty(line):   return line.strip() == ''
 def has_timing(line): return line.endswith('IPC')
 
 def line_timing(line):
+  if 'cycles' not in line: return 0, 0
   # note: this ignores timing of 1st LBR entry (has cycles but not IPC)
   assert 'cycles' in line and 'IPC' in line, 'Could not match IPC in:\n%s' % line
   # PRED 1 cycles [59] 6.00 IPC
@@ -151,7 +150,7 @@ def is_header(line):
     assert p, "is_header('%s'); expect a '[CPU #]'" % line.strip()
     if '::' in p: pass
     elif ': ' in p: line = patch(': ')
-    elif ':' in p: line = patch(':')
+    elif ':' in p: line = line.replace(p, p.replace(':', '-'))
   #    tmux: server  3881 [103] 1460426.037549:    9000001 instructions:ppp:  ffffffffb516c9cf exit_to_user_mode_prepare+0x4f ([kernel.kallsyms])
   return (re.match(r"([^:]*):\s+(\d+)\s+(\S*)\s+(\S*)", line) or
 # kworker/0:3-eve 105050 [000] 1358881.094859:    7000001 r20c4:ppp:  ffffffffb5778159 acpi_ps_get_arguments.constprop.0+0x1ca ([kernel.kallsyms])
@@ -170,6 +169,9 @@ def is_label(line):
   return line.endswith(':') or (len(spl) == 1 and line.endswith(']')) or \
       (len(spl) > 1 and spl[-2].endswith(':')) or \
       (':' in line and line.split(':')[-1].isdigit())
+
+def is_tag(line):
+  return C.any_in(('not reaching sample ...', ), line)
 
 def is_srcline(line): return 'srcline:' in line or is_label(line)
 def get_srcline(line):
@@ -202,12 +204,11 @@ def is_jcc_erratum(line, previous=None):
   next_ip = ip + length
   return not ip >> 5 == next_ip >> 5
 
-def print_sample(sample, n=10):
+def print_sample(sample, n=10, std=sys.stderr):
   if not len(sample): return
-  C.printf('\n'.join(('sample#%d' % stat['total'], sample[0], '\n')))
+  C.printf('\n'.join(('sample#%d' % stat['total'], sample[0], '\n')), std=std)
   size = int(sample[0].split('#size=')[1])
-  if len(sample) > 1: C.printf('\n'.join((sample[-min(n, size):] if n else sample[1:]) + ['\n']))
-  sys.stderr.flush()
+  if len(sample) > 1: C.printf('\n'.join((sample[-min(n, size):] if n else sample[1:]) + ['\n']), std=std)
 
 def str2int(ip, plist):
   try:
@@ -259,6 +260,7 @@ class LineInfo:
     'ip hex':     line_ip_hex,
     'jmp ret':    x86.is_jmp_ret,
     'label':      is_label,
+    'tag':        is_tag,
     'memory':     x86.is_memory,
     'mem idx':    x86.is_mem_idx,
     'mem imm':    x86.is_mem_imm,
@@ -324,6 +326,7 @@ class LineInfo:
   def ip(self):             return self._get_info('ip')
   def ip_hex(self):         return self._get_info('ip hex')
   def is_label(self):       return self._get_info('label')
+  def is_tag(self):         return self._get_info('tag')
   def is_jmp_ret(self):     return self._get_info('jmp ret')
   def is_memory(self):      return self._get_info('memory')
   def is_mem_idx(self):     return self._get_info('mem idx')
@@ -395,10 +398,65 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
       left, limit = 0, int(threshold * tot)
       for k in sorted_keys:
         if not limit or hist[k] >= limit and hist[k] > 1:
-          bucket = ('%70s' % k) if d['type'] == 'str' else '%5s' % (hex_ip(k) if d['type'] == 'hex' else k)
+          bucket = ('%150s' if 'callchain' in name else '%70s') % k if d['type'] == 'str' else (
+                    '%5s' % (hex_ip(k) if d['type'] == 'hex' else k))
           print('%s: %7d%6.1f%%' % (bucket, hist[k], 100.0 * hist[k] / tot))
         else: left += hist[k]
       if left: print('other: %6d%6.1f%%\t// buckets > 1, < %.1f%%' % (left, 100.0 * left / tot, 100.0 * threshold))
   if do_tripcount_mean: d['num-buckets'] = '-'
   d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) is str else k) for k in hist.keys()) if weighted else tot
   return d
+
+glob_hist_threshold = C.env2int('LBR_GLOB_HIST_THR', 3) / 100.0
+hsts_threshold = {}
+def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
+
+def print_glob_hist(hist, name, weighted=False, threshold=glob_hist_threshold):
+  if name in hsts_threshold: threshold = hsts_threshold[name]
+  d = print_hist((hist, name, None, None, None, weighted), threshold)
+  if not type(d) is dict: return d
+  if d['type'] == 'hex': d['mode'] = hex_ip(int(d['mode']))
+  del d['type']
+  print('%s histogram summary: %s' % (name, hist_fmt(d)))
+  return d['total']
+
+paths_range = range(3, C.env2int('LBR_PATH_HISTORY', 4))
+def paths_inc(name, home, lbr_takens, sample=None): # name is an IP
+  def inc(h, v):
+    if h not in home: home[h] = {}
+    C.inc(home[h], v)
+  path = None
+  for x in paths_range:
+    path = ';'.join([hex_ip(a) for a in lbr_takens[-x:]])
+    inc('%s-paths-%d' % (name, x), path)
+  if sample and path and verbose & 0x10:
+    # log path (IP-list of takens) to name
+    i = get_taken_idx(sample, -paths_range[-1])
+    if i > 0: i -= 1 # one more line (hope for a label)
+    info_lines('address %s via path %s' % (name, path), sample[i:] + [''])
+    # log callchain (labels) to name
+    callchain, j = '', len(sample) - 1
+    while j >= i:
+      info_j = line2info(sample[j])
+      func = sample[j].strip()[:-1] if info_j.is_label() else None
+      if not func and info_j.is_call_ret() and j < (len(sample) - 1) and not line2info(sample[j+1]).is_label(): func = '?'
+      if func:
+        sep = '' if not len(callchain) else (';' if '@plt' in func else ' -> ')
+        callchain = func + sep + callchain
+      j -= 1
+    inc('callchain names to ' + name, callchain)
+
+def paths_print(home):
+  for k in home.keys():
+    if any(x in k for x in ['paths', 'callchain']): print_glob_hist(home[k], k)
+
+def get_taken_idx(sample, n):
+  i = len(sample) - 1
+  while i >= 0:
+    if is_taken(sample[i]):
+      n += 1
+      if n==0: break
+    i -= 1
+  return i
+
+def info_lines(info, lines1): C.info_p(info, '\t\n'.join(['\t'] + lines1))

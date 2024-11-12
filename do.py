@@ -10,6 +10,8 @@
 # Misc utilities for CPU performance profiling on Linux
 #
 # TODO list:
+#   let bottlenecks-view use instructions,cycles to watch IPC
+#   add a tunable of string to pass to all perf stat/record and toplev profile-steps
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a separate module, arg for output dir
 #   quiet mode
@@ -18,9 +20,9 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.68
+__version__ = 3.71
 
-import argparse, os.path, sys
+import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
 from lbr import x86
 from lbr.stats import inst_fusions
@@ -50,6 +52,7 @@ if 'generic' in pmu.name() and not globs['force-cpu']:
   C.error('\n'.join(("You are using an old Linux kernel not enabled for your platform",
                      "pmu: "+pmu.name(), "kernel: "+globs['uname-a'])))
 
+DSB = 'ANY_DSB_MISS'
 do = {'run':        C.RUN_DEF,
   'asm-dump':       30,
   'az-hot-loop':    .05,
@@ -77,7 +80,7 @@ do = {'run':        C.RUN_DEF,
   'lbr-branch-stats': 1,
   'lbr-indirects':  20,
   'lbr-jcc-erratum': 0,
-  'lbr-stats':      '- 0 10 0 ANY_DSB_MISS',
+  'lbr-stats':      '- 0 10 0 ' + DSB,
   'lbr-stats-tk':   '- 0 20 1',
   'lbr-verbose':    0,
   'ldlat':          int(globs['ldlat-def']),
@@ -96,7 +99,7 @@ do = {'run':        C.RUN_DEF,
   'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c %d' % (pmu.lbr_event(), pmu.lbr_period()),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(globs['ldlat-def']),
-  'perf-pebs':      '-b -e %s -c 1000003' % pmu.event('dsb-miss', 3),
+  'perf-pebs':      pmu.event_period('dsb-miss', 1000000),
   'perf-pebs-top':  0,
   'perf-pt':        "-e '{intel_pt//u,%su}' -c %d -m,64M" % (pmu.lbr_event(), pmu.lbr_period()), # noretcomp
   'perf-record':    ' -g ', # '-e BR_INST_RETIRED.NEAR_CALL:pp ',
@@ -689,7 +692,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   if en(8) and do['sample'] > 1:
     assert C.any_in(pmu.lbr_unfiltered_events(cut=True), do['perf-lbr']) \
            or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
-    data, nsamples = perf_record('lbr', 8)
+    msg = None if pmu.lbr_event() in do['perf-lbr'] else pmu.find_event_name(do['perf-lbr'])
+    data, nsamples = perf_record('lbr', 8, msg)
     info, comm = '%s.info.log' % data, get_comm(data) if not windows_file else None
     clean = r"sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def print_info(x):
@@ -741,7 +745,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
             "| tee >(grep MISPRED | %s | tee >(grep -E -v 'call|jmp|ret' | %s > %s.cond-tk-mispreds.log) | %s > %s.tk-mispreds.log) "
             "%s| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
             (clean, sort2uf, data, sort2uf, data, slow_cmd, clean, sort2uf, data, sort2uf, data, sort2uf, data),
-            '@processing taken branches', data)
+            '@processing %staken branches' % ('' if do['imix'] & 0x10 else 'all '), data)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'cond-tk-mispreds'))
           if do['imix'] & 0x20 and args.mode != 'profile':
@@ -820,11 +824,12 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if pmu.retlat(): assert ' -W' in do['perf-pebs'] or do['forgive'] > 1, "Expect use of Timed PEBS"
     if 'frontend' in do['perf-pebs'] and pmu.granite() and pmu.cpu('kernel-version') < (6, 4):
       error('Linux kernel version is too old for GNR: %s' % str(pmu.cpu('kernel-version')))
-    data = perf_record('pebs', 9, pmu.find_event_name(do['perf-pebs']))[0]
+    pebs_event = pmu.find_event_name(do['perf-pebs'])
+    data = perf_record('pebs', 9, pebs_event)[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
     if '_COST' in do['perf-pebs']: pass
     elif do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data),
-                              "@ top-10 IPs, Insts of %s" % pmu.find_event_name(do['perf-pebs']), data)
+                              "@ top-10 IPs, Insts of %s" % pebs_event, data)
     else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
     if pmu.retlat() and ' -W' in do['perf-pebs']:
       perf_script("-F retire_lat,ip | sort | uniq -c | awk '{print $1*$2 \"\\t\" $2 \"\\t\" $3 }' | grep -v ^0"
@@ -832,33 +837,37 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
                 " END {printf \"%%8d %%18s\\n\", sum, ip}' | sort -n | ./ptage > %s.ips-retlat.log)"
         " | sort -n | ./ptage | tee %s.lat-retlat.log | tail -11" % (data, data), "@ top-10 (retire-latency, IPs) pairs", data)
       exe(C.tail(data + '.ips-retlat.log'), "@ top-10 IPs by retire-latency")
-    is_dsb = 0
     if pmu.dsb_msb() and 'DSB_MISS' in do['perf-pebs']:
       if pmu.cpu('smt-on') and not do['batch'] and do['forgive'] < 2: C.warn('Disable SMT for DSB robust analysis')
-      else:
-        is_dsb = 1
-        perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
-                    (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
+      else: perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
+                        (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
+    def log_funcs(funcs_log):
+      if not isfile(funcs_log): return
+      sed_cut = "sed s/::/#/g | cut -d: -f3 | sed 's/, num-buckets//;s/\-> ? \-> //g;s/ \-> ?//g;s/ \-> /|/g;s/;/|/g' | sed s/#/::/g"
+      top = do['perf-pebs-top']
+      while top > 0:
+        top_ip = exe_1line("tail -%d %s.ips.log | head -1" % (top + 1, data), 2)
+        ip_log = '%s.ip%s.log' % (data, top_ip)
+        x = exe_1line("%s | %s" % (C.grep('callchain names .* summary', ip_log), sed_cut)).strip('|')
+        x = re.sub(r'\+\d+', '', x)
+        if x != '?':
+          for c in '()[]*+': x = x.replace(c, '\\' + c)
+          exe('echo modules of functions in mode callchain: >> %s && %s >> %s' % (ip_log, C.grep(x, funcs_log), ip_log))
+        top -= 1
     def handle_top():
       top = do['perf-pebs-top']
       top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
       if top < 0 and isfile(logs['code']):
         exe("grep -w -5 '%s:' %s" % (top_ip, logs['code']), '@code around IP: %s' % top_ip)
-      elif not is_dsb: pass
-      elif top == 1:
-        # asserts in skip_sample() only if piped!!
-        perf_script("%s | tee >(%s %s | tee -a %s.ips.log) | ./lbr_stats %s | tee -a %s.ips.log" % (
-          perf_F(ilen=True), C.realpath('lbr_stats'), top_ip, data, do['lbr-stats'], data), "@ stats on PEBS event", data)
-      else:
-        perf_script("%s | ./lbr_stats %s | tee -a %s.ips.log" % (perf_F(ilen=True), do['lbr-stats'], data),
-                  "@ stats on PEBS event", data)
-      if top > 1:
+      elif top >= 1:
         cmd = ''
         while top > 0:
-          top_ip = exe_1line("grep -E '^[0-9]' %s.ips.log | tail -%d | head -1" % (data, top+1), 2)
-          cmd += ' | tee >(%s %s >> %s.ctxt.log) ' % (C.realpath('lbr_stats'), top_ip, data)
+          top_ip = exe_1line("tail -%d %s.ips.log | head -1" % (top + 1, data), 2)
+          cmd += ' | tee >(%s %s 0 0 0 %s > %s.ip%s.log) ' % (C.realpath('lbr_stats'), top_ip, pebs_event, data, top_ip)
           top -= 1
-        perf_script("%s %s > /dev/null" % (perf_F(ilen=True), cmd), "@ stats on PEBS", data)
+        perf_script("%s %s | ./lbr_stats %s | tee %s.info.log | grep sequential" % (perf_F(ilen=True), cmd,
+          do['lbr-stats'], data), "@ stats on %s" % pebs_event, data)
+        log_funcs(logs['code'].replace('code.log', 'funcs.log'))
     if '_COST' not in do['perf-pebs']: handle_top()
 
   if en(10):
@@ -1120,7 +1129,7 @@ def main():
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
-    if not do['comm']: do['perf-filter'] = 1
+    if not do['comm']: do['perf-filter'] = 0
     args.profile_mask &= ~0x4 # disable system-wide profile-step
   if args.delay:
     if profiling(): C.info('delay profiling by %d seconds' % args.delay)
@@ -1139,6 +1148,9 @@ def main():
       C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)
     globs['cmds_file'] = open(cmds_file, 'w')
     globs['cmds_file'].write('# %s\n' % do_cmd)
+  if do['perf-pebs'].isupper(): do['perf-pebs'] = pmu.event_period(do['perf-pebs'])
+  if DSB not in do['perf-pebs'] and DSB in do['lbr-stats']:
+    do['lbr-stats'] = do['lbr-stats'].replace(DSB, pmu.find_event_name(do['perf-pebs']))
   if args.verbose > 5: C.printc(str(args))
   if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1

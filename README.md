@@ -89,6 +89,7 @@ System-wide profiling is supported as well.
 ### tools
 A set of command-line tools to facilitate profiling
 * **addrbits** -- extracts certain bit-range of hexa input
+* **lbr_filter** -- filters LBR-based profile on certain IPs
 * **lbr_stats** -- calculates stats on LBR-based profile
 * **llvm-mca** -- calculates IPC-ideal for simple loops in LBR profile-step
 * **loop_stats** -- calculates stats for a particular loop in an LBR-based profile

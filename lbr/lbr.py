@@ -236,21 +236,28 @@ def edge_stats(line, lines, xip, size):
   if xinfo.is_cond_br() and xinfo.is_taken():
     LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
   #Shortcircuit detection
+  #A setcc instructions is found, now walk in reverse and find at least two conditional jumps within a max_inst window.
   if 'set' in x86.get('inst',line):
     x = len(lines)-1
     max_inst=8
     max_cnt=0
     candidate_regs=[]
     entry_pt=0
+    #walk in reverse and fail if there is a call/ret or we've reached the max_inst window.
     while x > 0 and not x86.is_branch(lines[x],x86.CALL_RET) and  max_cnt <= max_inst:
+      #If a test or cmp instruction is found then we need to grab some additional info.
       if re.search(x86.TEST_CMP,lines[x]):
+        #small state machine to tell the detector that we've found our first hit.
         if entry_pt == 0:
           candidate_regs=x86.get("srcs",lines[x]) + [x86.get("dst",lines[x])]
           for i in candidate_regs:
+            #remove any immediate values
             if '0x' in i:
               candidate_regs.remove(i)
+          #reset the window for the next reverse walk in search of conditional jumps.
           max_cnt=-1
           entry_pt=1
+        #Ok we have found the second conditional jump, and now we can see if any registers in the second find match that of our previous find above.
         else:
           for i in candidate_regs:
             if i in lines[x]:

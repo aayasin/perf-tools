@@ -31,7 +31,7 @@ ev = C.arg(5, LBR_Event)
 
 while True:
   sample = read_sample(ip_filter=filter, min_lines=2, loop_ipc=loop, lp_stats_en=loop_stats, event=ev,
-                       skip_bad= ev not in LBR_Edge_Events)
+                       skip_bad= ev in LBR_Edge_Events)
   if not sample: break
   assert len(sample) > 2, 'invalid sample: ' + str(sample)
   if LC.edge_en: continue

@@ -246,7 +246,8 @@ PRE_PUSH_CMDS := \
     "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)" \
     "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL)" \
     "time $(DO) profile -a \"openssl speed rsa2048\" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)" \
-    "echo 'testing default w/ python2 (errors only)' && $(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL)"
+    "echo 'testing default w/ python2 (errors only)' && $(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL)" \
+    "echo 'testing pipeline-view' && $(DO) profile -pm 200000 -s 20 -o pipeline-test "
 
 pre-push: help
 	@for cmd in $(PRE_PUSH_CMDS); do \

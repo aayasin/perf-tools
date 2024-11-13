@@ -1,3 +1,4 @@
+[33m[1mWARNING: cannot open /sys/devices/system/cpu/cpu0/cpufreq/base_frequency[0m
 usage: do.py command [command ..] [options]
 
 positional arguments:
@@ -13,12 +14,13 @@ positional arguments:
                         disable-prefetches suspend-prefetches enable-smt
                         disable-smt suspend-smt
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --perf PERF           use a custom perf tool (default: perf)
   --pmu-tools PMU_TOOLS
                         use a custom pmu-tools (default: /usr/bin/python
-                        ./pmu-tools)
+                        /root/jestrang/2024Q4_PERFTOOLS/pipeline.perf-
+                        tools./pmu-tools)
   --toplev-args TOPLEV_ARGS
                         arguments to pass-through to toplev (default:
                         --frequency --metric-group +Summary)
@@ -29,7 +31,7 @@ optional arguments:
   --nodes NODES, -n NODES
                         user metrics to pass to toplev's --nodes (default: +Lo
                         ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,
-                        +UopPI,+IpAssist)
+                        +UopPI,+IpAssist,+Memory_Bound*/3)
   -r REPEAT, --repeat REPEAT
                         times to run per-app counting and topdown-primary
                         profile steps (default: 3)

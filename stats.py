@@ -12,10 +12,10 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.01
+__version__= 1.02
 
 import common as C, pmu, tma
-import csv, re, os.path, sys
+import csv, json, os.path, re, sys
 
 def get_file(app, ext):
   for filename in os.listdir(os.getcwd()):
@@ -379,6 +379,15 @@ def read_perf_toplev(filename):
       else: d[x] = v
   return d
 
+def read_retlat_json(filename):
+  d = {}
+  if debug > 3: print('reading %s' % filename)
+  with open(filename, 'r') as file:
+    data = json.load(file)
+    for e in data['Data'].keys():
+      d[e + '__retire_latency_MEAN'] = data['Data'][e]['MEAN']
+  return d
+
 def patch_metrics(d):
   SLOTS = 'TOPDOWN.SLOTS'
   if SLOTS not in d: return {}
@@ -417,6 +426,8 @@ def csv2stat(filename):
     return filename.replace(x.group(1), '')
   d = patch_metrics(d)
   base = basename()
+  retlat = base[:-1] + '-retlat.json'
+  if os.path.isfile(retlat): d.update(read_retlat_json(retlat))
   tl_info = base + 'toplev-mvl2-perf.csv'
   if not nomux():
     if not os.path.isfile(tl_info): C.warn('file is missing: ' + tl_info)

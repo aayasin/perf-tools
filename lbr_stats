@@ -31,7 +31,7 @@ ev = C.arg(5, LBR_Event)
 
 while True:
   sample = read_sample(ip_filter=filter, min_lines=2, loop_ipc=loop, lp_stats_en=loop_stats, event=ev,
-                       skip_bad=not 'ANY_DSB_MISS' in ev)
+                       skip_bad= ev in LBR_Edge_Events)
   if not sample: break
   assert len(sample) > 2, 'invalid sample: ' + str(sample)
   if LC.edge_en: continue
@@ -56,9 +56,11 @@ if 1:
   if 'DSB_MISS' in ev: print('%s stats:' % ev, c,
     '\n  Global:', ', '.join([C.ratio('sequential', c), C.ratio('loop_head', c), C.ratio('after_uncond_jmp', c)]),
     '\n  Loops:', ', '.join([loop_r('seq'), loop_r('jmp2mid'), loop_r('jmp2head'), loop_r('16B_unaligned'), loop_r('32B_unaligned')]) )
+  elif not (LC.edge_en or loop or filter): print(c)
   if filter:
-    loops.print_loop(loop)
     print(LC.stat)
-  else:
+    loops.print_loop(loop)
+    LC.paths_print(hsts)
+    C.warn_summary()
+  else: # in case of edge_en or loop_stats
     print_all(top, loop_ipc=loop)
-

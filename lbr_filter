@@ -1,0 +1,27 @@
+#!/usr/bin/env python
+# Copyright (c) 2020-2024, Intel Corporation
+# Author: Ahmad Yasin
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT # ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# A tool for filtering LBR stream on certain IPs
+
+from __future__ import print_function
+__author__ = 'ayasin'
+
+import common as C
+from lbr.lbr import read_sample
+from lbr.common_lbr import print_sample
+from sys import stdout
+
+# usage: perf script -F +brstackinsn [--xed] | ./lbr_stats ip[s]-of-sample event
+filter = '%x' % int(C.arg(1), 16) # asserts in hexa
+ev = C.arg(2)
+
+while True:
+  sample = read_sample(ip_filter=filter, event=ev, min_lines=2, indirect_en=False)
+  if not sample: break
+  print_sample(sample, 0, stdout)

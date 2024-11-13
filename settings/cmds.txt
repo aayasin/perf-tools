@@ -1,3 +1,5 @@
+LINUXK=6 LINUXV=6.6.6 ./build-perf.sh
+
 strace -o strace.log -s999 my-command
 
 sed 's/^[[:space:]]*//'

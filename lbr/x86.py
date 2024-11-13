@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.55
+__version__ = 0.56
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -44,7 +44,7 @@ MEM_IDX   = r"\((%[a-z0-9]+)?,%[a-z0-9]+,?(1|2|4|8)?\)"
 
 def inst_patch(i='JMP'):
   assert i == 'JMP'
-  r = ';'.join(['s/%s jmp/%s-jmp/' % (x, x) for x in ('bnd', 'notrack')])
+  r = ';'.join(['s/%s jmp/%s-jmp/' % (x, x) for x in ('bnd', 'notrack')] + ['s/ret/ret DUMMY_OPERAND/'])
   return "sed '%s'" % r
 
 def is_type(t, l): return re.match(r"\s+\S+\s+%s" % t, l) is not None

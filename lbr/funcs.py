@@ -137,7 +137,7 @@ def process_function(lines, outer_funcs=[]):
   lines.pop(0)
   info = LC.line2info(lines[0])
   srcline = info.srcline() if LC.is_srcline(lines[0]) else None
-  if info.is_label():
+  if info.is_label() or info.is_tag():
     if len(lines) == 1: return lines[0], [] # corner case 2 of call -> label -> sample end
     lines.pop(0)
   ip = LC.hex_ip(LC.line_ip(lines[0]))

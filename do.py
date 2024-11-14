@@ -749,7 +749,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'cond-tk-mispreds'))
           if do['imix'] & 0x20 and args.mode != 'profile':
-            exe_v0(msg='@' + analyze.gen_misp_report(None))
+            exe_v0(msg='@' + analyze.gen_misp_report(None, verbose=args.verbose))
             analyze.gen_misp_report(data)
           if len(slow_cmd): exe('tail -6 %s.slow.log | grep -v ===total' % data, '@Top-5 slow sequences end with branch:')
         exe(log_br_count('mispredicted taken', 'tk-mispreds'))

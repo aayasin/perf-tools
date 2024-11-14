@@ -168,8 +168,8 @@ def analyze_ifetch():
     #if loop_size > 0 and loops[l]['taken'] == 0: loop_code(loops[l])
     if loop_size > 0: loop_code(loops[l])
 
-def gen_misp_report(data, header='Branch Misprediction Report (taken-only)'):
-  if not data: return header.lower()
+def gen_misp_report(data, header='Branch Misprediction Report (taken-only)', verbose=None):
+  if not data: handles['verbose'] = verbose; return header.lower()
   def filename(ext='mispreds-tmp'): return '%s.%s.log' % (data, ext)
   takens_freq, mispreds = {}, {}
   for l in file2lines(filename('takens'))[:-1]:

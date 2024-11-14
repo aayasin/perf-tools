@@ -179,8 +179,9 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     if not LC.has_timing(prev_l): return
     cycles, takens = 0, []
     begin, at = find_block_ip()
-    disable_cycles = False
+    info_at = LC.line2info(lines[at])
     while begin:
+      inner_loop, inner_func = False, 0
       if begin == ip:
         if cycles == 0: inc(loop['IPC'], LC.line_timing(prev_l)[1])  # IPC is supported for loops execution w/ no takens
         if 'Conds' in loop and 'Cond_polarity' in loop:
@@ -190,10 +191,16 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
         LC.glob['loop_iters'] += 1
         break
       else:
-        # block ip = inner loop ip
-        if LC.hex_ip(begin) in loops[ip]['inner-loops']: disable_cycles = True
+        # last taken is inner loop back
+        for l in loops[ip]['inner-loops']:
+          if info_at.ip() == loops[LC.str2int(l, lines)]['back']:
+            inner_loop = True
+            break
+        # last taken is call/ret (function)
+        if 'call' in lines[at]: inner_func += 1
+        elif 'ret' in lines[at]: inner_func -= 1
         if LC.has_timing(lines[at]):
-          if not disable_cycles: cycles += LC.line_timing(lines[at])[0]
+          if not inner_loop and inner_func >= 0: cycles += LC.line_timing(lines[at])[0]
           takens += [lines[at]]
           begin, at = find_block_ip(at - 1)
         else:

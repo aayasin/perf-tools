@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.56
+__version__ = 0.57
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 

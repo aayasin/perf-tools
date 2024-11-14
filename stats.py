@@ -148,7 +148,7 @@ def read_histos(info, as_histos=False, groups=False):
       histo = None
       continue
     if histo:  # histogram line
-      l_list = re.split(r'\s{2,}', l) if rgx() else l.split()
+      l_list = re.split(r'\s{2,}', l) if rgx() and 'other' not in l else l.split()
       k = l_list[0]
       if k == 'IPC': continue # skip IPC histo header
       k = k[:-1]

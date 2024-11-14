@@ -46,6 +46,7 @@ def setup(app, basename=None, verbose=0):
 
 def advise(m, prefix='Advise'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
 def exe(x, msg=None): return C.exe_cmd(x, msg=msg, debug=handles['verbose'] > 1)
+def file2lines(f, pop=False): return C.file2lines(f, fail=True, pop=pop, debug=handles['verbose'] > 3)
 def hint(m): advise(m, '\tHint')
 def percent(x): return '%.1f%%' % (100.0 * x)
 
@@ -71,7 +72,7 @@ def analyze_misp():
         hint('de-virtualize above %s branch when target is %s (%s of cases)' % (i, t, percent(t_cov)))
 
   exe(C.tail(ext('mispreds')), '@ top significant (== # executions * # mispredicts) branches')
-  misp = C.file2lines_pop(ext('mispreds'))
+  misp = file2lines(ext('mispreds'), pop=True)
   while 1:
     b = C.str2list(misp.pop())
     verbose('misp', b, 1)
@@ -170,12 +171,11 @@ def analyze_ifetch():
 def gen_misp_report(data, header='Branch Misprediction Report (taken-only)'):
   if not data: return header.lower()
   def filename(ext='mispreds-tmp'): return '%s.%s.log' % (data, ext)
-  def file2lines(ext): return C.file2lines(filename(ext), fail=True)
   takens_freq, mispreds = {}, {}
-  for l in file2lines('takens')[:-1]:
+  for l in file2lines(filename('takens'))[:-1]:
     b = C.str2list(l)
     takens_freq[ b[2] ] = int(b[1])
-  for l in file2lines('tk-mispreds')[:-1]:
+  for l in file2lines(filename('tk-mispreds'))[:-1]:
     b = C.str2list(l)
     m = int(b[1])
     mispreds[ (' '.join(b[2:]), C.ratio(m, takens_freq[b[2]])) ] = m * takens_freq[b[2]]

@@ -229,9 +229,9 @@ PRE_PUSH_CMDS := \
     "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL)" \
     "echo 'testing prof-no-aux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
     "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command' && \
-     $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
-     -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && \
-     test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && test -f $(AP)-u.$(CPU).results.tar.gz" \
+      $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
+      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
+      test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && echo jon- f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
     "echo 'testing sys-wide non-MUX profile-steps' && \
      $(MAKE) test-default APP=./$(AP) CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \
      :perf-lbr:\\\"'-a -j any,save_type -e r20c4:ppp -c 90001'\\\" :perf-filter:0 -o $(AP)-a\"" \

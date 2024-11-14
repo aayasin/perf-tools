@@ -91,6 +91,9 @@ def convert(v, adjust_percent=True):
     return v / 100 if adjust_percent else v
   return str(v)
 
+def file2lines(f, pop=False): return C.file2lines(f, fail=True, pop=pop, debug=debug > 3)
+def open_r(f): return C.open_r(f, debug=debug > 3)
+
 def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=True):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
@@ -119,7 +122,6 @@ def is_metric(s):
          not s.lower().endswith(('instructions', 'pairs', 'branches', 'insts-class', 'insts-subclass'))
 
 def read_histos(info, as_histos=False, groups=False):
-  assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
   histo = None
   g = 'LBR.Histo'
@@ -129,7 +131,7 @@ def read_histos(info, as_histos=False, groups=False):
       d[histo][k] = v
     else: d[k] = (v, g) if groups else v
   def rgx(): return histo == 'inst-per-leaf-func-name'
-  for l in C.file2lines(info):
+  for l in file2lines(info):
     if 'IPC histogram of' in l: break  # stops upon detailed loops stats
     if 'WARNING' in l: pass
     l = l.strip()
@@ -158,9 +160,8 @@ def read_histos(info, as_histos=False, groups=False):
   return d
 
 def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
-  assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
-  for l in C.file2lines(info):
+  for l in file2lines(info):
     if 'histogram' in l: break  # stops upon global histograms
     s = v = None
     g = 'LBR.'
@@ -194,7 +195,7 @@ def rollup(c, perf_stat_file=None):
   if debug > 1: print_DB(c)
 
 def read_mispreds(mispreds_file, sig_threshold=1.0):
-  misp, sig = C.file2lines_pop(mispreds_file), []
+  misp, sig = file2lines(mispreds_file, pop=True), []
   while len(misp):
     b = C.str2list(misp.pop())
     val = b[0][:-1]
@@ -237,8 +238,7 @@ def read_perf(f):
     if e == 'L2_LINES_OUT.SILENT': d['Useless_HWPF'] = (
       d['L2_LINES_OUT.USELESS_HWPF'][0] / (d['L2_LINES_OUT.SILENT'][0] + d['L2_LINES_OUT.NON_SILENT'][0]), group)
   if f is None: return calc_metric(None) # a hack!
-  if debug > 3: print('reading %s' % f)
-  lines = C.file2lines(f)
+  lines = file2lines(f)
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
   for l in lines:
     if 'atom' in l: continue
@@ -319,8 +319,7 @@ Key2group = {
 
 def read_toplev(filename, metric=None):
   d = {}
-  if debug > 3: print('reading %s' % filename)
-  for l in C.file2lines(filename, fail=True):
+  for l in file2lines(filename):
     try:
       if not re.match(r"^(|core )(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
       l = l.replace('% ', '%_')
@@ -351,8 +350,7 @@ def read_toplev(filename, metric=None):
 def read_perf_toplev(filename):
   perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
   d = {'num_zero_stats': 0, 'num_not_counted_stats': 0, 'num_not_supported_stats': 0}
-  if debug > 3: print('reading %s' % filename)
-  with open(filename) as csvfile:
+  with open_r(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
     for r in reader:
       if r['Event'] in ('Event', 'dummy', 'msr/tsc/'): continue
@@ -382,7 +380,7 @@ def read_perf_toplev(filename):
 def read_retlat_json(filename):
   d = {}
   if debug > 3: print('reading %s' % filename)
-  with open(filename, 'r') as file:
+  with open_r(filename) as file:
     data = json.load(file)
     for e in data['Data'].keys():
       d[e + '__retire_latency_MEAN'] = data['Data'][e]['MEAN']
@@ -456,8 +454,7 @@ def perf_log2stat(log, smt_on, d={}):
   def user_events(f):
     ue = {}
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
-    if debug > 3: print('reading %s' % f)
-    for l in C.file2lines(f):
+    for l in file2lines(f):
       if re.match('^\s*$', l) or 'perf stat ' in l: continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val

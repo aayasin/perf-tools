@@ -215,19 +215,21 @@ def print_env(std=sys.stderr):
 
 # files
 #
-def file2lines(filename, fail=False):
+def open_r(filename, debug=False):
+  if debug: print('reading %s' % filename)
+  return open(filename, mode='r')
+
+def file2lines(filename, fail=False, pop=False, debug=False):
   try:
-    with open(filename, mode='r') as f:
-      return f.read().splitlines()
+    with open_r(filename, debug) as f:
+      lines = f.read().splitlines()
+      if pop: lines.pop()
+      return lines
   except IOError:
     if fail: error('cannot open %s'%filename)
     else:
       warn('cannot open %s'%filename, bold=True)
       return [None]
-
-def file2lines_pop(filename):
-  lines = file2lines(filename); lines.pop()
-  return lines
 
 def file2str(f, lines=0):
   out = file2lines(f)

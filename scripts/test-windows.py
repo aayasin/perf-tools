@@ -4,5 +4,7 @@ A.setup('blender_barbershop_arls_baseline', 'blender_barbershop_arls_baseline-ja
 A.threshold['misp-sig-ifetch'] = 0.3
 C.printc("A.analyze_misp()")
 A.analyze_misp()
+C.printc("A.analyze_bigcode()")
+A.analyze_bigcode()
 C.printc("A.analyze_ifetch()")
 A.analyze_ifetch()

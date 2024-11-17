@@ -419,14 +419,14 @@ def csv2stat(filename):
   NOMUX = 'vl6-nomux-perf.csv'
   def nomux(): return filename.endswith(NOMUX)
   def basename():
-    x = re.match(r'.*\.(toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
+    x = re.match(r'.*(toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
     if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
     return filename.replace(x.group(1), '')
   d = patch_metrics(d)
   base = basename()
-  retlat = base[:-1] + '-retlat.json'
+  retlat = base + '-retlat.json'
   if os.path.isfile(retlat): d.update(read_retlat_json(retlat))
-  tl_info = base + 'toplev-mvl2-perf.csv'
+  tl_info = base + '.toplev-mvl2-perf.csv'
   if not nomux():
     if not os.path.isfile(tl_info): C.warn('file is missing: ' + tl_info)
     else: d.update(read_perf_toplev(tl_info))
@@ -438,7 +438,7 @@ def csv2stat(filename):
     if len(info_files) > 1:
       C.warn('multiple info.log files exist for same app, %s will be added to .stat file' % info)
     d.update(read_info(info, sep='_', groups=False))
-  return perf_log2stat(base + 'perf_stat-r3.log', read_toplev(C.toplev_log2csv(filename), 'SMT_on'), d)
+  return perf_log2stat(base + '.perf_stat-r3.log', read_toplev(C.toplev_log2csv(filename), 'SMT_on'), d)
 
 def perf_log2stat(log, smt_on, d={}):
   suff = re.findall('(.perf_stat(-B)?-r[1-9].log)', log)[0]

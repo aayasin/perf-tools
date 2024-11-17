@@ -105,7 +105,7 @@ def parse_args():
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM,
                   help='Must prepend your study.py command with STUDY_MODE=<mode> for now')
   ap.add_argument('-t', '--attempt', default='1')
-  C.add_hex_arg(ap, '-s', '--stages', 0x3f, 'stages in study')
+  C.add_hex_arg(ap, '-sm', '--stages', 0x3f, 'stages in study')
   ap.add_argument('--dump', action='store_const', const=True, default=False)
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
@@ -359,6 +359,7 @@ def main():
         tune = '--tune :sample:3 :perf-pebs:"\'%s\'" :perf-pebs-top:10' % e
         l += [' '.join([do, '-a', app(x), tune, '-pm 200 --mode', mode])]
     return l
+  def lbr_cycles_en(on): return on and args.profile_mask & 0x100 and args.stages & 0x40
 
   C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'FORCECPU', 'EVENTMAP')
                       ] + sys.argv + ['# version %.2f' % __version__]), '.study.cmd')
@@ -371,7 +372,7 @@ def main():
     try:
       for x in args.config:
         exe(' '.join([do, '-a', app(x), '-pm', '%x' % (args.profile_mask & ~0x200), '--mode profile']))
-        if args.profile_mask & 0x100: exe(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode profile']))
+        if lbr_cycles_en(1): exe(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode profile']))
         if args.profile_mask & 0x200 and args.mode in Conf['Pebs'].keys():
           for c in pebs_cmds(x, 'profile'): exe(c)
     # command failed and exited w/ error
@@ -385,7 +386,7 @@ def main():
       if int(step, 16) & args.profile_mask:
         for x in args.config:
           jobs.append(' '.join([do, '-a', app(x), '-pm', step, '--mode process']))
-          if step == '100': jobs.append(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode process']))
+          if lbr_cycles_en(step == '100'): jobs.append(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode process']))
         if step == '200' and args.mode in Conf['Pebs'].keys():
           for c in pebs_cmds(x, 'process'): jobs.append(c)
     if len(jobs):

@@ -333,10 +333,7 @@ def compare_stats(app1, app2):
 def main():
   lbr_cycles = '--tune :perf-lbr:"\'-j any,save_type -e cycles:p -c %d\'"' % 2e6
   do0 = C.realpath('do.py')
-  do = do0 + ' profile'
-  for x in C.argument_parser(None):
-    a = getattr(args, x.replace('-', '_'))
-    if a: do += ' --%s %s' % (x, "'%s'" % a if ' ' in a else a)
+  do = do0 + ' profile' + C.get_shared_args(args)
   if args.repeat != 3: do += ' -r %d' % args.repeat
 
   x, extra = 'tune', ''

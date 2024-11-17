@@ -30,6 +30,10 @@ optional arguments:
                         user metrics to pass to toplev's --nodes (default: +Lo
                         ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,
                         +UopPI,+IpAssist)
+  --sys-wide SYS_WIDE, -s SYS_WIDE
+                        system-wide profiling for x seconds (default: 0)
+  --delay DELAY, -d DELAY
+                        delay profiling for x seconds (default: 0)
   -r REPEAT, --repeat REPEAT
                         times to run per-app counting and topdown-primary
                         profile steps (default: 3)
@@ -55,12 +59,6 @@ optional arguments:
   --stdout              keep profiling unfiltered results in stdout (default:
                         False)
   --power               collect power metrics/events as well (default: False)
-  -d DELAY, --delay DELAY
-                        delay profiling for x seconds. disabled by default
-                        (default: 0)
-  -s SYS_WIDE, --sys-wide SYS_WIDE
-                        system-wide profiling for x seconds. disabled by
-                        default (default: 0)
   -o OUTPUT, --output OUTPUT
                         basename to use for output files (default: None)
   -g GEN_ARGS, --gen-args GEN_ARGS

@@ -347,13 +347,17 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
     common_args.append(a)
     return defs[a] if defs and a in defs else None
   def add_argument(a, h): ap.add_argument('--' + a, default=common_def(a), help=h)
-  def add_argument2(a, h, d=None): ap.add_argument('--'+a, '-'+a[0], default=common_def(a), help=h)
+  def add_argument2(a, h): ap.add_argument('--'+a, '-'+a[0], default=common_def(a), help=h)
+  def add_prof_arg(a): ap.add_argument('--'+a, '-'+a[0], type=int, default=common_def(a),
+                                       help=a.replace('sys-', 'system-') + ' profiling for x seconds')
   add_argument('perf', 'use a custom perf tool')
   add_argument('pmu-tools', 'use a custom pmu-tools')
   add_argument('toplev-args', 'arguments to pass-through to toplev')
   add_argument2('events', 'user events to pass to perf-stat\'s -e')
   add_argument2('metrics', 'user metrics to pass to perf-stat\'s -M')
   add_argument2('nodes', 'user metrics to pass to toplev\'s --nodes')
+  add_prof_arg('sys-wide')
+  add_prof_arg('delay')
   if not usg: return common_args
   ap.add_argument('-r', '--repeat', default=3, type=int, help='times to run per-app counting and topdown-primary profile steps')
   ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
@@ -363,6 +367,12 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   add_hex_arg(ap, '-pm', '--profile-mask', mask, 'stages in the profile command. See profile-mask-help.md for details')
   ap.add_argument('--tune', nargs='+', default=common_def('tune'), help=argparse.SUPPRESS, action='append') # override global variables with python expression
   return ap
+def get_shared_args(args):
+  r = ''
+  for x in argument_parser(None):
+    a = getattr(args, x.replace('-', '_'))
+    if a: r += ' --%s %s' % (x, "'%s'" % a if type(a) is str and any_in(' {', a) else str(a))
+  return r
 
 def commands_list():
   return ' '.join(chop(exe_output("grep -E 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort" % sys.argv[0], sep=' '), "),'").split() +

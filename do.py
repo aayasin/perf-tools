@@ -966,7 +966,6 @@ def build_kernel(dir='./kernels/'):
   if args.verbose > 2: exe(fixup("%s -dw ./%s | grep -A%d pause | grep -E '[ 0-9a-f]+:'" % (do['objdump'], app, do['asm-dump'])), '@kernel ASM')
 
 def parse_args():
-  def help_s_arg(x): return x + ' profiling for x seconds. disabled by default'
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   epilog = """environment variables:
     FORCECPU - force a specific CPU all over e.g. SPR, spr.
@@ -975,7 +974,7 @@ def parse_args():
   """
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
     defs={'perf': 'perf', 'pmu-tools': '%s %s/pmu-tools' % (do['python'], C.dirname()),
-          'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']}, epilog=epilog)
+          'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics'], 'sys-wide': 0, 'delay': 0}, epilog=epilog)
   ap.add_argument('command', nargs='+', help='setup-perf log profile analyze tar, all (for these 5) '
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
@@ -983,8 +982,6 @@ def parse_args():
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('--stdout', action='store_const', const=True, default=False, help='keep profiling unfiltered results in stdout')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
-  ap.add_argument('-d', '--delay', type=int, default=0, help=help_s_arg('delay'))
-  ap.add_argument('-s', '--sys-wide', type=int, default=0, help=help_s_arg('system-wide'))
   ap.add_argument('-o', '--output', help='basename to use for output files')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')

@@ -419,7 +419,7 @@ def csv2stat(filename):
   NOMUX = 'vl6-nomux-perf.csv'
   def nomux(): return filename.endswith(NOMUX)
   def basename():
-    x = re.match(r'.*(toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
+    x = re.match(r'.*(\.toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
     if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
     return filename.replace(x.group(1), '')
   d = patch_metrics(d)

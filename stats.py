@@ -12,14 +12,14 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.02
+__version__= 1.03
 
 import common as C, pmu, tma
 import csv, json, os.path, re, sys
 
 def get_file(app, ext):
   for filename in os.listdir(os.getcwd()):
-    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+).perf.data.%s.log" % (C.command_basename(app), ext), filename):
+    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+)(\-a)?.perf.data.%s.log" % (C.command_basename(app), ext), filename):
       return filename
   return None
 

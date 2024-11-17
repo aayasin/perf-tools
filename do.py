@@ -214,7 +214,7 @@ def toplev_describe(m, msg=None, mod='^'):
 def read_toplev(l, m): return None if do['help'] < 0 else stats.read_toplev(l, m)
 def perf_record_true(): return '%s record true > /dev/null' % get_perf_toplev()[0]
 def analyze_it():
-  exe_v0(msg="Analyzing '%s'" % args.app)
+  exe_v0(msg="Analyzing '%s'" % uniq_name())
   analyze.analyze(uniq_name(), args, do)
 
 def tools_install(packages=[]):
@@ -536,7 +536,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     return record_name(do[x])
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
-  if args.profile_mask & ~0x1 and not do['batch'] and args.verbose >= 0: C.info('App: ' + r)
+  if args.profile_mask & ~0x1 and not do['batch'] and args.verbose > 0: C.info('App: ' + r)
   if en(1):
     logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
     if profiling() and (args.sys_wide or '-a' in do['perf-stat']):
@@ -1123,7 +1123,7 @@ def main():
     C.warn('bottlenecks view not supported on Hybrid. disabling..')
     args.profile_mask &= ~0x10000
   if args.sys_wide:
-    if profiling(): C.info('system-wide profiling')
+    if profiling(): C.info('system-wide profiling for %d seconds' % args.sys_wide)
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'

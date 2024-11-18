@@ -12,14 +12,14 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.02
+__version__= 1.03
 
 import common as C, pmu, tma
 import csv, json, os.path, re, sys
 
 def get_file(app, ext):
   for filename in os.listdir(os.getcwd()):
-    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+).perf.data.%s.log" % (C.command_basename(app), ext), filename):
+    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+)(\-a)?.perf.data.%s.log" % (C.command_basename(app), ext), filename):
       return filename
   return None
 
@@ -91,6 +91,9 @@ def convert(v, adjust_percent=True):
     return v / 100 if adjust_percent else v
   return str(v)
 
+def file2lines(f, pop=False): return C.file2lines(f, fail=True, pop=pop, debug=debug > 3)
+def open_r(f): return C.open_r(f, debug=debug > 3)
+
 def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=True):
   assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
@@ -119,7 +122,6 @@ def is_metric(s):
          not s.lower().endswith(('instructions', 'pairs', 'branches', 'insts-class', 'insts-subclass'))
 
 def read_histos(info, as_histos=False, groups=False):
-  assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
   histo = None
   g = 'LBR.Histo'
@@ -129,7 +131,7 @@ def read_histos(info, as_histos=False, groups=False):
       d[histo][k] = v
     else: d[k] = (v, g) if groups else v
   def rgx(): return histo == 'inst-per-leaf-func-name'
-  for l in C.file2lines(info):
+  for l in file2lines(info):
     if 'IPC histogram of' in l: break  # stops upon detailed loops stats
     if 'WARNING' in l: pass
     l = l.strip()
@@ -148,7 +150,7 @@ def read_histos(info, as_histos=False, groups=False):
       histo = None
       continue
     if histo:  # histogram line
-      l_list = re.split(r'\s{2,}', l) if rgx() else l.split()
+      l_list = re.split(r'\s{2,}', l) if rgx() and 'other' not in l else l.split()
       k = l_list[0]
       if k == 'IPC': continue # skip IPC histo header
       k = k[:-1]
@@ -158,9 +160,8 @@ def read_histos(info, as_histos=False, groups=False):
   return d
 
 def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
-  assert os.path.isfile(info), 'Missing file: %s' % info
   d = {}
-  for l in C.file2lines(info):
+  for l in file2lines(info):
     if 'histogram' in l: break  # stops upon global histograms
     s = v = None
     g = 'LBR.'
@@ -194,7 +195,7 @@ def rollup(c, perf_stat_file=None):
   if debug > 1: print_DB(c)
 
 def read_mispreds(mispreds_file, sig_threshold=1.0):
-  misp, sig = C.file2lines_pop(mispreds_file), []
+  misp, sig = file2lines(mispreds_file, pop=True), []
   while len(misp):
     b = C.str2list(misp.pop())
     val = b[0][:-1]
@@ -237,8 +238,7 @@ def read_perf(f):
     if e == 'L2_LINES_OUT.SILENT': d['Useless_HWPF'] = (
       d['L2_LINES_OUT.USELESS_HWPF'][0] / (d['L2_LINES_OUT.SILENT'][0] + d['L2_LINES_OUT.NON_SILENT'][0]), group)
   if f is None: return calc_metric(None) # a hack!
-  if debug > 3: print('reading %s' % f)
-  lines = C.file2lines(f)
+  lines = file2lines(f)
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
   for l in lines:
     if 'atom' in l: continue
@@ -319,8 +319,7 @@ Key2group = {
 
 def read_toplev(filename, metric=None):
   d = {}
-  if debug > 3: print('reading %s' % filename)
-  for l in C.file2lines(filename, fail=True):
+  for l in file2lines(filename):
     try:
       if not re.match(r"^(|core )(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
       l = l.replace('% ', '%_')
@@ -351,8 +350,7 @@ def read_toplev(filename, metric=None):
 def read_perf_toplev(filename):
   perf_fields_tl = ['Timestamp', 'CPU', 'Group', 'Event', 'Value', 'Perf-event', 'Index', 'STDDEV', 'MULTI', 'Nodes']
   d = {'num_zero_stats': 0, 'num_not_counted_stats': 0, 'num_not_supported_stats': 0}
-  if debug > 3: print('reading %s' % filename)
-  with open(filename) as csvfile:
+  with open_r(filename) as csvfile:
     reader = csv.DictReader(csvfile, fieldnames=perf_fields_tl, delimiter=';')
     for r in reader:
       if r['Event'] in ('Event', 'dummy', 'msr/tsc/'): continue
@@ -382,7 +380,7 @@ def read_perf_toplev(filename):
 def read_retlat_json(filename):
   d = {}
   if debug > 3: print('reading %s' % filename)
-  with open(filename, 'r') as file:
+  with open_r(filename) as file:
     data = json.load(file)
     for e in data['Data'].keys():
       d[e + '__retire_latency_MEAN'] = data['Data'][e]['MEAN']
@@ -421,14 +419,14 @@ def csv2stat(filename):
   NOMUX = 'vl6-nomux-perf.csv'
   def nomux(): return filename.endswith(NOMUX)
   def basename():
-    x = re.match(r'.*\.(toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
+    x = re.match(r'.*(\.toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
     if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
     return filename.replace(x.group(1), '')
   d = patch_metrics(d)
   base = basename()
-  retlat = base[:-1] + '-retlat.json'
+  retlat = base + '-retlat.json'
   if os.path.isfile(retlat): d.update(read_retlat_json(retlat))
-  tl_info = base + 'toplev-mvl2-perf.csv'
+  tl_info = base + '.toplev-mvl2-perf.csv'
   if not nomux():
     if not os.path.isfile(tl_info): C.warn('file is missing: ' + tl_info)
     else: d.update(read_perf_toplev(tl_info))
@@ -440,7 +438,7 @@ def csv2stat(filename):
     if len(info_files) > 1:
       C.warn('multiple info.log files exist for same app, %s will be added to .stat file' % info)
     d.update(read_info(info, sep='_', groups=False))
-  return perf_log2stat(base + 'perf_stat-r3.log', read_toplev(C.toplev_log2csv(filename), 'SMT_on'), d)
+  return perf_log2stat(base + '.perf_stat-r3.log', read_toplev(C.toplev_log2csv(filename), 'SMT_on'), d)
 
 def perf_log2stat(log, smt_on, d={}):
   suff = re.findall('(.perf_stat(-B)?-r[1-9].log)', log)[0]
@@ -456,8 +454,7 @@ def perf_log2stat(log, smt_on, d={}):
   def user_events(f):
     ue = {}
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue
-    if debug > 3: print('reading %s' % f)
-    for l in C.file2lines(f):
+    for l in file2lines(f):
       if re.match('^\s*$', l) or 'perf stat ' in l: continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val

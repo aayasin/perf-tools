@@ -9,7 +9,7 @@
 
 # Assembly support specific to x86
 __author__ = 'ayasin'
-__version__ = 0.56
+__version__ = 0.57
 # TODO:
 # - inform compiler on registers used by insts like MOVLG
 
@@ -31,7 +31,7 @@ COND_BR   = 'j[^m][^ ]*'
 EXTRACT   = 'xtr' # covers legacy, AVX* and x87 flavors
 IMUL      = r"imul.*"
 INDIRECT  = r"(jmp|call).*%"
-JUMP      = '(j|%s|sys%s|(bnd|notrack) jmp)' % (CALL_RET, CALL_RET)
+JUMP      = '(j|%s|sys%s|(bnd|notrack) (jmp|%s))' % (CALL_RET, CALL_RET, CALL_RET)
 LEA_S     = r"lea.?\s+.*\(.*,.*,\s*[0-9]\)"
 LOAD      = r"v?mov[a-z0-9]*\s+[^,]*\("
 LOAD_ANY  = r"[a-z0-9]+\s+[^,]*\("  # use is_mem_load()

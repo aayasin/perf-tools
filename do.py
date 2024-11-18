@@ -214,7 +214,7 @@ def toplev_describe(m, msg=None, mod='^'):
 def read_toplev(l, m): return None if do['help'] < 0 else stats.read_toplev(l, m)
 def perf_record_true(): return '%s record true > /dev/null' % get_perf_toplev()[0]
 def analyze_it():
-  exe_v0(msg="Analyzing '%s'" % args.app)
+  exe_v0(msg="Analyzing '%s'" % uniq_name())
   analyze.analyze(uniq_name(), args, do)
 
 def tools_install(packages=[]):
@@ -536,7 +536,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     return record_name(do[x])
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
-  if args.profile_mask & ~0x1 and not do['batch'] and args.verbose >= 0: C.info('App: ' + r)
+  if args.profile_mask & ~0x1 and not do['batch'] and args.verbose > 0: C.info('App: ' + r)
   if en(1):
     logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
     if profiling() and (args.sys_wide or '-a' in do['perf-stat']):
@@ -749,7 +749,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'cond-tk-mispreds'))
           if do['imix'] & 0x20 and args.mode != 'profile':
-            exe_v0(msg='@' + analyze.gen_misp_report(None))
+            exe_v0(msg='@' + analyze.gen_misp_report(None, verbose=args.verbose))
             analyze.gen_misp_report(data)
           if len(slow_cmd): exe('tail -6 %s.slow.log | grep -v ===total' % data, '@Top-5 slow sequences end with branch:')
         exe(log_br_count('mispredicted taken', 'tk-mispreds'))
@@ -966,7 +966,6 @@ def build_kernel(dir='./kernels/'):
   if args.verbose > 2: exe(fixup("%s -dw ./%s | grep -A%d pause | grep -E '[ 0-9a-f]+:'" % (do['objdump'], app, do['asm-dump'])), '@kernel ASM')
 
 def parse_args():
-  def help_s_arg(x): return x + ' profiling for x seconds. disabled by default'
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   epilog = """environment variables:
     FORCECPU - force a specific CPU all over e.g. SPR, spr.
@@ -975,7 +974,7 @@ def parse_args():
   """
   ap = C.argument_parser(usg='do.py command [command ..] [options]',
     defs={'perf': 'perf', 'pmu-tools': '%s %s/pmu-tools' % (do['python'], C.dirname()),
-          'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics']}, epilog=epilog)
+          'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics'], 'sys-wide': 0, 'delay': 0}, epilog=epilog)
   ap.add_argument('command', nargs='+', help='setup-perf log profile analyze tar, all (for these 5) '
                   '\nsupported options: ' + C.commands_list())
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
@@ -983,8 +982,6 @@ def parse_args():
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
   ap.add_argument('--stdout', action='store_const', const=True, default=False, help='keep profiling unfiltered results in stdout')
   ap.add_argument('--power', action='store_const', const=True, default=False, help='collect power metrics/events as well')
-  ap.add_argument('-d', '--delay', type=int, default=0, help=help_s_arg('delay'))
-  ap.add_argument('-s', '--sys-wide', type=int, default=0, help=help_s_arg('system-wide'))
   ap.add_argument('-o', '--output', help='basename to use for output files')
   ap.add_argument('-g', '--gen-args', help='args to gen-kernel.py')
   ap.add_argument('-ki', '--app-iterations', default='1e9', help='num-iterations of kernel')
@@ -1126,7 +1123,7 @@ def main():
     C.warn('bottlenecks view not supported on Hybrid. disabling..')
     args.profile_mask &= ~0x10000
   if args.sys_wide:
-    if profiling(): C.info('system-wide profiling')
+    if profiling(): C.info('system-wide profiling for %d seconds' % args.sys_wide)
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'

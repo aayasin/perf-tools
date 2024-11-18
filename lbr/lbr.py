@@ -220,10 +220,7 @@ def edge_stats(line, lines, xip, size):
       if C.any_in(vecs, ''.join(v2ii2v_srcs)): inc_stat('V2I transition-Penalty')
       elif C.any_in(vecs, v2ii2v_dst): inc_stat('I2V transition-Penalty')
     elif v2ii2v_dst: inc_stat('V2I transition-Penalty')
-  if xinfo.is_cond_br() and xinfo.is_taken():
-    LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
-  #Shortcircuit detection
-  #A setcc instructions is found, now walk in reverse and find at least two conditional jumps within a max_inst window.
+  #Shortcircuit detection finds cases when at least two nested conditionals exist. In this case we anchor on a setcc instruction and walk up the instruction reverse and find at least two conditional jumps within a max_inst window.
   if 'set' in x86.get('inst',line):
     x = len(lines)-1
     max_inst=8
@@ -254,14 +251,30 @@ def edge_stats(line, lines, xip, size):
               break
       max_cnt+=1
       x-=1
-  # checks all lines but first
-  if info.is_cond_br():
-    if info.is_taken(): LC.glob['cond_taken-not-first'] += 1
-    else: LC.glob['cond_non-taken'] += 1
-    if x86_f.is_jcc_fusion(xline, line):
-      LC.glob['cond_fusible'] += 1
-      if size > 1 and xinfo.is_test_cmp() and LC.is_type(x86.LOAD, prev_line(-2)):
-        inc_pair('LD-CMP', suffix='fusible')
+  if size > 1:
+    xline = LC.prev_line(lines)
+    xinfo = LC.line2info(xline)
+    if 'dsb-heatmap' in hsts and (xinfo.is_taken() or new_line):
+      inc(hsts['dsb-heatmap'], pmu.dsb_set_index(ip))
+    if 'indirect-x2g' in hsts and LC.is_type(x86.INDIRECT, xline):
+      ilen = xinfo.ilen() or 2
+      if abs(ip - (xip + ilen)) >= 2 ** 31:
+        inc(hsts['indirect-x2g'], xip)
+        if 'MISP' in xline: inc(hsts['indirect-x2g-misp'], xip)
+    if xip and xip in indirects:
+      inc(hsts['indirect_%s_targets' % LC.hex_ip(xip)], ip)
+      if 'MISP' in xline: inc(hsts['indirect-misp_%s_targets' % LC.hex_ip(xip)], ip)
+      #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
+    if xinfo.is_cond_br() and xinfo.is_taken():
+      LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
+    # checks all lines but first
+    if info.is_cond_br():
+      if info.is_taken(): LC.glob['cond_taken-not-first'] += 1
+      else: LC.glob['cond_non-taken'] += 1
+      if x86_f.is_jcc_fusion(xline, line):
+        LC.glob['cond_fusible'] += 1
+        if size > 2 and xinfo.is_test_cmp() and LC.is_type(x86.LOAD, LC.prev_line(lines, step=2)):
+          inc_pair('LD-CMP', suffix='fusible')
       else:
         LC.glob['cond_non-fusible'] += 1
         if xinfo.is_mem_imm():
@@ -574,7 +587,6 @@ def print_global_stats():
     for x in LC.Insts_Fusions: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_MRN: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_V2II2V: print_imix_stat(x, LC.glob[x])
-    for x in LC.Insts_ShortCircuit: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_global: print_imix_stat(x, LC.glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

@@ -47,8 +47,7 @@ def setup(app, basename=None, verbose=0):
     for e in log_exts: handles[e] = '.'.join((basename, e, 'log'))
 
 def lbr_info():
-  if not lbr_info.info_d:
-    lbr_info.info_d = {k: v[0] for k, v in stats.read_info(ext('info')).items()}
+  if not lbr_info.info_d: lbr_info.info_d = stats.strip(stats.read_info(ext('info')))
   return lbr_info.info_d
 lbr_info.info_d = None
 
@@ -113,7 +112,7 @@ def analyze_misp():
       if easy: hint('above forward-conditional branch should be converted to CMOV. check your compiler')
 
 # interface for do.py
-def analyze(app, args, do=None):
+def analyze(app, args, do=None, analyze_all=True):
   handles['app'] = app
   handles['verbose'] = args.verbose
   handles['stat'] = 1
@@ -131,14 +130,15 @@ def analyze(app, args, do=None):
     C.printc('%s%s = %s is %s' % (atts[0], bottleneck, value, atts[1]), atts[2])
     return flagged
 
-  if examine('Mispredictions'): analyze_misp()
-  if examine('Big_Code'):       analyze_bigcode()
+  if examine('Mispredictions'):       analyze_misp()
+  if examine('Big_Code'):             analyze_bigcode()
+  if examine('Instruction_Fetch_BW'): analyze_ifetch()
+  if not analyze_all: return
+
   if examine('Cache_Memory_Bandwidth'):
     value = stats.get('Useless_HWPF', app)
     if value > threshold['useless-hwpf']:
       advise('too much useless HW prefetches of %s; try to disable them' % percent(value))
-  if examine('Instruction_Fetch_BW'):
-    analyze_ifetch()
 
 def analyze_bigcode():
   app, d = handles['app'], {}

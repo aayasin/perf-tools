@@ -185,9 +185,9 @@ def par_jobs_file(commands, name=None, verbose=False, shell='bash'):
   return name
 
 import glob as python_glob
-def glob(regex):
+def glob(regex, forgive=0):
   fs = python_glob.glob(regex)
-  if len(fs) == 0: error("could not find files: %s" % regex)
+  if len(fs) == 0 and not forgive: error("could not find files: %s" % regex)
   return sorted(fs)
 
 # OS
@@ -359,7 +359,7 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   add_prof_arg('delay')
   if not usg: return common_args
   ap.add_argument('-r', '--repeat', default=3, type=int, help='times to run per-app counting and topdown-primary profile steps')
-  ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
+  ap.add_argument('-a', '--app', default=def_value('app', RUN_DEF), help='name of user-application/kernel/command to profile')
   ap.add_argument('-v', '--verbose', type=int, default=def_value('verbose', 0),
     help='verbose level; -1: quiet; 0:info, 1:commands, '
     '2:+verbose-on metrics|build|sub-commands, 3:+toplev --perf|ASM on kernel build|greedy lbr.py, 4:+args parsing, '

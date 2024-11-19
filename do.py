@@ -216,7 +216,8 @@ def read_toplev(l, m): return None if do['help'] < 0 else stats.read_toplev(l, m
 def perf_record_true(): return '%s record true > /dev/null' % get_perf_toplev()[0]
 def analyze_it():
   exe_v0(msg="Analyzing '%s'" % uniq_name())
-  analyze.analyze(uniq_name(), args, do)
+  analyze.analyze(uniq_name(), args, do,
+                  len(do['perf-stat-ipc']) < 99) # hack for yperf which uses really long tunable
 
 def tools_install(packages=[]):
   installer='sudo %s -y install ' % do['package-mgr']

@@ -12,16 +12,15 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.03
+__version__= 1.04
 
 import common as C, pmu, tma
 import csv, json, os.path, re, sys
 
-def get_file(app, ext):
-  for filename in os.listdir(os.getcwd()):
-    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+)(\-a)?.perf.data.%s.log" % (C.command_basename(app), ext), filename):
-      return filename
-  return None
+# TODO: add a "namer" module to assign filename for all logs;
+#       to replace this function, so analyze.ext() can call it directly,
+#       to replace other instances of finding filename below and in do.py as well.
+def get_file(app, ext): return get_file_int(C.command_basename(app), '.perf.data.' + ext)
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]
@@ -39,6 +38,8 @@ def get_val(s, c):
   if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, c, str(val)))
   return val
 
+def strip(d): return {k: v[0] for k, v in d.items()}
+
 def print_metrics(app):
   c = C.command_basename(app)
   rollup(c)
@@ -51,6 +52,12 @@ sDB = {}
 stats = {'verbose': 0}
 
 # internal methods
+def get_file_int(prefix, ext):
+  for filename in C.glob(prefix + '*', True):
+    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+)(\-a)?%s.log" % (prefix, ext), filename):
+      return filename
+  return None
+
 def get_stat_int(s, c, stat_file=None, val=-1):
   if not c in sDB and s in ('CPUs_Utilized', ): return read_perf(stat_file)[s][0]
   rollup(c, stat_file)
@@ -186,9 +193,10 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
 def rollup(c, perf_stat_file=None):
   if c in sDB: return
   perf_stat_file, info, vl6 = perf_stat_file or c + '.perf_stat-r3.log', c + '.toplev-mvl2.log', c + '.toplev-vl6.log'
-  # TODO: call do.profile to get file names
-  sDB[c] = read_perf(perf_stat_file)
+  perf_stat_lbr = get_file_int(c + '.perf_stat', '')
+  sDB[c] = read_perf(perf_stat_file) if os.path.exists(perf_stat_file) else {}
   if os.path.exists(vl6): sDB[c].update(read_toplev(vl6))
+  elif os.path.exists(perf_stat_lbr): sDB[c].update(read_perf(perf_stat_lbr))
   if os.path.exists(info):
     sDB[c].update(read_toplev(info))
     sDB[c]['sig-misp'] = (read_mispreds(info.replace('.info', '.mispreds')), 'list')

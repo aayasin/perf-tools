@@ -220,7 +220,14 @@ def edge_stats(line, lines, xip, size):
       if C.any_in(vecs, ''.join(v2ii2v_srcs)): inc_stat('V2I transition-Penalty')
       elif C.any_in(vecs, v2ii2v_dst): inc_stat('I2V transition-Penalty')
     elif v2ii2v_dst: inc_stat('V2I transition-Penalty')
-  #Shortcircuit detection finds cases when at least two nested conditionals exist. In this case we anchor on a setcc instruction and walk up the instruction reverse and find at least two conditional jumps within a max_inst window.
+  #Shortcircuit detection finds cases when at least two nested conditionals exist. We first anchor on a setcc instruction and walk up the instruction sequence in search of two conditional branches within an 8 instruction window. For example:
+  #xor    %eax,%eax
+  #cmp    %rdi,%rsi <-
+  #ja     12ee <is_goodrange+0x1e>
+  #add    %rdx,%rsi
+  #xor    %eax,%eax
+  #cmp    %rsi,%rdi <-
+  #setb   %al       <-
   if 'set' in x86.get('inst',line):
     x = len(lines)-1
     max_inst=8
@@ -236,7 +243,7 @@ def edge_stats(line, lines, xip, size):
           candidate_regs=x86.get("srcs",lines[x]) + [x86.get("dst",lines[x])]
           for i in candidate_regs:
             #remove any immediate values
-            if '0x' in i:
+            if x86.is_imm(i):
               candidate_regs.remove(i)
           #reset the window for the next reverse walk in search of conditional jumps.
           max_cnt=-1
@@ -587,6 +594,7 @@ def print_global_stats():
     for x in LC.Insts_Fusions: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_MRN: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_V2II2V: print_imix_stat(x, LC.glob[x])
+    for x in LC.Insts_ShortCircuit: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_global: print_imix_stat(x, LC.glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

@@ -20,7 +20,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.71
+__version__ = 3.72
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -186,6 +186,7 @@ def exe_1line(x, f=None, heavy=True):
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
 
 def error(x): C.warn(x) if do['forgive'] > 1 else C.error(x)
+def do_info(x):  return C.info(x) if args.verbose >= 0 else None
 def warn_file(x):
   if not args.mode == 'profile' and not args.print_only and not isfile(x): C.warn('file does not exist: %s' % x)
 
@@ -333,6 +334,8 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   def version(tool): C.fappend('%s: %s' % (tool, exe_1line('%s --version | head -1' % tool)), out)
   forcecpu = globs['force-cpu']
   C.printc('%s%s' % (('%s/' % forcecpu.lower()) if forcecpu else '', pmu.name(real=True))) #OS
+  revert_mode = 0
+  if args.mode == 'profile': revert_mode, args.mode = 1, 'both'
   if args.mode == 'process': return
   if isfile(out): exe('mv %s %s' % (out, out.replace('.log', '-%d.log' % os.getpid())))
   exe('uname -a | sed s/Linux/Linux:/ > ' + out, 'logging setup')
@@ -372,6 +375,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   exe("ulimit -a > setup-ulimit.log")
   if do['dmidecode']: exe("sudo dmidecode | tee setup-memory.log | grep -E -A15 '^Memory Device' | "
     "grep -E '(Size|Type|Speed|Bank Locator):' | sort | uniq -c | sort -nr | %s >> %s" % (label('.', 'dmidecode'), out))
+  if revert_mode: args.mode = 'profile'
 
 def perf_version(): return exe_1line(args.perf + ' --version', heavy=False).replace('perf version ', '')
 def perf_newer_than(to_check):
@@ -455,6 +459,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
                                                         ',+srcline' if do['srcline'] else '',
                                                         ' 2>>' + err if do['srcline'] else '')
+  def perf_stat_TSC(log): return ' '.join([perf, 'stat -a -C0 -e msr/tsc/', '-o', log.replace('.log', '-C0.log ')])
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'],
                 csv=False, # note !csv implies to collect TSC
                 basic_events=do['perf-stat-add'] > 1, first_events='cpu-clock,', last_events=',' + do['perf-stat-def'], warn=True,
@@ -476,7 +481,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       if profiling() and isfile(log): os.remove(log)
     else:
       assert 'msr/tsc/' not in perf_args
-      tscperf = ' '.join([perf, 'stat -a -C0 -e msr/tsc/', '-o', log.replace('.log', '-C0.log ')])
+      tscperf = perf_stat_TSC(log)
     stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
     ret = profile_exe(tscperf + perf + stat, msg, step, mode='perf-stat', fail=0 if warn else -1)
     if args.stdout or do['tee']==0 or do['help']<0: return C.error('perf-stat failed') if ret else None
@@ -536,7 +541,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     return record_name(do[x])
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
-  if args.profile_mask & ~0x1 and not do['batch'] and args.verbose > 0: C.info('App: ' + r)
+  if args.profile_mask & ~0x1 and not do['batch']: do_info('App: ' + r)
   if en(1):
     logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
     if profiling() and (args.sys_wide or '-a' in do['perf-stat']):
@@ -677,8 +682,10 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     perf_data, flags = '%s.perf.data' % record_calibrate('perf-%s' % tag), do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or (do['forgive'] > 1), 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     if not windows_file:
-      cmd = "bash -c '%s %s %s'" % (perf, track_ipc, r) if len(track_ipc) else '-- %s' % r
-      profile_exe(perf + ' %s %s -o %s %s' % (record, flags, perf_data, cmd), 'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
+      log = '%s.perf_stat%s.log' % (out, C.chop(flags.strip()))
+      cmd = "bash -c '%s %s %s -o %s %s'" % (perf_stat_TSC(log), perf, track_ipc, log, r) if len(track_ipc) else '-- %s' % r
+      profile_exe(perf + ' %s %s -o %s %s && %s' % (record, flags, perf_data, cmd, C.grep('insn|time', log)),
+                  'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
       warn_file(perf_data)
       if tag not in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
     n = samples_count(perf_data)
@@ -950,7 +957,7 @@ def do_logs(cmd, ext=[], tag=''):
     for f in C.glob(s+'*'):
       if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
     if isfile('run.sh'): files += ['run.sh']
-    exe('tar -czvf %s ' % r + ' '.join(files), 'tar into %s' % r, log=False)
+    exe('tar -cz%sf %s ' % ('v' if args.verbose > 0 else '', r) + ' '.join(files), 'tar into %s' % r, log=False)
     print_cmd('tar -czvf %s setup*.log .%s*.cmd %s*.{%s}' % (r, s, s, ','.join(log_files[1:])))
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + ' *-out.txt *perf.data* $(find -name __pycache__) results.tar.gz')
 
@@ -1113,7 +1120,7 @@ def main():
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
   C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
   if args.mode == 'process':
-    C.info('post-processing only (not profiling)')
+    do_info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
     if args.profile_mask & 0x300: args.profile_mask |= 0x2
   elif args.mode == 'both' and args.verbose >= 0 and args.profile_mask & 0x100 and not (args.profile_mask & 0x2):
@@ -1123,14 +1130,14 @@ def main():
     C.warn('bottlenecks view not supported on Hybrid. disabling..')
     args.profile_mask &= ~0x10000
   if args.sys_wide:
-    if profiling(): C.info('system-wide profiling for %d seconds' % args.sys_wide)
+    if profiling(): do_info('system-wide profiling for %d seconds' % args.sys_wide)
     do['run'] = 'sleep %d'%args.sys_wide
     for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
     args.toplev_args += ' -a'
     if not do['comm']: do['perf-filter'] = 0
     args.profile_mask &= ~0x4 # disable system-wide profile-step
   if args.delay:
-    if profiling(): C.info('delay profiling by %d seconds' % args.delay)
+    if profiling(): do_info('delay profiling by %d seconds' % args.delay)
     delay = ' -D %d' % (args.delay * 1000)
     for x in ('stat', 'stat-ipc'): do['perf-'+x] += delay
     for x in record_steps: do['perf-'+x] += delay

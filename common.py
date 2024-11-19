@@ -343,9 +343,8 @@ def add_hex_arg(ap, n, fn, d, h):
 def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefaultsHelpFormatter, epilog=None):
   ap = argparse.ArgumentParser(usage=usg, formatter_class=fc, epilog=epilog) if usg else argparse.ArgumentParser(formatter_class=fc)
   common_args = []
-  def common_def(a):
-    common_args.append(a)
-    return defs[a] if defs and a in defs else None
+  def common_def(a): common_args.append(a); return def_value(a)
+  def def_value(a, dv=None): return defs[a] if defs and a in defs else dv
   def add_argument(a, h): ap.add_argument('--' + a, default=common_def(a), help=h)
   def add_argument2(a, h): ap.add_argument('--'+a, '-'+a[0], default=common_def(a), help=h)
   def add_prof_arg(a): ap.add_argument('--'+a, '-'+a[0], type=int, default=common_def(a),
@@ -361,7 +360,8 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   if not usg: return common_args
   ap.add_argument('-r', '--repeat', default=3, type=int, help='times to run per-app counting and topdown-primary profile steps')
   ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
-  ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; -1: quiet; 0:info, 1:commands, '
+  ap.add_argument('-v', '--verbose', type=int, default=def_value('verbose', 0),
+    help='verbose level; -1: quiet; 0:info, 1:commands, '
     '2:+verbose-on metrics|build|sub-commands, 3:+toplev --perf|ASM on kernel build|greedy lbr.py, 4:+args parsing, '
     '5:+event-groups|+perf-script timing, 6:ocperf verbose, .. 9:anything')
   add_hex_arg(ap, '-pm', '--profile-mask', mask, 'stages in the profile command. See profile-mask-help.md for details')

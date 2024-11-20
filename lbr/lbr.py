@@ -220,6 +220,16 @@ def edge_stats(line, lines, xip, size):
       if C.any_in(vecs, ''.join(v2ii2v_srcs)): inc_stat('V2I transition-Penalty')
       elif C.any_in(vecs, v2ii2v_dst): inc_stat('I2V transition-Penalty')
     elif v2ii2v_dst: inc_stat('V2I transition-Penalty')
+  #########################
+  #MoveEliminationDetection
+  #########################
+  if x86.is_type(x86.MOV,line):
+    if not info.is_memory() and not info.is_imm():
+      if info.srcs()[0] in x86.REGS_64 and info.dst() in x86.REGS_64:
+        inc_stat('R64 Move-Elimination')
+      elif info.srcs()[0] in x86.REGS_32 and info.dst() in x86.REGS_32:
+        inc_stat('R32 Move-Elimination')
+  #########################
   if size > 1:
     xline = LC.prev_line(lines)
     xinfo = LC.line2info(xline)
@@ -556,6 +566,7 @@ def print_global_stats():
     for x in LC.Insts_Fusions: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_MRN: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_V2II2V: print_imix_stat(x, LC.glob[x])
+    for x in LC.Insts_MovElim: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_global: print_imix_stat(x, LC.glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

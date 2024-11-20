@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.60 # see version line of do.py
+__version__ = 0.61 # see version line of do.py
 
 import common as C, pmu, stats, tma
 from lbr import x86
@@ -19,6 +19,7 @@ import re
 
 threshold = {
   'code-footprint':   600,
+  'CPUs_Utilized':    0.95,
   'hot-loop':         0.05,
   'indirect-target':  0.15,
   'IpTB':             3 * pmu.cpu_pipeline_width(),
@@ -129,6 +130,10 @@ def analyze(app, args, do=None, analyze_all=True):
     atts = ('\n', 'exceeded', C.color.RED) if flagged else ('', 'within its threshold', C.color.GREEN)
     C.printc('%s%s = %s is %s' % (atts[0], bottleneck, value, atts[1]), atts[2])
     return flagged
+
+  CPUs_Utilized = stats.get('CPUs_Utilized', app)
+  if CPUs_Utilized < threshold['CPUs_Utilized']:
+    advise('Low # CPU utilized = %.2f; is your workload CPU-Bound?' % CPUs_Utilized)
 
   if examine('Mispredictions'):       analyze_misp()
   if examine('Big_Code'):             analyze_bigcode()

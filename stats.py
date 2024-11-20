@@ -59,7 +59,7 @@ def get_file_int(prefix, ext):
   return None
 
 def get_stat_int(s, c, stat_file=None, val=-1):
-  if not c in sDB and s in ('CPUs_Utilized', ): return read_perf(stat_file)[s][0]
+  if not c in sDB and stat_file and s in ('CPUs_Utilized', ): return read_perf(stat_file)[s][0]
   rollup(c, stat_file)
   return get_val(s, c)
 

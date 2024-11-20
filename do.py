@@ -460,6 +460,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
                                                         ',+srcline' if do['srcline'] else '',
                                                         ' 2>>' + err if do['srcline'] else '')
+  # FIXME:01: add a "namer" module to assign filename for all logs; here and in calling log_funcs()
   def perf_stat_TSC(log): return ' '.join([perf, 'stat -a -C0 -e msr/tsc/', '-o', log.replace('.log', '-C0.log ')])
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'],
                 csv=False, # note !csv implies to collect TSC
@@ -1103,6 +1104,8 @@ def main():
     if 'build' not in args.command: C.error('must use build command with --gen-args')
   if args.output and ' ' in args.output: C.error('--output must not have spaces')
   assert args.sys_wide >= 0, 'negative duration provided!'
+  # FIXME:02: support apart from -r3 or -r1
+  assert 0 < args.repeat < 10 and args.repeat in (1, 3), 'unsupported repeat count!'
   if args.verbose > 4: args.toplev_args += ' -g'
   if args.verbose > 2: args.toplev_args += ' --perf'
   if args.print_only and args.verbose <= 0: args.verbose = 1

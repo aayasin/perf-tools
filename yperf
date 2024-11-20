@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+# Copyright (c) 2020-2024, Intel Corporation
+# Author: Ahmad Yasin
+#
+#   This program is free software; you can redistribute it and/or modify it under the terms and conditions of the
+# GNU General Public License, version 2, as published by the Free Software Foundation.
+#   This program is distributed in the hope it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+# yperf - profiles (system) in a single run, generates reports and advises for SW optimizations
+#
+
+# FIXME:03: insane start-up time of this script
+from __future__ import print_function
+__author__  = 'ayasin'
+__version__ = 0.30      # see version line of do.py
+
+import common as C, pmu, tma
+
+prof_modes = ['record', 'report', 'advise']
+def parse_args():
+  usage = '\n\t'.join(('prof [options] <mode> [-- app and args]',
+                       'profile a workload with one-shot (single profiling run)'))
+  bott_events = [
+    'ICACHE_TAG.STALLS', 'ICACHE_DATA.STALLS',                                          # BigC
+    'DSB2MITE_SWITCHES.PENALTY_CYCLES', #'IDQ.MS_UOPS:c1:e1',                           # IFetchBW
+    'INT_MISC.CLEAR_RESTEER_CYCLES',                                                    # Misps
+    # 'BR_MISP_RETIRED.ALL_BRANCHES', 'INT_MISC.CLEARS_COUNT', 'MACHINE_CLEARS.COUNT',  # Misps
+    ]
+  if pmu.goldencove_on(): bott_events += ['INT_MISC.UNKNOWN_BRANCH_CYCLES',             # BigC
+    # 'UOPS_RETIRED.MS', # overloads frontend!
+    ]
+  if pmu.lunarlake_on(): bott_events += ['IDQ.MS_CYCLES_ANY']                           # Misps, IFetchBW
+  assert len(bott_events) < 8
+  events = tma.fixed_metrics()[0] + ',' + ','.join([pmu.event(e) for e in bott_events])
+  if len(bott_events) < 7: events += ',cycles:k'
+  ap = C.argument_parser(usage, mask=100,
+    defs={'app': None, 'delay': 0, 'events': events, 'sys-wide': 10, 'verbose': -1,
+    })
+  ap.add_argument('mode', default=prof_modes, help='mode for prof: ' + ' '.join(prof_modes))
+  ap.add_argument('-o', '--output', default='myprofile', help='basename to use for output files')
+  args, rest = ap.parse_known_args()
+  if rest:
+    args.app = ' '.join(rest[1:])
+    args.sys_wide = 0
+  #else: C.error("Expect '--' for per-app profiling\n" + usage)
+  if not pmu.goldencove_on(): C.warn('old PMU: ' + pmu.name())
+  return args
+
+def main():
+  args = parse_args()
+  events = '\\"%s\\"' % args.events
+  tune = " :loops:0 :perf-stat-ipc:\"'stat -e %s'\" :srcline:1" % events
+  mode = 'suspend-smt' if pmu.cpu('smt-on') else ''
+  mode += 'log profile --mode profile'
+  if args.mode == 'report':
+    if not len(C.glob(args.output + '*.perf.data', 1)): C.error("run 'yperf record' before 'yperf report'")
+    mode = 'profile tar --mode process'
+  elif args.mode == 'advise':
+    if not len(C.glob(args.output + '*.info.log', 1)): C.error("run 'yperf report' before 'yperf advise'")
+    C.warn('Using a proxy of Bottlenecks View that is subject to inaccuracies. Use do.py for in-depth analysis!')
+    mode = 'analyze'
+  else:
+    assert args.mode == 'record'
+  cmd = ' '.join([C.realpath('do.py'), mode, C.get_shared_args(args), '-pm 100 -v -1', '--tune %s' % tune,
+                  '-s %d' % args.sys_wide, "-a '%s'" % args.app if args.app else '', '-o %s' % args.output])
+  C.exe_cmd(cmd, debug=1 if args.verbose >= 0 else 0)
+
+if __name__ == "__main__":
+  main()

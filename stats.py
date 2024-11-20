@@ -17,9 +17,14 @@ __version__= 1.04
 import common as C, pmu, tma
 import csv, json, os.path, re, sys
 
-# TODO: add a "namer" module to assign filename for all logs;
-#       to replace this function, so analyze.ext() can call it directly,
-#       to replace other instances of finding filename below and in do.py as well.
+# FIXME:01: add a "namer" module to assign filename for all logs;
+#       to replace this function, so analyze.ext() can call it directly, many in do.py, and
+#       to replace other instances of finding filename below:
+#         get_stat_log()
+#         get_TSC()
+#         rollup_all()
+#         rollup() (start and toward end)
+#         return from csv2stat() which removed common.toplev_log2csv too!
 def get_file(app, ext): return get_file_int(C.command_basename(app), '.perf.data.' + ext)
 
 def get_stat_log(s, perf_stat_file):
@@ -34,7 +39,10 @@ def get_val(s, c):
   try:
     val = sDB[c][s][0]
   except KeyError:
-    C.warn('KeyError for stat: %s, in config: %s' % (s, c))
+    if s in tma.estimate(None, None):
+      val = tma.estimate(s, strip(sDB[c]))
+      sDB[c][s] = (val, 'Bottleneck')
+    else: C.warn('KeyError for stat: %s, in config: %s' % (s, c))
   if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, c, str(val)))
   return val
 
@@ -226,6 +234,7 @@ def print_DB(c):
 
 def get_TSC(f):
   tsc = read_perf(f.replace('.log', '-C0.log'))['msr/tsc/'][0]
+  # FIXME:02: support apart from -r3 or -r1
   if f.endswith('-r3.log'): tsc = int(tsc / 3)
   return tsc
 

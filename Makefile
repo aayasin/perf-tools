@@ -60,13 +60,20 @@ tramp3d-v4: pmu-tools/workloads/CLTRAMP3D /usr/bin/clang++
 
 run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
-	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s1 --tune :perf-stat:\"\'-C2\'\" # for profiling
+	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s3 --tune :perf-stat:\"\'-C2\'\" # for debugging
 test-mem-bw: run-mem-bw
 	sleep 2s
 	set -o pipefail; $(DO) profile -s3 $(ST) -o $< $(RERUN) | $(SHOW)
 	grep -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log
+	./yperf record -o $<-yperf && touch $<-yperf # collect for later
 	kill -9 `pidof m0-n8192-u01.llv`
 	@echo 1 | tee $< > $@
+test-yperf: run-mem-bw-yperf
+	./yperf report -o $<
+ifneq ($(CPU), ICX)
+	./yperf advise -o $<
+endif
+
 run-mt:
 	./omp-bin.sh $(NUM_THREADS) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv &
 test-mt: run-mt
@@ -207,7 +214,7 @@ update:
 PT=perf-tools.1
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \
-	    $(PT) run-mem-bw setup-system-* test-{default-track-perf,dir,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
+	    $(PT) run-mem-bw* setup-system-* test-{default-track-perf,dir,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
 	rm -f .prepush_state.cmd
 post-push:
 	$(CLONE) $(PT) && cd $(PT) && ./do.py setup-perf log && cd .. && rm -rf $(PT)   # tests a fresh clone

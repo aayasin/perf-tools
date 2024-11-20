@@ -90,6 +90,7 @@ def event(x, precise=0):
   }
   e = aliases[x] if x in aliases else perf_event(x)
   if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
+  if ':' in x and x.split(':')[0].isupper(): e = e.replace(x.split(':')[0], x)
   return perf_format(e)
 
 def event_period(e, p=default_period(), precise=True, lbr=True):

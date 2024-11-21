@@ -58,7 +58,7 @@ def get(tag):
   if tag.startswith('bottlenecks-list-'):
     all = get('bottlenecks-list')
     return [all[i] for i in range(int(tag[-1]))]
-  model = 'GNR' if pmu.granite() else pmu.cpu('CPU') or C.env2str('TMA_CPU', 'SPR')
+  model = pmu.cpu_CPU('SPR')
   if tag == 'zero-ok':
     ZeroOk = C.csv2dict(settings_file('tma-zero-ok.csv'))
     return ZeroOk[model].split(';')

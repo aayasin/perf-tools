@@ -229,6 +229,7 @@ def force_cpu(cpu):
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
   return event_list
 
+def cpu_CPU(default='UNK'): return 'GNR' if granite() else cpu('CPU') or C.env2str('TMA_CPU', default)
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:
@@ -248,7 +249,7 @@ def cpu(what, default=None):
       xs = x.split(':')
       if len(xs) > 1:
         k, v = str(xs[0].strip()), str(xs[1].strip())
-        d[k] = Cpu(v) if k == 'CPU' else v
+        d[k] = (Cpu(v) if k == 'CPU' else v) if len(v) else None
       elif xs[0] != 'toplev': C.warn('toplev --version: %s' % xs[0])
     return d
   try:

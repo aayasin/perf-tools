@@ -233,6 +233,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing default profile-steps, tracks LBR speed' && $(MAKE) test-default-track-perf" \
     "echo 'testing stats module' && $(MAKE) test-stats" \
     "echo 'testing analyze module' && $(MAKE) test-analyze" \
+    "echo 'running the yperf profiler' && $(MAKE) test-yperf" \
     "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL)" \
     "echo 'testing prof-no-aux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
     "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command' && \

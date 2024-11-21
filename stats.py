@@ -467,7 +467,7 @@ def perf_log2stat(log, smt_on, d={}):
     d['knob.forcecpu'] = 1 if C.env2str('FORCECPU') else 0
     d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', tma.get('version'))
     d['knob.uarch'] = pmu.cpu('CPU')
-    return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK')
+    return d['knob.uarch'] or pmu.cpu_CPU()
   def user_events(f):
     ue = {}
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue

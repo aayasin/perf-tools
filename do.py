@@ -951,7 +951,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
 def do_logs(cmd, ext=[], tag=''):
   log_files = ['', 'csv', 'json', 'log', 'stat', 'svg', 'xlsx'] + ext
   if cmd == 'tar':
-    r = '.'.join((tag, pmu.cpu('CPU'), 'results.tar.gz')) if len(tag) else C.error('do_logs(tar): expecting tag')
+    r = '.'.join((tag, pmu.cpu_CPU(), 'results.tar.gz')) if len(tag) else C.error('do_logs(tar): expecting tag')
     if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
   s = (uniq_name() if user_app() else '')
   if cmd == 'tar':
@@ -978,7 +978,7 @@ def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   epilog = """environment variables:
     FORCECPU - force a specific CPU all over e.g. SPR, spr.
-    TMA_CPU - force model for TMA (in .stat filename).
+    TMA_CPU - force model for TMA (in .stat file).
     TRACEBACK - print traceback of calls on error.
   """
   ap = C.argument_parser(usg='do.py command [command ..] [options]',

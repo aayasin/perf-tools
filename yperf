@@ -41,7 +41,8 @@ def parse_args():
   ap.add_argument('-o', '--output', default='myprofile', help='basename to use for output files')
   args, rest = ap.parse_known_args()
   if rest:
-    args.app = ' '.join(rest[1:])
+    if rest[0] == '--': rest.pop(0)
+    args.app = ' '.join(rest)
     args.sys_wide = 0
   #else: C.error("Expect '--' for per-app profiling\n" + usage)
   if not pmu.goldencove_on(): C.warn('old PMU: ' + pmu.name())

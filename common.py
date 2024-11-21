@@ -338,8 +338,6 @@ RUN_DEF = './run.sh'
 TOPLEV_DEF=' --frequency --metric-group +Summary'
   #' --no-uncore' # https://github.com/andikleen/pmu-tools/issues/450
 PROF_MASK_DEF=0x313F
-def add_hex_arg(ap, n, fn, d, h):
-  ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
 def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefaultsHelpFormatter, epilog=None):
   ap = argparse.ArgumentParser(usage=usg, formatter_class=fc, epilog=epilog) if usg else argparse.ArgumentParser(formatter_class=fc)
   common_args = []
@@ -364,15 +362,21 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
     help='verbose level; -1: quiet; 0:info, 1:commands, '
     '2:+verbose-on metrics|build|sub-commands, 3:+toplev --perf|ASM on kernel build|greedy lbr.py, 4:+args parsing, '
     '5:+event-groups|+perf-script timing, 6:ocperf verbose, .. 9:anything')
-  add_hex_arg(ap, '-pm', '--profile-mask', mask, 'stages in the profile command. See profile-mask-help.md for details')
+  argp_add_hex_arg(ap, '-pm', '--profile-mask', mask, 'stages in the profile command. See profile-mask-help.md for details')
   ap.add_argument('--tune', nargs='+', default=common_def('tune'), help=argparse.SUPPRESS, action='append') # override global variables with python expression
   return ap
-def get_shared_args(args):
+def argp_add_hex_arg(ap, n, fn, d, h):
+  ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
+def argp_get_common(args):
   r = ''
   for x in argument_parser(None):
     a = getattr(args, x.replace('-', '_'))
     if a: r += ' --%s %s' % (x, "'%s'" % a if type(a) is str and any_in(' {', a) else str(a))
   return r
+def argp_tune_prepend(args, prep):
+  tune = getattr(args, 'tune') or []
+  tune.insert(0, [prep])
+  return ' --tune ' + ' '.join([' '.join(i) for i in tune])
 
 def commands_list():
   return ' '.join(chop(exe_output("grep -E 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort" % sys.argv[0], sep=' '), "),'").split() +

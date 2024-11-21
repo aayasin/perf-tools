@@ -50,7 +50,6 @@ def parse_args():
 def main():
   args = parse_args()
   events = '\\"%s\\"' % args.events
-  tune = " :loops:0 :perf-stat-ipc:\"'stat -e %s'\" :srcline:1" % events
   mode = 'suspend-smt' if pmu.cpu('smt-on') else ''
   mode += 'log profile --mode profile'
   if args.mode == 'report':
@@ -62,8 +61,9 @@ def main():
     mode = 'analyze'
   else:
     assert args.mode == 'record'
-  cmd = ' '.join([C.realpath('do.py'), mode, C.get_shared_args(args), '-pm 100 -v -1', '--tune %s' % tune,
-                  '-s %d' % args.sys_wide, "-a '%s'" % args.app if args.app else '', '-o %s' % args.output])
+  cmd = ' '.join([C.realpath('do.py'), mode, C.argp_get_common(args), '-pm 100 -v -1',
+                  C.argp_tune_prepend(args, ":loops:0 :perf-stat-ipc:\"'stat -e %s'\" :srcline:1" % events),
+                  "-a '%s'" % args.app if args.app else '', '-o %s' % args.output])
   C.exe_cmd(cmd, debug=1 if args.verbose >= 0 else 0)
 
 if __name__ == "__main__":

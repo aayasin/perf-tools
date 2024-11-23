@@ -13,6 +13,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 
 import os, pickle, re, subprocess, sys, inspect
+from datetime import datetime
 
 # logging
 #
@@ -51,6 +52,9 @@ def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   if outfile: fappend(msg, outfile)
   return msg
 log_stdio=None
+# colored & timestamped printing
+def printct(msg, col=color.DARKCYAN, log_only=False):
+  return printc(msg.replace('@@', datetime.now().strftime('%Y-%m-%d %H:%M:%S')), col=col, log_only=log_only)
 
 log_db = {'info': {}, 'warn': {}}
 def warning(type='warn'): return ('warning' if type == 'warn' else type).upper()
@@ -128,7 +132,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=1
     if '@' in msg: msg='\t' + msg.replace('@', '')
     else: msg = msg + ' ..'
     if run or msg.endswith('..'): printc(msg, color.BOLD)
-  if debug: printc(x, color.BLUE)
+  if debug: printct('@@\t' + x, color.BLUE)
   sys.stdout.flush()
   if background: return subprocess.Popen(x.split())
   ret = 0
@@ -169,6 +173,7 @@ def exe_one_line(x, field=None, debug=False, fail=0):
   print1('%s\n' % res)
   return res
 
+def isfile(f): return f and os.path.isfile(f)
 def ptage(r=2): return 'PTAGE_R=%d %s/ptage' % (r, dirname())
 def tail(f=''): return "tail -11 %s | %s" % (f, grep('=total|^\s+0', flags='-v'))
 
@@ -207,7 +212,7 @@ def realpath(x): return os.path.join(dirname(), x)
 def env2int(x, default=0, base=10): y=os.getenv(x); return int(y, base) if y else default
 def env2str(x, default=0, prefix=0): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
 def env2list(x, default): y = os.getenv(x); return y.split() if y else default
-def envfile(x): x = os.getenv(x); return x if x and os.path.isfile(x) else None
+def envfile(x): x = os.getenv(x); return x if isfile(x) else None
 
 def print_env(std=sys.stderr):
   for k, v in sorted(os.environ.items()):

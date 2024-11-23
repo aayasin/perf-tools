@@ -26,13 +26,11 @@ import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
 from lbr import x86
 from lbr.stats import inst_fusions
-from datetime import datetime
 from getpass import getuser
 from math import log10
 from platform import python_version
 from pipeline import pipeline_view
 
-def isfile(f): return f and os.path.isfile(f)
 globs = {
   'cmds_file':          None,
   'find-perf':          'sudo find / -name perf -executable -type f | grep ^/',
@@ -62,7 +60,7 @@ do = {'run':        C.RUN_DEF,
   'compiler':       'gcc -O2 -ffast-math', # ~/tools/llvm-6.0.0/bin/clang',
   'container':      0,
   'core':           1,
-  'cpuid':          0 if not isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.os_release()) else 1,
+  'cpuid':          0 if not C.isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.os_release()) else 1,
   'debug':          0,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
@@ -92,7 +90,7 @@ do = {'run':        C.RUN_DEF,
   'msrs':           pmu.cpu_msrs(),
   'nodes':          tma.get('key-nodes'),
   'numactl':        1,
-  'objdump':        'binutils-gdb/binutils/objdump' if isfile('./binutils-gdb/binutils/objdump') else 'objdump',
+  'objdump':        'binutils-gdb/binutils/objdump' if C.isfile('./binutils-gdb/binutils/objdump') else 'objdump',
   'package-mgr':    C.os_installer(),
   'packages':       ['cpuid', 'dmidecode', 'numactl'] + list(globs['tunable2pkg'].keys()),
   'perf-annotate':  3,
@@ -158,7 +156,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=Fa
         if 'perf record ' not in x: msg = None
     elif args.mode == 'profile':
         x, run, debug = '# ' + x, False, args.verbose > 2
-    elif '--xed' in x and not isfile(C.Globals['xed']): C.error('!\n'.join(('xed was not installed',
+    elif '--xed' in x and not C.isfile(C.Globals['xed']): C.error('!\n'.join(('xed was not installed',
       "required by '%s' in perf-script of '%s'" % (msg, x), 'try: ./do.py setup-all --tune :xed:1 ')))
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], pmu.name()):
@@ -188,7 +186,7 @@ def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_
 def error(x): C.warn(x) if do['forgive'] > 1 else C.error(x)
 def do_info(x):  return C.info(x) if args.verbose >= 0 else None
 def warn_file(x):
-  if not args.mode == 'profile' and not args.print_only and not isfile(x): C.warn('file does not exist: %s' % x)
+  if not args.mode == 'profile' and not args.print_only and not C.isfile(x): C.warn('file does not exist: %s' % x)
 
 def version(): return str(round(__version__, 3 if args.tune else 2))
 def module_version(mod_name):
@@ -240,7 +238,7 @@ def tools_install(packages=[]):
   for x in packages:
     exe(installer + x, 'installing ' + x.split(' ')[0])
   if do['xed']:
-    if do['xed'] < 2 and isfile(C.Globals['xed']): exe_v0(msg='xed is already installed')
+    if do['xed'] < 2 and C.isfile(C.Globals['xed']): exe_v0(msg='xed is already installed')
     else: exe('./build-xed.sh', 'installing xed')
     debian = 'Debian' in C.os_release()
     assert not debian or python_version().startswith('3')
@@ -250,10 +248,10 @@ def tools_install(packages=[]):
   if do['msr']: exe('sudo modprobe msr', 'enabling MSRs')
   if do['flameg']: exe('git clone https://github.com/brendangregg/FlameGraph', 'cloning FlameGraph')
   if do['loop-ideal-ipc'] & 0x1:
-    if isfile(C.Globals['llvm-mca']): exe_v0(msg='llvm is already installed')
+    if C.isfile(C.Globals['llvm-mca']): exe_v0(msg='llvm is already installed')
     else: exe('./build-llvm.sh', 'installing llvm')
   if do['loop-ideal-ipc'] & 0x2:
-    if isfile(C.Globals['uica']): exe('./build-uica.sh -u' ,'updating uiCA')
+    if C.isfile(C.Globals['uica']): exe('./build-uica.sh -u' ,'updating uiCA')
     else: exe('./build-uica.sh' ,'installing uiCA')
 
 def tools_update(kernels=[], mask=0x7):
@@ -268,7 +266,7 @@ def tools_update(kernels=[], mask=0x7):
       if mask & 0x8: exe('mv ~/.cache/pmu-events /tmp')
       exe(args.pmu_tools + "/event_download.py -a") # requires sudo; download all CPUs
   if mask & 0x10: exe('git submodule update --remote')
-  if do['loop-ideal-ipc'] & 0x2 and isfile(C.Globals['uica']): exe('./build-uica.sh -u')
+  if do['loop-ideal-ipc'] & 0x2 and C.isfile(C.Globals['uica']): exe('./build-uica.sh -u')
 
 def set_sysfile(p, v): exe_to_null('echo %s | sudo tee %s'%(v, p))
 def prn_sysfile(p, out=None): exe_v0('printf "%s : %s \n" %s' % (p, C.file2str(p), C.flag2str(' >> ', out)))
@@ -311,7 +309,8 @@ def atom(x='offline'):
   exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
   print(".. or try: for x in {16..23}; do echo %d | sudo tee /sys/devices/system/cpu/cpu$x/online; done" %
     (0 if x == 'offline' else 1))
-def fix_frequency(x='on', base_freq=C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')):
+def fix_frequency(x='on'):
+  base_freq = C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')
   if x == 'on':
     for f in C.glob('/sys/devices/system/cpu/cpu*/cpufreq/scaling_m*_freq'):
       set_sysfile(f, base_freq)
@@ -338,12 +337,12 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   revert_mode = 0
   if args.mode == 'profile': revert_mode, args.mode = 1, 'both'
   if args.mode == 'process': return
-  if isfile(out): exe('mv %s %s' % (out, out.replace('.log', '-%d.log' % os.getpid())))
+  if C.isfile(out): exe('mv %s %s' % (out, out.replace('.log', '-%d.log' % os.getpid())))
   exe('uname -a | sed s/Linux/Linux:/ > ' + out, 'logging setup')
   log_patch("cat /etc/os-release | grep -E -v 'URL|ID_LIKE|CODENAME'")
   for f in ('/sys/kernel/mm/transparent_hugepage/enabled',
             '/sys/devices/system/node/node0/memory_side_cache/index1/size'):
-    if isfile(f): prn_sysfile(f, out)
+    if C.isfile(f): prn_sysfile(f, out)
   log_patch("sysctl -a | tee setup-sysctl.log | grep -E 'randomize_va_space|hugepages ='")
   C.fappend('IP-address: %s' % exe_1line('hostname -i'), out)
   exe("env > setup-env.log")
@@ -480,7 +479,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if evts != '': perf_args += ' -e "%s%s%s"' % (first_events, evts, last_events)
     log, tscperf = '%s.perf_stat%s.%s' % (out, C.chop(flags.strip()), 'csv' if csv else 'log'), ''
     if csv:
-      if profiling() and isfile(log): os.remove(log)
+      if profiling() and C.isfile(log): os.remove(log)
     else:
       assert 'msr/tsc/' not in perf_args
       tscperf = perf_stat_TSC(log)
@@ -488,9 +487,9 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     ret = profile_exe(tscperf + perf + stat, msg, step, mode='perf-stat', fail=0 if warn else -1)
     if args.stdout or do['tee']==0 or do['help']<0: return C.error('perf-stat failed') if ret else None
     if args.mode == 'process': return log
-    if not isfile(log) or os.path.getsize(log) == 0:
+    if not C.isfile(log) or os.path.getsize(log) == 0:
       ret = profile_exe(env + ' ' + tscperf + ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
-    if not isfile(log) or int(exe_1line('wc -l ' + log, 0, False)) < 5:
+    if not C.isfile(log) or int(exe_1line('wc -l ' + log, 0, False)) < 5:
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', step, events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
     if ret: C.error('perf_stat() failed (despite multiple attempts)')
@@ -530,7 +529,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   perf_script.first = True
   perf_script.comm = do['comm']
   def record_name(flags): return '%s%s' % (out, C.chop(flags, (C.CHOP_STUFF, 'cpu_core', 'cpu')))
-  def get_stat(s, default=None): return stats.get_stat_log(s, logs['stat']) if isfile(logs['stat']) else default
+  def get_stat(s, default=None): return stats.get_stat_log(s, logs['stat']) if C.isfile(logs['stat']) else default
   def record_calibrate(x):
     if not windows_file:
       factor = do['calibrate']
@@ -588,7 +587,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if do['model'] and pmu.retlat():
       retlat = '%s/%s-retlat.json' % (C.dirname(), out)
       tlargs += ' --ret-latency %s' % retlat
-      if profiling() and (not isfile(retlat) or os.path.getsize(retlat) < 100):
+      if profiling() and (not C.isfile(retlat) or os.path.getsize(retlat) < 100):
         exe('%s -q -o %s -- %s' % (genretlat, retlat, r), 'calibrating retire latencies')
     c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, C.toplev_log2csv(o), tlargs, r)
     if ' --global' in c:
@@ -717,7 +716,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       print_info('# %s:\n#\n' % 'Static Statistics')
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
       bin=bins[-1]
-      if isfile(bin):
+      if C.isfile(bin):
         print_info('\ncompiler info for %s (check if binary was built with -g if nothing is printed):\n' % bin)
         exe("strings %s | %s >> %s" % (bin, C.grep('^((GCC|GNU):|clang [bv])'), info))
       prn_line(info)
@@ -733,13 +732,13 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       exe(' && '.join([C.grep("code footprint|^(loop|function)#[1-5]:", info)] +
           [stats.grep_histo(h, info) for h in hists]), "@top loops, functions & more in " + info)
     lbr_hdr = '# LBR-based Statistics:'
-    if not isfile(info) or do['reprocess'] > 1 or do['reprocess'] < 0:
+    if not C.isfile(info) or do['reprocess'] > 1 or do['reprocess'] < 0:
       if do['size']: static_stats()
       print_info('# processing %s%s\n' % (data, C.flag2str(" filtered on ", comm)))
       if do['lbr-branch-stats']:
         exe(perf + r" report %s | grep -A13 'Branch Statistics:' | tee -a %s | grep -E -v ':\s+0\.0%%|CROSS'" %
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
-      if isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
+      if C.isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, r" grep -E -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
       slow_cmd = "| tee >(sed -E 's/\[[0-9]+\]//' | %s | ./slow-branch | sort -n | %s > %s.slow.log)" % (
         sort2u, C.ptage(), data) if mask_eq(0x48, do['imix']) else ''
@@ -773,7 +772,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       err = '%s.error.log' % data
       ev = C.flag_value(do['perf-lbr'], '-e')
       print_info('\n%s\n#\n' % lbr_hdr)
-      if not isfile(hits) or do['reprocess']:
+      if not C.isfile(hits) or do['reprocess']:
         if sys.version_info < (3, 0): C.error('Python 3 or above required')
         lbr_env = "LBR_LOOPS_LOG=%s LBR_FUNCS_LOG=%s" % (loops, funcs)
         cycles = get_stat(pmu.event('cycles')) or get_stat('cycles', 0)
@@ -807,7 +806,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
             "@instruction-mix no operands")
         if args.verbose > 0: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)
         report_info(info, err)
-      if do['loops'] and isfile(loops):
+      if do['loops'] and C.isfile(loops):
         prn_line(info)
         if do['loop-ideal-ipc'] & 0x1: exe('echo > %s' % llvm_mca)
         if do['loop-ideal-ipc'] & 0x2: exe('echo > %s' % uica)
@@ -851,7 +850,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       else: perf_script("-F ip | ./addrbits %d 6 | %s | tee %s.dsb-sets.log | tail -11" %
                         (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
     def log_funcs(funcs_log):
-      if not isfile(funcs_log): return
+      if not C.isfile(funcs_log): return
       sed_cut = "sed s/::/#/g | cut -d: -f3 | sed 's/, num-buckets//;s/\-> ? \-> //g;s/ \-> ?//g;s/ \-> /|/g;s/;/|/g' | sed s/#/::/g"
       top = do['perf-pebs-top']
       while top > 0:
@@ -866,7 +865,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     def handle_top():
       top = do['perf-pebs-top']
       top_ip = exe_1line("tail -2 %s.ips.log | head -1" % data, 2)
-      if top < 0 and isfile(logs['code']):
+      if top < 0 and C.isfile(logs['code']):
         exe("grep -w -5 '%s:' %s" % (top_ip, logs['code']), '@code around IP: %s' % top_ip)
       elif top >= 1:
         cmd = ''
@@ -952,13 +951,13 @@ def do_logs(cmd, ext=[], tag=''):
   log_files = ['', 'csv', 'json', 'log', 'stat', 'svg', 'xlsx'] + ext
   if cmd == 'tar':
     r = '.'.join((tag, pmu.cpu_CPU(), 'results.tar.gz')) if len(tag) else C.error('do_logs(tar): expecting tag')
-    if isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
+    if C.isfile(r): exe('rm -f ' + r, 'deleting %s !' % r)
   s = (uniq_name() if user_app() else '')
   if cmd == 'tar':
-    files = C.glob('.'+s+'*.cmd') + (C.glob('setup*') if isfile(globs['setup-log']) else [])
+    files = C.glob('.'+s+'*.cmd') + (C.glob('setup*') if C.isfile(globs['setup-log']) else [])
     for f in C.glob(s+'*'):
       if not (f.endswith('perf.data') or f.endswith('perf.data.old')): files += [f]
-    if isfile('run.sh'): files += ['run.sh']
+    if C.isfile('run.sh'): files += ['run.sh']
     exe('tar -cz%sf %s ' % ('v' if args.verbose > 0 else '', r) + ' '.join(files), 'tar into %s' % r, log=False)
     print_cmd('tar -czvf %s setup*.log .%s*.cmd %s*.{%s}' % (r, s, s, ','.join(log_files[1:])))
   if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + ' *-out.txt *perf.data* $(find -name __pycache__) results.tar.gz')
@@ -1079,7 +1078,7 @@ def run_commands(commands, windows_file=None):
       r = '../perf-tools-%s-%s-e%d.tar.gz' % (version(),
           '-'.join([module_version(x) for x in ('lbr', 'stats', 'study')]), len(param))
       to = 'ayasin@10.184.76.216:/nfs/site/home/ayasin/ln/mytools'
-      if isfile(r): C.warn('file exists: %s' % r)
+      if C.isfile(r): C.warn('file exists: %s' % r)
       fs = ' '.join(exe2list('git ls-files | grep -v pmu-tools') + ['.git'] + param if param else [])
       scp = 'scp %s %s' % (r, to)
       exe('tar -czvf %s %s ; echo %s' % (r, fs, scp), redir_out=None)
@@ -1122,7 +1121,7 @@ def main():
     args.profile_mask = 0x100
     args.mode = 'process'
   if do['log-stdout']: C.log_stdio = '%s-out.txt' % (uniq_name() if user_app() else 'run-default')
-  C.printc('\n\n%s\n%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), do_cmd), log_only=True)
+  C.printct('\n\n@@\n%s' % do_cmd, log_only=True)
   if args.mode == 'process':
     do_info('post-processing only (not profiling)')
     args.profile_mask &= ~0x1
@@ -1153,7 +1152,7 @@ def main():
   if args.app and '|' in args.app: C.error("Invalid use of pipe in app: '%s'. try putting it in a .sh file" % args.app)
   if not do['batch'] or args.mode == 'profile':
     cmds_file = '.%s.cmd' % uniq_name()
-    if isfile(cmds_file):
+    if C.isfile(cmds_file):
       C.exe_cmd('mv %s %s-%d.cmd' % (cmds_file, cmds_file.replace('.cmd', ''), os.getpid()), fail=0)
     globs['cmds_file'] = open(cmds_file, 'w')
     globs['cmds_file'].write('# %s\n' % do_cmd)

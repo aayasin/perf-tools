@@ -202,10 +202,10 @@ def rollup(c, perf_stat_file=None):
   if c in sDB: return
   perf_stat_file, info, vl6 = perf_stat_file or c + '.perf_stat-r3.log', c + '.toplev-mvl2.log', c + '.toplev-vl6.log'
   perf_stat_lbr = get_file_int(c + '.perf_stat', '')
-  sDB[c] = read_perf(perf_stat_file) if os.path.exists(perf_stat_file) else {}
-  if os.path.exists(vl6): sDB[c].update(read_toplev(vl6))
-  elif os.path.exists(perf_stat_lbr): sDB[c].update(read_perf(perf_stat_lbr))
-  if os.path.exists(info):
+  sDB[c] = read_perf(perf_stat_file) if C.isfile(perf_stat_file) else {}
+  if C.isfile(vl6): sDB[c].update(read_toplev(vl6))
+  elif C.isfile(perf_stat_lbr): sDB[c].update(read_perf(perf_stat_lbr))
+  if C.isfile(info):
     sDB[c].update(read_toplev(info))
     sDB[c]['sig-misp'] = (read_mispreds(info.replace('.info', '.mispreds')), 'list')
   if debug > 1: print_DB(c)

@@ -69,9 +69,12 @@ test-mem-bw: run-mem-bw
 	kill -9 `pidof m0-n8192-u01.llv`
 	@echo 1 | tee $< > $@
 test-yperf: run-mem-bw-yperf
+	./yperf record -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
+	./yperf report -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
 	./yperf report -o $<
 ifneq ($(CPU), ICX)
 	./yperf advise -o $<
+	./yperf advise -o CLTRAMP3D-yperf
 endif
 
 run-mt:

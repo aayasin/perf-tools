@@ -173,7 +173,7 @@ def analyze_bigcode():
 def analyze_ifetch():
   # TODO: move loop_code, loop_uops to lbr/loops.py
   def loop_code(loop): exe(C.grep(loop['ip'].replace('x', ''), ext('hitcounts'), '--color -B1 -A%d' % loop['size']))
-  def func_code(func): exe(stats.grep_start_end('flows of function at %s' % func['ip'], 'flow ', ext('funcs')))
+  def func_code(func): exe(C.grep_start_end('flows of function at %s' % func['ip'], 'flow ', ext('funcs')))
   def loop_uops(loop, loop_size): return loop_size - sum(loop[x] for x in loop.keys() if x.endswith('-mf'))
   def l2s(l): return ', '.join(l)
   loops = stats.read_loops_info(ext('info'), as_loops=True)

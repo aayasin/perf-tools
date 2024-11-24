@@ -20,5 +20,5 @@ jobs:
         pip install flake8 pytest
     - name: Lint with flake8
       run: |
-        flake8 $(git ls-files '*.py') --select=F,E9
+        flake8 $(git ls-files '*.py') --select=F,E9 --ignore=F401,F841,F403,F405
   

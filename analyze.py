@@ -9,9 +9,14 @@
 
 # A module for analyzing profiling logs
 #
+# TODO:
+#   add a way to summarize supported SW optimizations per-bottleneck in a table,
+#     akind to creation of profile-mask-help.md
+#   support Branching_Overhead
+#
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.61 # see version line of do.py
+__version__ = 0.62 # see version line of do.py
 
 import common as C, pmu, stats, tma
 from lbr import x86
@@ -20,6 +25,7 @@ import re
 threshold = {
   'code-footprint':   600,
   'CPUs_Utilized':    0.95,
+  'hot-func':         0.02,
   'hot-loop':         0.05,
   'indirect-target':  0.15,
   'IpTB':             3 * pmu.cpu_pipeline_width(),
@@ -43,7 +49,7 @@ def setup(app, basename=None, verbose=0):
   if len(handles): handles.clear()
   handles['app'] = app
   handles['verbose'] = verbose
-  log_exts = ('hitcounts', 'info', 'mispreds')
+  log_exts = ('funcs', 'hitcounts', 'info', 'mispreds')
   if basename:
     for e in log_exts: handles[e] = '.'.join((basename, e, 'log'))
 
@@ -167,6 +173,7 @@ def analyze_bigcode():
 def analyze_ifetch():
   # TODO: move loop_code, loop_uops to lbr/loops.py
   def loop_code(loop): exe(C.grep(loop['ip'].replace('x', ''), ext('hitcounts'), '--color -B1 -A%d' % loop['size']))
+  def func_code(func): exe(stats.grep_start_end('flows of function at %s' % func['ip'], 'flow ', ext('funcs')))
   def loop_uops(loop, loop_size): return loop_size - sum(loop[x] for x in loop.keys() if x.endswith('-mf'))
   def l2s(l): return ', '.join(l)
   loops = stats.read_loops_info(ext('info'), as_loops=True)
@@ -200,6 +207,21 @@ def analyze_ifetch():
       l2s(issues), percent(cycles), loop_uops(loops[l], loop_size), l2s(extra), l2s(hints)))
     #if loop_size > 0 and loops[l]['taken'] == 0: loop_code(loops[l])
     if loop_size > 0: loop_code(loops[l])
+  funcs = stats.read_funcs_info(ext('info'), as_funcs=True)
+  for f in sorted(funcs.keys()):
+    verbose('func', (f, funcs[f]), 2)
+    if 'FF-cycles%' not in funcs[f]: continue
+    cycles, issues, hints = funcs[f]['FF-cycles%'], [], set()
+    if cycles <= threshold['hot-func']: continue
+    verbose('func', (f, funcs[f]), 1)
+    if funcs[f]['flows-num'] == 1 and '<serial>' in funcs[f]['flows']:
+      issues += ['serial']
+      hints.add('inline')
+      # FIXME:06: report size of flow
+      advise('Hot %s is %s. Function accounts for %s of time, # flows = %d;\n\t\t\t-> try to %s it' % (f,
+        l2s(issues), percent(cycles), funcs[f]['flows-num'], l2s(hints)))
+      func_code(funcs[f])
+    # FIXME:06: handle non-serial single flow
 
 def gen_misp_report(data, header='Branch Misprediction Report (taken-only)', verbose=None):
   if not data: handles['verbose'] = verbose; return header.lower()

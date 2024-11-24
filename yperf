@@ -9,17 +9,19 @@
 
 # yperf - profiles (system) in a single run, generates reports and advises for SW optimizations
 #
-
+# TODO:
+#   - try toplev instread of perf-stat in "perf-stat-ipc" to avoid the PROXY of BV warning
+#
 from __future__ import print_function
 __author__  = 'ayasin'
-__version__ = 0.31      # see version line of do.py
+__version__ = 0.32      # see version line of do.py
 
 import common as C, pmu, tma
 
 prof_modes = ['record', 'report', 'advise']
 def parse_args():
   usage = '\n\t'.join(('prof [options] <mode> [-- app and args]',
-                       'profile a workload with one-shot (single profiling run)',
+                       'profile a workload in one-shot (a single profiling run)',
                        'profiles system-wide by default unless an app is provided'))
   bott_events = [
     'ICACHE_TAG.STALLS', 'ICACHE_DATA.STALLS',                                          # BigC
@@ -59,7 +61,7 @@ def main():
     mode = 'profile tar --mode process'
   elif args.mode == 'advise':
     if not len(C.glob(args.output + '*.info.log', 1)): C.error("run 'yperf report' before 'yperf advise'")
-    C.warn('Using a proxy of Bottlenecks View that is subject to inaccuracies. Use do.py for in-depth analysis!')
+    C.warn('Using a PROXY of Bottlenecks View that is subject to inaccuracies. Use do.py for in-depth analysis!')
     mode = 'analyze'
   else:
     assert args.mode == 'record'

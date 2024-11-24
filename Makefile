@@ -2,6 +2,7 @@
 AP = CLTRAMP3D
 APP = taskset 0x4 ./$(AP)
 CC = clang
+CPP = clang++
 CLONE = git clone --recurse-submodules https://github.com/aayasin/perf-tools
 CMD = profile
 CPU = $(shell ./pmu.py CPU)
@@ -53,6 +54,8 @@ intel:
 	cd dtlb; ./build.sh
 	#git clone https://github.com/intel-innersource/applications.benchmarking.cpu-micros.inst-lat-bw
 	#wget https://downloadmirror.intel.com/763324/mlc_v3.10.tgz
+permute: workloads/src/permute.cpp /usr/bin/clang++
+	$(CPP) -g -std=c++17 -static $< -o workloads/permute
 tramp3d-v4: pmu-tools/workloads/CLTRAMP3D /usr/bin/clang++
 	cd pmu-tools/workloads; ./CLTRAMP3D; cp tramp3d-v4.cpp CLTRAMP3D ../..; rm tramp3d-v4.cpp
 	sed -i "s/11 tramp3d-v4.cpp/11 tramp3d-v4.cpp -o $@/" CLTRAMP3D
@@ -241,9 +244,9 @@ PRE_PUSH_CMDS := \
     "echo 'testing prof-no-aux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
     "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view, pipeline-view & over-time profile-steps, tar command' && \
       $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
-      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
+      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=3931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
       test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && \
-      echo skip test -f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
+      echo test -f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
     "echo 'testing Windows support' && $(MAKE) test-windows" \
     "echo 'testing sys-wide non-MUX profile-steps' && \
      $(MAKE) test-default APP=./$(AP) CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \

@@ -163,15 +163,21 @@ def exe2list(x, sep=' ', debug=False):
 def exe_one_line(x, field=None, debug=False, fail=0):
   def print1(x): printf(x, std=sys.stdout, col=color.BLUE) if debug else None
   x_str = 'exe_one_line(%s, f=%s)' % (x, str(field))
-  print1('%s = ' % x_str)
-  try:
-    res = exe_output(x, '')
-  except subprocess.CalledProcessError:
-    (error if fail else warn)('%s failed!' % x_str)
-    res = 'N/A'
+  cached = x in exe_one_line.cache
+  if cached:
+    res = exe_one_line.cache[x]
+  else:
+    print1('%s = ' % x_str)
+    try:
+      res = exe_output(x, '')
+    except subprocess.CalledProcessError:
+      (error if fail else warn)('%s failed!' % x_str)
+      res = 'N/A'
+    exe_one_line.cache[x] = res
   if field is not None: res = str2list(res)[field]
-  print1('%s\n' % res)
+  if not cached: print1('%s\n' % res)
   return res
+exe_one_line.cache = {}
 
 def isfile(f): return f and os.path.isfile(f)
 def ptage(r=2): return 'PTAGE_R=%d %s/ptage' % (r, dirname())

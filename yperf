@@ -10,7 +10,7 @@
 # yperf - profiles (system) in a single run, generates reports and advises for SW optimizations
 #
 # TODO:
-#   - try toplev instread of perf-stat in "perf-stat-ipc" to avoid the PROXY of BV warning
+#  - try toplev instread of perf-stat in "perf-stat-ipc" to avoid the PROXY of BV warning
 #
 from __future__ import print_function
 __author__  = 'ayasin'
@@ -61,7 +61,7 @@ def main():
     mode = 'profile tar --mode process'
   elif args.mode == 'advise':
     if not len(C.glob(args.output + '*.info.log', 1)): C.error("run 'yperf report' before 'yperf advise'")
-    C.warn('Using a PROXY of Bottlenecks View that is subject to inaccuracies. Use do.py for in-depth analysis!')
+    C.warn('Using a PROXY of Bottlenecks View that is subject to INACCURACIES. Use do.py for in-depth analysis!')
     mode = 'analyze'
   else:
     assert args.mode == 'record'

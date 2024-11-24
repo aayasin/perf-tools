@@ -10,9 +10,9 @@
 # A module for analyzing profiling logs
 #
 # TODO:
-#   add a way to summarize supported SW optimizations per-bottleneck in a table,
+#  - add a way to summarize supported SW optimizations per-bottleneck in a table,
 #     akind to creation of profile-mask-help.md
-#   support Branching_Overhead
+#  - support Branching_Overhead
 #
 from __future__ import print_function
 __author__ = 'ayasin'

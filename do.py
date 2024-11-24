@@ -920,7 +920,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     exe(' '.join((perf, 'script', x)), msg=None, redir_out=None)
     print('firefox %s.svg &' % perf_data)
 
-  if 0 and en(21): # TODO jon:
+  if en(21): 
     widths = pmu.cpu_pipeline_width('all_widths')
     evts = pmu.widths_2_cmasks(widths)
     if do['interval'] < 1000: C.warn('Adjusting your %dms interval to 1000ms' % do['interval'])

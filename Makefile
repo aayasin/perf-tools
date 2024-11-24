@@ -249,7 +249,7 @@ PRE_PUSH_CMDS := \
       $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
       -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=3931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
       test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && \
-      echo test -f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
+      echo jon let PM=23931a then test -f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
     "echo 'testing Windows support' && $(MAKE) test-windows" \
     "echo 'testing sys-wide non-MUX profile-steps' && \
      $(MAKE) test-default APP=./$(AP) CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \

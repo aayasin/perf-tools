@@ -261,6 +261,9 @@ def grep(what, file='', flags='', color=False):
   cmd = "%sgrep -E %s '%s' %s" % (zprefix(file), flags, what, file)
   if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('grep', 'grep --color')
   return "(%s || true)" % cmd
+# grep lines from start till end or max lines
+def grep_start_end(start, end, log, max=33):
+  return "%s | sed '/%s/q' | grep -v '^$'" % (grep(start, log, '-A%d' % max), end)
 
 # auxiliary: strings, argv, python-stuff
 #

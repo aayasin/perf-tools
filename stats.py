@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.04
+__version__= 1.05
 
 import common as C, pmu, tma
 import csv, json, os.path, re, sys
@@ -129,8 +129,26 @@ def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=Tr
         else: d['%s%s%s' % (key, sep if sep else ' ', stat_name)] = (val, 'LBR.Loop') if groups else val
   return d
 
+def read_funcs_info(log, as_funcs=False, sep=None, groups=True):
+  assert os.path.isfile(log), 'Missing file: %s' % log
+  d = {}
+  funcs = C.exe_output(C.grep('function#', log), sep='\n')
+  if funcs != '':  # funcs stats found
+    for func in funcs.split('\n'):
+      key = func.split(':')[0].strip()
+      # FIXME:05: extract flows properly
+      func_attrs = re.split(r',', func[func.index('{') + 1:-1])
+      if as_funcs: d[key] = {}
+      for attr in func_attrs:
+        attr_list = attr.split(':')
+        stat, val = attr_list[0].strip(), convert(attr_list[1].strip())
+        if as_funcs: d[key][stat] = val
+        else: d['%s%s%s' % (key, sep if sep else ' ', stat)] = (val, 'LBR.func') if groups else val
+      # FIXME:06: read flows themselves into func dictionary
+  return d
+
 def grep_histo(histo, info):
-  return "%s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % histo, info, '-A33'), histo)
+  return C.grep_start_end('%s histogram:' % histo, '%s histogram summary' % histo, info)
 
 def is_metric(s):
   return s[0].isupper() and not s.isupper() and \

@@ -54,8 +54,8 @@ intel:
 	cd dtlb; ./build.sh
 	#git clone https://github.com/intel-innersource/applications.benchmarking.cpu-micros.inst-lat-bw
 	#wget https://downloadmirror.intel.com/763324/mlc_v3.10.tgz
-permute: workloads/src/permute.cpp /usr/bin/clang++
-	$(CPP) -g -std=c++17 -static $< -o workloads/permute
+workloads/permute: workloads/src/permute.cpp /usr/bin/clang++
+	$(CPP) -g -std=c++17 -static $< -o $@
 tramp3d-v4: pmu-tools/workloads/CLTRAMP3D /usr/bin/clang++
 	cd pmu-tools/workloads; ./CLTRAMP3D; cp tramp3d-v4.cpp CLTRAMP3D ../..; rm tramp3d-v4.cpp
 	sed -i "s/11 tramp3d-v4.cpp/11 tramp3d-v4.cpp -o $@/" CLTRAMP3D
@@ -71,12 +71,15 @@ test-mem-bw: run-mem-bw
 	./yperf record -o $<-yperf && touch $<-yperf # collect for later
 	kill -9 `pidof m0-n8192-u01.llv`
 	@echo 1 | tee $< > $@
-test-yperf: run-mem-bw-yperf
+test-yperf: run-mem-bw-yperf workloads/permute
+	./yperf record -pm 100 -o permute-yperf -- ./workloads/permute abcdefghijk
+	./yperf report -pm 100 -o permute-yperf -- ./workloads/permute abcdefghijk
 	./yperf record -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
 	./yperf report -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
 	./yperf report -o $<
 ifneq ($(CPU), ICX)
 	./yperf advise -o $<
+	./yperf advise -o permute-yperf
 	./yperf advise -o CLTRAMP3D-yperf
 endif
 
@@ -258,7 +261,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing srcline stat' && $(MAKE) test-srcline" \
     "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
     "echo 'testing sampling by instructions' && $(MAKE) test-LBR-edge" \
-    "echo 'testing pipeline-view sys-wide idle' && $(DO) profile -pm 200000 -s 20 -o pipeline-view -v1 " \
+    "echo 'testing pipeline-view sys-wide idle' && echo jon $(DO) profile -pm 200000 -s 20 -o pipeline-view -v1 " \
     "$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1" \
     "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)" \
     "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL)" \

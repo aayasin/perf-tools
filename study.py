@@ -105,7 +105,7 @@ def parse_args():
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM,
                   help='Must prepend your study.py command with STUDY_MODE=<mode> for now')
   ap.add_argument('-t', '--attempt', default='1')
-  C.add_hex_arg(ap, '-s', '--stages', 0x3f, 'stages in study')
+  C.argp_add_hex_arg(ap, '-sm', '--stages', 0x3f, 'stages in study')
   ap.add_argument('--dump', action='store_const', const=True, default=False)
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
@@ -333,23 +333,15 @@ def compare_stats(app1, app2):
 def main():
   lbr_cycles = '--tune :perf-lbr:"\'-j any,save_type -e cycles:p -c %d\'"' % 2e6
   do0 = C.realpath('do.py')
-  do = do0 + ' profile'
-  for x in C.argument_parser(None):
-    a = getattr(args, x.replace('-', '_'))
-    if a: do += ' --%s %s' % (x, "'%s'" % a if ' ' in a else a)
+  do = do0 + ' profile' + C.argp_get_common(args)
   if args.repeat != 3: do += ' -r %d' % args.repeat
-
-  x, extra = 'tune', ''
-  a = getattr(args, x) or []
-  if pmu.skylake(): extra += ' :perf-stat-add:-1'
-  elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
-  a.insert(0, [':batch:1 :help:0 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s ' % (
-    int(pmu.cpu('corecount')/2), extra)])
-  do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
-
+  extra = ' :perf-stat-add:-1' if pmu.skylake() else (' :perf-stat-add:0' if args.mode != 'imix-loops' else '')
+  do += C.argp_tune_prepend(args, ':batch:1 :help:0 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s' % (
+    int(pmu.cpu('corecount')/2), extra))
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
   elif args.verbose == -1: do += ' --print-only'
   do = do.replace('{', '"{').replace('}', '}"')
+
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
   def pebs_cmds(x, mode):
@@ -359,6 +351,7 @@ def main():
         tune = '--tune :sample:3 :perf-pebs:"\'%s\'" :perf-pebs-top:10' % e
         l += [' '.join([do, '-a', app(x), tune, '-pm 200 --mode', mode])]
     return l
+  def lbr_cycles_en(on): return on and args.profile_mask & 0x100 and args.stages & 0x40
 
   C.fappend(' '.join([C.env2str(x, '', x) for x in ('STUDY_MODE', 'TMA_CPU', 'FORCECPU', 'EVENTMAP')
                       ] + sys.argv + ['# version %.2f' % __version__]), '.study.cmd')
@@ -371,7 +364,7 @@ def main():
     try:
       for x in args.config:
         exe(' '.join([do, '-a', app(x), '-pm', '%x' % (args.profile_mask & ~0x200), '--mode profile']))
-        if args.profile_mask & 0x100: exe(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode profile']))
+        if lbr_cycles_en(1): exe(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode profile']))
         if args.profile_mask & 0x200 and args.mode in Conf['Pebs'].keys():
           for c in pebs_cmds(x, 'profile'): exe(c)
     # command failed and exited w/ error
@@ -385,7 +378,7 @@ def main():
       if int(step, 16) & args.profile_mask:
         for x in args.config:
           jobs.append(' '.join([do, '-a', app(x), '-pm', step, '--mode process']))
-          if step == '100': jobs.append(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode process']))
+          if lbr_cycles_en(step == '100'): jobs.append(' '.join([do, '-a', app(x), lbr_cycles, '-pm 100 --mode process']))
         if step == '200' and args.mode in Conf['Pebs'].keys():
           for c in pebs_cmds(x, 'process'): jobs.append(c)
     if len(jobs):

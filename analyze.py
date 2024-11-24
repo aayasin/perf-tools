@@ -11,17 +11,20 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.53 # see version line of do.py
+__version__ = 0.61 # see version line of do.py
 
 import common as C, pmu, stats, tma
 from lbr import x86
+import re
 
 threshold = {
+  'code-footprint':   600,
+  'CPUs_Utilized':    0.95,
   'hot-loop':         0.05,
-  'misp-sig':         5,
-  'misp-sig-ifetch':  1,
   'indirect-target':  0.15,
   'IpTB':             3 * pmu.cpu_pipeline_width(),
+  'misp-sig':         5,
+  'misp-sig-ifetch':  1,
   'useless-hwpf':     0.15,
 }
 def bottlenecks(): return tma.get('bottlenecks-list-5')
@@ -44,8 +47,14 @@ def setup(app, basename=None, verbose=0):
   if basename:
     for e in log_exts: handles[e] = '.'.join((basename, e, 'log'))
 
+def lbr_info():
+  if not lbr_info.info_d: lbr_info.info_d = stats.strip(stats.read_info(ext('info')))
+  return lbr_info.info_d
+lbr_info.info_d = None
+
 def advise(m, prefix='Advise'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
 def exe(x, msg=None): return C.exe_cmd(x, msg=msg, debug=handles['verbose'] > 1)
+def file2lines(f, pop=False): return C.file2lines(f, fail=True, pop=pop, debug=handles['verbose'] > 3)
 def hint(m): advise(m, '\tHint')
 def percent(x): return '%.1f%%' % (100.0 * x)
 
@@ -59,19 +68,19 @@ def analyze_misp():
   def code_between(start, end): return C.exe_output("grep --color -A20 %s %s | sed /%s/q" % (start, ext('hitcounts'), end), '\n')
   def hits2line(h): return '\t' + ' '.join(h.split()[1:])
   def lookup(x): return C.exe_one_line("grep %s %s" % (x, ext('hitcounts')), fail=1)
-  info_d = stats.read_info(ext('info'))
+  info_d = lbr_info()
   def top_target(src, i='indirect'):
     h = i + '_0x%s_targets' % src
     mode = h + '_mode'
     exe(stats.grep_histo(h, ext('info')))
     if mode in info_d:
-      t = info_d[mode][0]
-      t_cov = info_d[i + '_0x%s_targets_[%s]' % (src, t)][0] / info_d[i + '_0x%s_targets_total' % src][0]
+      t = info_d[mode]
+      t_cov = info_d[i + '_0x%s_targets_[%s]' % (src, t)] / info_d[i + '_0x%s_targets_total' % src]
       if t_cov > threshold['indirect-target']:
         hint('de-virtualize above %s branch when target is %s (%s of cases)' % (i, t, percent(t_cov)))
 
   exe(C.tail(ext('mispreds')), '@ top significant (== # executions * # mispredicts) branches')
-  misp = C.file2lines_pop(ext('mispreds'))
+  misp = file2lines(ext('mispreds'), pop=True)
   while 1:
     b = C.str2list(misp.pop())
     verbose('misp', b, 1)
@@ -104,9 +113,10 @@ def analyze_misp():
       if easy: hint('above forward-conditional branch should be converted to CMOV. check your compiler')
 
 # interface for do.py
-def analyze(app, args, do=None):
+def analyze(app, args, do=None, analyze_all=True):
   handles['app'] = app
   handles['verbose'] = args.verbose
+  handles['stat'] = 1
   info, hits = ext('info'), ext('hitcounts')
   if args.verbose > 2: print(app, info, hits, sep=', ')
   assert info and hits, 'Profiling info or hitcounts file is missing'
@@ -121,14 +131,38 @@ def analyze(app, args, do=None):
     C.printc('%s%s = %s is %s' % (atts[0], bottleneck, value, atts[1]), atts[2])
     return flagged
 
-  if examine('Mispredictions'):
-    analyze_misp()
+  CPUs_Utilized = stats.get('CPUs_Utilized', app)
+  if CPUs_Utilized < threshold['CPUs_Utilized']:
+    advise('Low # CPU utilized = %.2f; is your workload CPU-Bound?' % CPUs_Utilized)
+
+  if examine('Mispredictions'):       analyze_misp()
+  if examine('Big_Code'):             analyze_bigcode()
+  if examine('Instruction_Fetch_BW'): analyze_ifetch()
+  if not analyze_all: return
+
   if examine('Cache_Memory_Bandwidth'):
     value = stats.get('Useless_HWPF', app)
     if value > threshold['useless-hwpf']:
       advise('too much useless HW prefetches of %s; try to disable them' % percent(value))
-  if examine('Instruction_Fetch_BW'):
-    analyze_ifetch()
+
+def analyze_bigcode():
+  app, d = handles['app'], {}
+  # TODO: let stats.py rollup also lbr_info by default, so that
+  #  stats.get('code footprint') works (no cosmetic spaces)
+  def c(s): return re.sub(r'[ ]+', ' ', s)
+  bc_metrics = ('L2MPKI_Code_All',
+    'count of                                  non-cold code 4K-pages',
+    'estimate of                         non-cold code footprint [KB]',
+  )
+  assert 'footprint' in bc_metrics[-1] # keep it last
+  for s in bc_metrics:
+    if ' ' in s:
+      d[c(s)] = lbr_info()[s]
+    elif 'stat' in handles:
+      d[s] = stats.get(s, app)
+  if d[c(bc_metrics[-1])] < threshold['code-footprint']: return
+  advise('Large code footprint symptom. Are you using a profile-guided optimization tool, like autoFDO or BOLT?')
+  C.printc(C.dict2str(d))
 
 def analyze_ifetch():
   # TODO: move loop_code, loop_uops to lbr/loops.py
@@ -167,15 +201,14 @@ def analyze_ifetch():
     #if loop_size > 0 and loops[l]['taken'] == 0: loop_code(loops[l])
     if loop_size > 0: loop_code(loops[l])
 
-def gen_misp_report(data, header='Branch Misprediction Report (taken-only)'):
-  if not data: return header.lower()
+def gen_misp_report(data, header='Branch Misprediction Report (taken-only)', verbose=None):
+  if not data: handles['verbose'] = verbose; return header.lower()
   def filename(ext='mispreds-tmp'): return '%s.%s.log' % (data, ext)
-  def file2lines(ext): return C.file2lines(filename(ext), fail=True)
   takens_freq, mispreds = {}, {}
-  for l in file2lines('takens')[:-1]:
+  for l in file2lines(filename('takens'))[:-1]:
     b = C.str2list(l)
     takens_freq[ b[2] ] = int(b[1])
-  for l in file2lines('tk-mispreds')[:-1]:
+  for l in file2lines(filename('tk-mispreds'))[:-1]:
     b = C.str2list(l)
     m = int(b[1])
     mispreds[ (' '.join(b[2:]), C.ratio(m, takens_freq[b[2]])) ] = m * takens_freq[b[2]]

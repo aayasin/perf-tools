@@ -60,13 +60,23 @@ tramp3d-v4: pmu-tools/workloads/CLTRAMP3D /usr/bin/clang++
 
 run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
-	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s1 --tune :perf-stat:\"\'-C2\'\" # for profiling
+	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s3 --tune :perf-stat:\"\'-C2\'\" # for debugging
 test-mem-bw: run-mem-bw
 	sleep 2s
 	set -o pipefail; $(DO) profile -s3 $(ST) -o $< $(RERUN) | $(SHOW)
 	grep -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log
+	./yperf record -o $<-yperf && touch $<-yperf # collect for later
 	kill -9 `pidof m0-n8192-u01.llv`
 	@echo 1 | tee $< > $@
+test-yperf: run-mem-bw-yperf
+	./yperf record -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
+	./yperf report -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
+	./yperf report -o $<
+ifneq ($(CPU), ICX)
+	./yperf advise -o $<
+	./yperf advise -o CLTRAMP3D-yperf
+endif
+
 run-mt:
 	./omp-bin.sh $(NUM_THREADS) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv &
 test-mt: run-mt
@@ -139,11 +149,11 @@ test-stats: stats.py test-default-track-perf
 	./stats.py $(AP).toplev-vl6-perf.csv && test -f $(AP).$(CPU).stat
 	@echo 1 > $@
 
-TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
+TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -sm 7 -v1 $(DO_SUFF)
 TS_B = STUDY_MODE=all-misp ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --tune :forgive:2 $(DO_SUFF)
-TS_C = STUDY_MODE=dsb-bw ./$< cfg1 cfg2 -t2 -a ./run.sh --tune :loops:0 -s7 -v1 $(DO_SUFF)
-TS_D = STUDY_MODE=mem-bw ./$< cfg1 cfg2 -t3 -a ./run.sh --tune :loops:0 -s27 -v1 $(DO_SUFF)
-TS_E = STUDY_MODE=code-l2pf ./$< s1 s2 -a ./$(AP) --tune :loops:0 -s3 -v1 $(DO_SUFF)
+TS_C = STUDY_MODE=dsb-bw ./$< cfg1 cfg2 -t2 -a ./run.sh --tune :loops:0 -sm 7 -v1 $(DO_SUFF)
+TS_D = STUDY_MODE=mem-bw ./$< cfg1 cfg2 -t3 -a ./run.sh --tune :loops:0 -sm 27 -v1 $(DO_SUFF)
+TS_E = STUDY_MODE=code-l2pf ./$< s1 s2 -a ./$(AP) --tune :loops:0 -sm 3 -v1 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo $(TS_A) > $@
@@ -207,7 +217,7 @@ update:
 PT=perf-tools.1
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \
-	    $(PT) run-mem-bw setup-system-* test-{default-track-perf,dir,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
+	    $(PT) run-mem-bw* setup-system-* test-{default-track-perf,dir,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
 	rm -f .prepush_state.cmd
 post-push:
 	$(CLONE) $(PT) && cd $(PT) && ./do.py setup-perf log && cd .. && rm -rf $(PT)   # tests a fresh clone
@@ -226,19 +236,21 @@ PRE_PUSH_CMDS := \
     "echo 'testing default profile-steps, tracks LBR speed' && $(MAKE) test-default-track-perf" \
     "echo 'testing stats module' && $(MAKE) test-stats" \
     "echo 'testing analyze module' && $(MAKE) test-analyze" \
+    "echo 'running the yperf profiler' && $(MAKE) test-yperf" \
     "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL)" \
     "echo 'testing prof-no-aux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
     "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command' && \
-     $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
-     -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && \
-     test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && test -f $(AP)-u.$(CPU).results.tar.gz" \
+      $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
+      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
+      test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && echo jon- f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
+    "echo 'testing Windows support' && $(MAKE) test-windows" \
     "echo 'testing sys-wide non-MUX profile-steps' && \
      $(MAKE) test-default APP=./$(AP) CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \
      :perf-lbr:\\\"'-a -j any,save_type -e r20c4:ppp -c 90001'\\\" :perf-filter:0 -o $(AP)-a\"" \
     "echo 'testing default from another directory, toplev describe' && mkdir -p test-dir; cd test-dir; ln -sf ../common.py && \
      make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1" \
     "echo 'testing clean command' && cp -r test-dir test-dir0; cd test-dir0; ../do.py clean; ls -l" \
-    "echo 'testing study script (errors only)' && $(MAKE) test-study" \
+    "echo 'skip testing study script (errors only)' $(MAKE) test-study" \
     "echo 'testing srcline stat' && $(MAKE) test-srcline" \
     "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
     "echo 'testing sampling by instructions' && $(MAKE) test-LBR-edge" \

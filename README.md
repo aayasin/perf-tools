@@ -97,6 +97,7 @@ A set of command-line tools to facilitate profiling
 * **n-loop** -- run a given app n-times in a loop
 * **ptage** -- computes percentages & sum of number-prefixed input
 * **slow-branch** -- extracts slow sequences from Timed-LBR profile
+* **yperf** -- profiles (system) in one shot, generates reports and advises for SW optimizations
 
 ### wrappers
 Shortcuts to set-up certain tools

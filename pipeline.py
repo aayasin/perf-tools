@@ -12,6 +12,7 @@ from tabulate import tabulate
 import itertools,sys,re
 
 def pipeline_view(log, depths):
+  # FIXME:01: add a "namer" module to assign filename for all logs
   out_pipe = open(log.replace('csv', 'pipeline.log'), 'w');
   pipe_list = common.file2lines(log)
   event_list = []

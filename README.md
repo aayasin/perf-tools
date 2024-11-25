@@ -1,8 +1,8 @@
 ![perf-tools](https://raw.githubusercontent.com/aayasin/perf-tools/master/perf-tools-logo.png)
 
-<!---
-![Python linting](https://github.com/aayasin/perf-tools/workflows/Python%20linting/badge.svg)
---->
+![Python linting and testing](https://github.com/aayasin/perf-tools/actions/workflows/python.yml/badge.svg?branch=master)
+![Old Python linting and testing](https://github.com/aayasin/perf-tools/actions/workflows/python-old.yml/badge.svg?branch=master)
+![jevents test](https://github.com/aayasin/perf-tools/actions/workflows/jevents.yml/badge.svg?branch=master)
 
 perf-tools is an open-source package that profiles workloads, identifies issues, and maps them to application code.
 It is the home for a collection of performance analysis tools, recipes, micro-benchmarks &amp; more
@@ -25,6 +25,8 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
 * **workloads/** -- an evolving collection of "micro-workloads"
   * BC.sh -- wrapper of the Linux bc utility
   * **mmm/** -- the matrix-matrix mutiply (mmm) HPC kernel - multiple optimizations as demonstrated in [Tuning Performance via Metrics with Expectations](https://ieeexplore.ieee.org/document/8714063)
+  * **src/** -- collection of sources for microbenchmarks
+    * **permute** -- calculates permutations of input string
 * **kernels/** -- an evolving collection of x86 kernels
   * **gen-kernel.py** -- generator of X86 kernels
   * **jumpy.py** -- module for different jumping constructs
@@ -35,7 +37,7 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
   * **pagefault.c** -- a custom kernel for page faults on memory data accesses
   * **fp-arith-mix.c** -- demonstrates utilization of extra counters in Icelake's PMU
   * **rfetch3m** -- a random fetcher across 3MB code footprint (auto-generated)
-  * There are more kernels produced by **build.sh** though not uploaded to git
+  * There are more kernels produced by **build.py** though not uploaded to git
 ### Checkout with: 
 `git clone --recurse-submodules https://github.com/aayasin/perf-tools`
 
@@ -78,7 +80,7 @@ System-wide profiling is supported as well.
 * `./do.py help -m My_Metric` will print description of given metric (that toplev understands)
 
 ### kernels (microbenchmarks)
-* to build pre-defined ones, simply `cd kernels/ && ./build.sh`, or
+* to build pre-defined ones, simply `cd kernels/ && ./build.py`, or
 * `GEN=0 ./build.sh` from kernels/ dir to re-build the kernels without generating them
 * to run a kernel, invoke it with number-of-iterations, e.g.
 `    ./kernels/jumpy5p14 200000000`
@@ -97,6 +99,7 @@ A set of command-line tools to facilitate profiling
 * **n-loop** -- run a given app n-times in a loop
 * **ptage** -- computes percentages & sum of number-prefixed input
 * **slow-branch** -- extracts slow sequences from Timed-LBR profile
+* **yperf** -- profiles (system) in one shot, generates reports and advises for SW optimizations
 
 ### wrappers
 Shortcuts to set-up certain tools

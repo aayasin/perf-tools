@@ -13,6 +13,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 
 import os, pickle, re, subprocess, sys, inspect
+from datetime import datetime
 
 # logging
 #
@@ -51,6 +52,9 @@ def printc(msg, col=color.DARKCYAN, log_only=False, outfile=None):
   if outfile: fappend(msg, outfile)
   return msg
 log_stdio=None
+# colored & timestamped printing
+def printct(msg, col=color.DARKCYAN, log_only=False):
+  return printc(msg.replace('@@', datetime.now().strftime('%Y-%m-%d %H:%M:%S')), col=col, log_only=log_only)
 
 log_db = {'info': {}, 'warn': {}}
 def warning(type='warn'): return ('warning' if type == 'warn' else type).upper()
@@ -128,7 +132,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=1
     if '@' in msg: msg='\t' + msg.replace('@', '')
     else: msg = msg + ' ..'
     if run or msg.endswith('..'): printc(msg, color.BOLD)
-  if debug: printc(x, color.BLUE)
+  if debug: printct('@@\t' + x, color.BLUE)
   sys.stdout.flush()
   if background: return subprocess.Popen(x.split())
   ret = 0
@@ -159,16 +163,23 @@ def exe2list(x, sep=' ', debug=False):
 def exe_one_line(x, field=None, debug=False, fail=0):
   def print1(x): printf(x, std=sys.stdout, col=color.BLUE) if debug else None
   x_str = 'exe_one_line(%s, f=%s)' % (x, str(field))
-  print1('%s = ' % x_str)
-  try:
-    res = exe_output(x, '')
-  except subprocess.CalledProcessError:
-    (error if fail else warn)('%s failed!' % x_str)
-    res = 'N/A'
+  cached = x in exe_one_line.cache
+  if cached:
+    res = exe_one_line.cache[x]
+  else:
+    print1('%s = ' % x_str)
+    try:
+      res = exe_output(x, '')
+    except subprocess.CalledProcessError:
+      (error if fail else warn)('%s failed!' % x_str)
+      res = 'N/A'
+    exe_one_line.cache[x] = res
   if field is not None: res = str2list(res)[field]
-  print1('%s\n' % res)
+  if not cached: print1('%s\n' % res)
   return res
+exe_one_line.cache = {}
 
+def isfile(f): return f and os.path.isfile(f)
 def ptage(r=2): return 'PTAGE_R=%d %s/ptage' % (r, dirname())
 def tail(f=''): return "tail -11 %s | %s" % (f, grep('=total|^\s+0', flags='-v'))
 
@@ -185,9 +196,9 @@ def par_jobs_file(commands, name=None, verbose=False, shell='bash'):
   return name
 
 import glob as python_glob
-def glob(regex):
+def glob(regex, forgive=0):
   fs = python_glob.glob(regex)
-  if len(fs) == 0: error("could not find files: %s" % regex)
+  if len(fs) == 0 and not forgive: error("could not find files: %s" % regex)
   return sorted(fs)
 
 # OS
@@ -207,7 +218,7 @@ def realpath(x): return os.path.join(dirname(), x)
 def env2int(x, default=0, base=10): y=os.getenv(x); return int(y, base) if y else default
 def env2str(x, default=0, prefix=0): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
 def env2list(x, default): y = os.getenv(x); return y.split() if y else default
-def envfile(x): x = os.getenv(x); return x if x and os.path.isfile(x) else None
+def envfile(x): x = os.getenv(x); return x if isfile(x) else None
 
 def print_env(std=sys.stderr):
   for k, v in sorted(os.environ.items()):
@@ -250,6 +261,9 @@ def grep(what, file='', flags='', color=False):
   cmd = "%sgrep -E %s '%s' %s" % (zprefix(file), flags, what, file)
   if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('grep', 'grep --color')
   return "(%s || true)" % cmd
+# grep lines from start till end or max lines
+def grep_start_end(start, end, log, max=33):
+  return "%s | sed '/%s/q' | grep -v '^$'" % (grep(start, log, '-A%d' % max), end)
 
 # auxiliary: strings, argv, python-stuff
 #
@@ -338,14 +352,11 @@ RUN_DEF = './run.sh'
 TOPLEV_DEF=' --frequency --metric-group +Summary'
   #' --no-uncore' # https://github.com/andikleen/pmu-tools/issues/450
 PROF_MASK_DEF=0x313F
-def add_hex_arg(ap, n, fn, d, h):
-  ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
 def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefaultsHelpFormatter, epilog=None):
   ap = argparse.ArgumentParser(usage=usg, formatter_class=fc, epilog=epilog) if usg else argparse.ArgumentParser(formatter_class=fc)
   common_args = []
-  def common_def(a):
-    common_args.append(a)
-    return defs[a] if defs and a in defs else None
+  def common_def(a): common_args.append(a); return def_value(a)
+  def def_value(a, dv=None): return defs[a] if defs and a in defs else dv
   def add_argument(a, h): ap.add_argument('--' + a, default=common_def(a), help=h)
   def add_argument2(a, h): ap.add_argument('--'+a, '-'+a[0], default=common_def(a), help=h)
   def add_prof_arg(a): ap.add_argument('--'+a, '-'+a[0], type=int, default=common_def(a),
@@ -360,19 +371,26 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   add_prof_arg('delay')
   if not usg: return common_args
   ap.add_argument('-r', '--repeat', default=3, type=int, help='times to run per-app counting and topdown-primary profile steps')
-  ap.add_argument('-a', '--app', default=RUN_DEF, help='name of user-application/kernel/command to profile')
-  ap.add_argument('-v', '--verbose', type=int, default=0, help='verbose level; -1: quiet; 0:info, 1:commands, '
+  ap.add_argument('-a', '--app', default=def_value('app', RUN_DEF), help='name of user-application/kernel/command to profile')
+  ap.add_argument('-v', '--verbose', type=int, default=def_value('verbose', 0),
+    help='verbose level; -1: quiet; 0:info, 1:commands, '
     '2:+verbose-on metrics|build|sub-commands, 3:+toplev --perf|ASM on kernel build|greedy lbr.py, 4:+args parsing, '
     '5:+event-groups|+perf-script timing, 6:ocperf verbose, .. 9:anything')
-  add_hex_arg(ap, '-pm', '--profile-mask', mask, 'stages in the profile command. See profile-mask-help.md for details')
+  argp_add_hex_arg(ap, '-pm', '--profile-mask', mask, 'stages in the profile command. See profile-mask-help.md for details')
   ap.add_argument('--tune', nargs='+', default=common_def('tune'), help=argparse.SUPPRESS, action='append') # override global variables with python expression
   return ap
-def get_shared_args(args):
+def argp_add_hex_arg(ap, n, fn, d, h):
+  ap.add_argument(n, fn, type=lambda x: int(x, 16), default=d, help='mask to control ' + h)
+def argp_get_common(args):
   r = ''
   for x in argument_parser(None):
     a = getattr(args, x.replace('-', '_'))
     if a: r += ' --%s %s' % (x, "'%s'" % a if type(a) is str and any_in(' {', a) else str(a))
   return r
+def argp_tune_prepend(args, prep):
+  tune = getattr(args, 'tune') or []
+  tune.insert(0, [prep])
+  return ' --tune ' + ' '.join([' '.join(i) for i in tune])
 
 def commands_list():
   return ' '.join(chop(exe_output("grep -E 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort" % sys.argv[0], sep=' '), "),'").split() +

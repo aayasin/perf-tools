@@ -12,6 +12,7 @@ from tabulate import tabulate
 import itertools,sys,re
 
 def pipeline_view(log, depths):
+  # FIXME:01: add a "namer" module to assign filename for all logs
   out_pipe = open(log.replace('csv', 'pipeline.log'), 'w');
   pipe_list = common.file2lines(log)
   event_list = []
@@ -57,7 +58,7 @@ def pipeline_view(log, depths):
         sum += processed_chunks[index][i][k]
       #Use the sum to convert discrete values into percents and place into percent_chunks list
       for l in range(cols):
-        percent_chunks[index][i][l] = int(100*processed_chunks[index][i][l]/sum)
+        percent_chunks[index][i][l] = int(100*processed_chunks[index][i][l]/(sum+.1))
       totals[i][index] = sum
       sum = 0
   #Convert the percent_chunks from homogenous event data to heterogenous data where dsb, mite, decoders, ms, issue, execute, retire all occupy a single snapshot.

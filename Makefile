@@ -2,6 +2,7 @@
 AP = CLTRAMP3D
 APP = taskset 0x4 ./$(AP)
 CC = clang
+CPP = clang++
 CLONE = git clone --recurse-submodules https://github.com/aayasin/perf-tools
 CMD = profile
 CPU = $(shell ./pmu.py CPU)
@@ -53,6 +54,8 @@ intel:
 	cd dtlb; ./build.sh
 	#git clone https://github.com/intel-innersource/applications.benchmarking.cpu-micros.inst-lat-bw
 	#wget https://downloadmirror.intel.com/763324/mlc_v3.10.tgz
+workloads/permute: workloads/src/permute.cpp /usr/bin/clang++
+	$(CPP) -g -std=c++17 -static $< -o $@
 tramp3d-v4: pmu-tools/workloads/CLTRAMP3D /usr/bin/clang++
 	cd pmu-tools/workloads; ./CLTRAMP3D; cp tramp3d-v4.cpp CLTRAMP3D ../..; rm tramp3d-v4.cpp
 	sed -i "s/11 tramp3d-v4.cpp/11 tramp3d-v4.cpp -o $@/" CLTRAMP3D
@@ -60,13 +63,26 @@ tramp3d-v4: pmu-tools/workloads/CLTRAMP3D /usr/bin/clang++
 
 run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
-	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s1 --tune :perf-stat:\"\'-C2\'\" # for profiling
+	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s3 --tune :perf-stat:\"\'-C2\'\" # for debugging
 test-mem-bw: run-mem-bw
 	sleep 2s
 	set -o pipefail; $(DO) profile -s3 $(ST) -o $< $(RERUN) | $(SHOW)
 	grep -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log
+	./yperf record -o $<-yperf && touch $<-yperf # collect for later
 	kill -9 `pidof m0-n8192-u01.llv`
 	@echo 1 | tee $< > $@
+test-yperf: run-mem-bw-yperf workloads/permute
+	./yperf record -pm 100 -o permute-yperf -- ./workloads/permute abcdefghijk
+	./yperf report -pm 100 -o permute-yperf -- ./workloads/permute abcdefghijk
+	./yperf record -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
+	./yperf report -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
+	./yperf report -o $<
+ifneq ($(CPU), ICX)
+	./yperf advise -o $<
+	./yperf advise -o permute-yperf
+	./yperf advise -o CLTRAMP3D-yperf
+endif
+
 run-mt:
 	./omp-bin.sh $(NUM_THREADS) ./workloads/mmm/m9b8IZ-x256-n8448-u01.llv &
 test-mt: run-mt
@@ -207,7 +223,7 @@ update:
 PT=perf-tools.1
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \
-	    $(PT) run-mem-bw setup-system-* test-{default-track-perf,dir,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
+	    $(PT) run-mem-bw* setup-system-* test-{default-track-perf,dir,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
 	rm -f .prepush_state.cmd
 post-push:
 	$(CLONE) $(PT) && cd $(PT) && ./do.py setup-perf log && cd .. && rm -rf $(PT)   # tests a fresh clone
@@ -226,12 +242,14 @@ PRE_PUSH_CMDS := \
     "echo 'testing default profile-steps, tracks LBR speed' && $(MAKE) test-default-track-perf" \
     "echo 'testing stats module' && $(MAKE) test-stats" \
     "echo 'testing analyze module' && $(MAKE) test-analyze" \
+    "echo 'running the yperf profiler' && $(MAKE) test-yperf" \
     "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL)" \
     "echo 'testing prof-no-aux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
-    "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command' && \
+    "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view, pipeline-view & over-time profile-steps, tar command' && \
       $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
-      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
-      test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && echo jon- f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
+      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=3931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
+      test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && \
+      echo jon let PM=23931a then test -f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
     "echo 'testing Windows support' && $(MAKE) test-windows" \
     "echo 'testing sys-wide non-MUX profile-steps' && \
      $(MAKE) test-default APP=./$(AP) CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \
@@ -243,6 +261,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing srcline stat' && $(MAKE) test-srcline" \
     "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
     "echo 'testing sampling by instructions' && $(MAKE) test-LBR-edge" \
+    "echo 'testing pipeline-view sys-wide idle' && echo jon $(DO) profile -pm 200000 -s 20 -o pipeline-view -v1 " \
     "$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1" \
     "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)" \
     "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL)" \

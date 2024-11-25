@@ -58,7 +58,7 @@ def get(tag):
   if tag.startswith('bottlenecks-list-'):
     all = get('bottlenecks-list')
     return [all[i] for i in range(int(tag[-1]))]
-  model = 'GNR' if pmu.granite() else pmu.cpu('CPU') or C.env2str('TMA_CPU', 'SPR')
+  model = pmu.cpu_CPU('SPR')
   if tag == 'zero-ok':
     ZeroOk = C.csv2dict(settings_file('tma-zero-ok.csv'))
     return ZeroOk[model].split(';')
@@ -78,3 +78,44 @@ def get(tag):
 # TODO: import the model's ratios.py file under pmu-tools/ to look it up per metric
 def threshold_of(metric):
   return 15
+
+# Bottlenecks View over TMA - a *cheap* support for the yperf 1-shot collection
+def add_tma(d):
+  def ratio(x, denom='slots'):  return float(d[x]) / d[denom]
+  def ratioc(x): return ratio(x, 'cycles')
+  assert pmu.goldencove_on()
+  glc = 'topdown-br-mispredict' in d
+  d['#Mispred_Clears_Fr'] = float((d['topdown-br-mispredict'] / d['topdown-bad-spec']))
+    #if glc else 1 / (1 + d['MACHINE_CLEARS.COUNT'] / d['BR_MISP_RETIRED.ALL_BRANCHES']))
+  d['Branch_Mispredicts'] = ratio('topdown-br-mispredict') # if glc else d['topdown-bad-spec'] * d['#Mispred_Clears_Fr'])
+  d['Frontend_Bound'] = ratio('topdown-fe-bound')
+  d['Fetch_Latency'] = ratio('topdown-fetch-lat')
+  d['Mispredicts_Resteers'] = d['#Mispred_Clears_Fr'] * ratioc('INT_MISC.CLEAR_RESTEER_CYCLES')
+  d['Misp_Clear_Resteers'] = ratioc('INT_MISC.CLEAR_RESTEER_CYCLES')
+  d['Unknown_Branches'] = ratioc('INT_MISC.UNKNOWN_BRANCH_CYCLES')
+  d['ICache_Misses'] = ratioc('ICACHE_DATA.STALLS')
+  d['ITLB_Misses'] = ratioc('ICACHE_TAG.STALLS')
+  d['DSB_Switches'] = ratioc('DSB2MITE_SWITCHES.PENALTY_CYCLES')
+  #d['MS_Switches'] = 3 * ratioc('IDQ.MS_UOPS:c1:e1')
+  return d
+
+#
+## WARNING: this code merely does an ESTIMATION of the real metric! pmu-tools should have the right calculation.
+#
+def estimate(metric, d):
+  bottlenecks = get('bottlenecks-list-3')
+  if not metric: return bottlenecks
+  assert metric in bottlenecks
+  if 'Frontend_Bound' not in d: d = add_tma(d)
+  def scale(x): return round(100 * x, 2)
+  if metric == 'Mispredictions':
+    # 100 * ( 1 - #Umisp ) * ( Branch_Mispredicts + Fetch_Latency * Mispredicts_Resteers / ##Fetch_Latency )
+    return scale(d['Branch_Mispredicts'] + d['Mispredicts_Resteers'])
+  if metric == 'Big_Code':
+    # 100 * Fetch_Latency * ( ITLB_Misses + ICache_Misses + Unknown_Branches ) / ##Fetch_Latency
+    big_code = d['ITLB_Misses'] + d['ICache_Misses'] + d['Unknown_Branches']
+    return scale(min(big_code, d['Fetch_Latency'] - d['DSB_Switches'])) # - d['MS_Switches']))
+  if metric == 'Instruction_Fetch_BW':
+    # 100 * ( Frontend_Bound - ( 1 - #Umisp ) * Fetch_Latency * Mispredicts_Resteers / ##Fetch_Latency - #Assist_Frontend ) - Big_Code
+    return round(100 * (d['Frontend_Bound'] - d['Misp_Clear_Resteers']) - estimate('Big_Code', d), 2)
+  assert 0

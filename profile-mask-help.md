@@ -24,4 +24,5 @@
 40000 | tracing MSRs                                       | setup-all --tune :msr:1
 80000 | sampling-PT                                        | 
 100000 | FlameGraph                                         | setup-all --tune :flameg:1
+200000 | Pipeline View every 1000ms                         | [--tune :interval:10]
 

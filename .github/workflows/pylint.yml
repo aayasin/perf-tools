@@ -9,9 +9,9 @@ jobs:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
@@ -20,4 +20,5 @@ jobs:
         pip install flake8 pytest
     - name: Lint with flake8
       run: |
-        flake8 $(git ls-files '*.py') --ignore=E111,E121,E128,E241,E272,E302,E401,E501,E701,E704,E225,E201,E261,E228,E305,E222,E124,E226,E221,E402,E114,E231,E265,E702,E741,E116,E306,E251,E202,E306,E262,E127,E731,E131,E126,E722,E271,E123,E203,F405,F403,W291,W293,W504,W391,W503
+        flake8 $(git ls-files '*.py') --select=F,E9 --ignore=F401,F841,F403,F405
+  

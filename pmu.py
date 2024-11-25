@@ -90,6 +90,7 @@ def event(x, precise=0):
   }
   e = aliases[x] if x in aliases else perf_event(x)
   if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
+  if ':' in x and x.split(':')[0].isupper(): e = e.replace(x.split(':')[0], x)
   return perf_format(e)
 
 def event_period(e, p=default_period(), precise=True, lbr=True):
@@ -228,6 +229,7 @@ def force_cpu(cpu):
   if not os.path.exists(event_list): C.exe_cmd('%s/event_download.py %s' % (pmutools, cpu_id))
   return event_list
 
+def cpu_CPU(default='UNK'): return 'GNR' if granite() else cpu('CPU') or C.env2str('TMA_CPU', default)
 def cpu(what, default=None):
   def warn(): C.warn("pmu:cpu('%s'): unsupported parameter" % what); return None
   if cpu.state:
@@ -247,7 +249,7 @@ def cpu(what, default=None):
       xs = x.split(':')
       if len(xs) > 1:
         k, v = str(xs[0].strip()), str(xs[1].strip())
-        d[k] = Cpu(v) if k == 'CPU' else v
+        d[k] = (Cpu(v) if k == 'CPU' else v) if len(v) else None
       elif xs[0] != 'toplev': C.warn('toplev --version: %s' % xs[0])
     return d
   try:
@@ -302,15 +304,17 @@ def cpu_peak_kernels(widths=(4, 5, 6, 8)):
   return ['peak%dwide' % x for x in widths]
 
 def cpu_pipeline_width(all_widths=None):
-  full_widths = {'dsb':('IDQ.DSB_UOPS',4), 'mite':('IDQ.MITE_UOPS',4), 'decoders':('INST_DECODED.DECODERS',4), 'ms':('IDQ.MS_UOPS',4),
-                 'issued':('UOPS_ISSUED.ANY',4), 'executed':('UOPS_EXECUTED.CORE',8), 'retired':('UOPS_RETIRED.ALL',4)}
   if all_widths: # TODO: eventually read from pmu-tools.
+    # skylake
+    full_widths = {'dsb':('IDQ.DSB_UOPS',6), 'mite':('IDQ.MITE_UOPS',5), 'decoders':('INST_DECODED.DECODERS',4), 'ms':('IDQ.MS_UOPS',4),
+                   'issued':('UOPS_ISSUED.ANY',4),'executed':('UOPS_EXECUTED.THREAD',8),'retired':('UOPS_RETIRED.RETIRE_SLOTS',4)}
     if icelake():
       full_widths = {'dsb':('IDQ.DSB_UOPS',6), 'mite':('IDQ.MITE_UOPS',5), 'decoders':('INST_DECODED.DECODERS',4), 'ms':('IDQ.MS_UOPS',4),
                      'issued':('UOPS_ISSUED.ANY',5),'executed':('UOPS_EXECUTED.THREAD',10),'retired':('UOPS_RETIRED.SLOTS',8)}
     elif goldencove() or redwoodcove():
       full_widths = {'dsb':('IDQ.DSB_UOPS',8), 'mite':('IDQ.MITE_UOPS',6), 'decoders':('INST_DECODED.DECODERS',6), 'ms':('IDQ.MS_UOPS',4),
                      'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.THREAD',12),'retired':('UOPS_RETIRED.SLOTS',8)}
+    elif lunarlake(): assert 0, "LNL not supported"
     return full_widths
   width = 4
   if icelake(): width = 5

@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.59 # see version line of do.py
+__version__= x86.__version__ + 2.60 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -48,7 +48,7 @@ def skip_sample(s):
     if LC.is_empty(line): break
     assert line, 'was input truncated? sample:\n%s line:\n#%s#' % (s, line)
     info = LC.line2info(line)
-    if info.header: invalid1('bad', 'header-only')
+    if info.header(): invalid1('bad', 'header-only')
   return 0
 
 header_field = {

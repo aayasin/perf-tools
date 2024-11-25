@@ -12,16 +12,20 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.03
+__version__= 1.05
 
 import common as C, pmu, tma
 import csv, json, os.path, re, sys
 
-def get_file(app, ext):
-  for filename in os.listdir(os.getcwd()):
-    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+)(\-a)?.perf.data.%s.log" % (C.command_basename(app), ext), filename):
-      return filename
-  return None
+# FIXME:01: add a "namer" module to assign filename for all logs;
+#       to replace this function, so analyze.ext() can call it directly, many in do.py, and
+#       to replace other instances of finding filename below:
+#         get_stat_log()
+#         get_TSC()
+#         rollup_all()
+#         rollup() (start and toward end)
+#         return from csv2stat() which removed common.toplev_log2csv too!
+def get_file(app, ext): return get_file_int(C.command_basename(app), '.perf.data.' + ext)
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]
@@ -35,9 +39,14 @@ def get_val(s, c):
   try:
     val = sDB[c][s][0]
   except KeyError:
-    C.warn('KeyError for stat: %s, in config: %s' % (s, c))
+    if s in tma.estimate(None, None):
+      val = tma.estimate(s, strip(sDB[c]))
+      sDB[c][s] = (val, 'Bottleneck')
+    else: C.warn('KeyError for stat: %s, in config: %s' % (s, c))
   if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, c, str(val)))
   return val
+
+def strip(d): return {k: v[0] for k, v in d.items()}
 
 def print_metrics(app):
   c = C.command_basename(app)
@@ -51,8 +60,14 @@ sDB = {}
 stats = {'verbose': 0}
 
 # internal methods
+def get_file_int(prefix, ext):
+  for filename in C.glob(prefix + '*', True):
+    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+)(\-a)?%s.log" % (prefix, ext), filename):
+      return filename
+  return None
+
 def get_stat_int(s, c, stat_file=None, val=-1):
-  if not c in sDB and s in ('CPUs_Utilized', ): return read_perf(stat_file)[s][0]
+  if not c in sDB and stat_file and s in ('CPUs_Utilized', ): return read_perf(stat_file)[s][0]
   rollup(c, stat_file)
   return get_val(s, c)
 
@@ -114,8 +129,26 @@ def read_loops_info(info, loop_id='imix-ID', as_loops=False, sep=None, groups=Tr
         else: d['%s%s%s' % (key, sep if sep else ' ', stat_name)] = (val, 'LBR.Loop') if groups else val
   return d
 
+def read_funcs_info(log, as_funcs=False, sep=None, groups=True):
+  assert os.path.isfile(log), 'Missing file: %s' % log
+  d = {}
+  funcs = C.exe_output(C.grep('function#', log), sep='\n')
+  if funcs != '':  # funcs stats found
+    for func in funcs.split('\n'):
+      key = func.split(':')[0].strip()
+      # FIXME:05: extract flows properly
+      func_attrs = re.split(r',', func[func.index('{') + 1:-1])
+      if as_funcs: d[key] = {}
+      for attr in func_attrs:
+        attr_list = attr.split(':')
+        stat, val = attr_list[0].strip(), convert(attr_list[1].strip())
+        if as_funcs: d[key][stat] = val
+        else: d['%s%s%s' % (key, sep if sep else ' ', stat)] = (val, 'LBR.func') if groups else val
+      # FIXME:06: read flows themselves into func dictionary
+  return d
+
 def grep_histo(histo, info):
-  return "%s | sed '/%s histogram summary/q'" % (C.grep('%s histogram:' % histo, info, '-A33'), histo)
+  return C.grep_start_end('%s histogram:' % histo, '%s histogram summary' % histo, info)
 
 def is_metric(s):
   return s[0].isupper() and not s.isupper() and \
@@ -186,10 +219,11 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
 def rollup(c, perf_stat_file=None):
   if c in sDB: return
   perf_stat_file, info, vl6 = perf_stat_file or c + '.perf_stat-r3.log', c + '.toplev-mvl2.log', c + '.toplev-vl6.log'
-  # TODO: call do.profile to get file names
-  sDB[c] = read_perf(perf_stat_file)
-  if os.path.exists(vl6): sDB[c].update(read_toplev(vl6))
-  if os.path.exists(info):
+  perf_stat_lbr = get_file_int(c + '.perf_stat', '')
+  sDB[c] = read_perf(perf_stat_file) if C.isfile(perf_stat_file) else {}
+  if C.isfile(vl6): sDB[c].update(read_toplev(vl6))
+  elif C.isfile(perf_stat_lbr): sDB[c].update(read_perf(perf_stat_lbr))
+  if C.isfile(info):
     sDB[c].update(read_toplev(info))
     sDB[c]['sig-misp'] = (read_mispreds(info.replace('.info', '.mispreds')), 'list')
   if debug > 1: print_DB(c)
@@ -218,6 +252,7 @@ def print_DB(c):
 
 def get_TSC(f):
   tsc = read_perf(f.replace('.log', '-C0.log'))['msr/tsc/'][0]
+  # FIXME:02: support apart from -r3 or -r1
   if f.endswith('-r3.log'): tsc = int(tsc / 3)
   return tsc
 
@@ -450,7 +485,7 @@ def perf_log2stat(log, smt_on, d={}):
     d['knob.forcecpu'] = 1 if C.env2str('FORCECPU') else 0
     d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', tma.get('version'))
     d['knob.uarch'] = pmu.cpu('CPU')
-    return d['knob.uarch'] or C.env2str('TMA_CPU', 'UNK')
+    return d['knob.uarch'] or pmu.cpu_CPU()
   def user_events(f):
     ue = {}
     if not os.path.isfile(f): C.warn('file is missing: '+f); return ue

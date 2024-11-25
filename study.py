@@ -105,7 +105,7 @@ def parse_args():
   ap.add_argument('--mode', nargs='?', choices=modes_list(), default=DM,
                   help='Must prepend your study.py command with STUDY_MODE=<mode> for now')
   ap.add_argument('-t', '--attempt', default='1')
-  C.add_hex_arg(ap, '-sm', '--stages', 0x3f, 'stages in study')
+  C.argp_add_hex_arg(ap, '-sm', '--stages', 0x3f, 'stages in study')
   ap.add_argument('--dump', action='store_const', const=True, default=False)
   ap.add_argument('--advise', action='store_const', const=True, default=False)
   ap.add_argument('--forgive', action='store_const', const=True, default=False)
@@ -333,20 +333,15 @@ def compare_stats(app1, app2):
 def main():
   lbr_cycles = '--tune :perf-lbr:"\'-j any,save_type -e cycles:p -c %d\'"' % 2e6
   do0 = C.realpath('do.py')
-  do = do0 + ' profile' + C.get_shared_args(args)
+  do = do0 + ' profile' + C.argp_get_common(args)
   if args.repeat != 3: do += ' -r %d' % args.repeat
-
-  x, extra = 'tune', ''
-  a = getattr(args, x) or []
-  if pmu.skylake(): extra += ' :perf-stat-add:-1'
-  elif args.mode != 'imix-loops': extra += ' :perf-stat-add:0'
-  a.insert(0, [':batch:1 :help:0 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s ' % (
-    int(pmu.cpu('corecount')/2), extra)])
-  do += ' --%s %s' % (x, ' '.join([' '.join(i) for i in a]))
-
+  extra = ' :perf-stat-add:-1' if pmu.skylake() else (' :perf-stat-add:0' if args.mode != 'imix-loops' else '')
+  do += C.argp_tune_prepend(args, ':batch:1 :help:0 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s' % (
+    int(pmu.cpu('corecount')/2), extra))
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
   elif args.verbose == -1: do += ' --print-only'
   do = do.replace('{', '"{').replace('}', '}"')
+
   def exe(c): return C.exe_cmd(c, debug=args.verbose)
   def do_cmd(c): return do.replace('profile', c).replace('batch:1', 'batch:0')
   def pebs_cmds(x, mode):

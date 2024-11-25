@@ -8,6 +8,7 @@
 #include <string>
 #include <functional> // For std::function
 #include <algorithm>  // For std::swap
+#include <chrono>     // for timing
 
 std::vector<std::string> permute(std::string l, bool debug = false) {
     int end = l.size();
@@ -56,13 +57,19 @@ int main(int argc, char* argv[]) {
     }
 
     std::string input = argv[1];
+    auto start = std::chrono::high_resolution_clock::now();
     std::vector<std::string> permutations = permute(input);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto time = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - start).count();
 
     // Print the permutations
     //for (const auto& perm : permutations) {
     //    std::cout << perm << std::endl;
     //}
-    std::cout << permutations.size() << std::endl;
+    //std::cout << permutations.size() << std::endl;
+    auto perf = permutations.size() / time; //std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    //std::cout << std::fixed << std::setprecision(3);
+    std::cout << perf << " permutations/ms" << std::endl;
 
     return 0;
 }

@@ -1,6 +1,6 @@
 ![perf-tools](https://raw.githubusercontent.com/aayasin/perf-tools/master/perf-tools-logo.png)
 
-![Python linting and testing](https://github.com/aayasin/perf-tools/actions/workflows/python.yml/badge.svg?branch=master)
+[![Python linting](https://github.com/aayasin/perf-tools/actions/workflows/pylint.yml/badge.svg?branch=master)](https://github.com/aayasin/perf-tools/actions/workflows/pylint.yml)
 
 perf-tools is an open-source package that profiles workloads, identifies issues, and maps them to application code.
 It is the home for a collection of performance analysis tools, recipes, micro-benchmarks &amp; more

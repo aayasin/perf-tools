@@ -174,6 +174,49 @@ def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
     if not info.is_label(): insts_per_call += 1
     x -= 1
 
+def shortcircuit_stats(lines,line):
+  #Shortcircuit detection finds cases when at least two nested conditionals exist. 
+  #We first anchor on a setcc instruction and walk up the instruction sequence in search of
+  #two conditional branches within an 8 instruction window. For example:
+  #xor    %eax,%eax
+  #cmp    %rdi,%rsi <-
+  #ja     12ee <is_goodrange+0x1e>
+  #add    %rdx,%rsi
+  #xor    %eax,%eax
+  #cmp    %rsi,%rdi <-
+  #setb   %al       <-
+  if 'set' in x86.get('inst',line):
+    x = len(lines)-1
+    max_inst=8
+    max_cnt=0
+    candidate_regs=[]
+    entry_pt=0
+    #walk in reverse and fail if there is a call/ret or we've reached the max_inst window.
+    while x > 0 and not x86.is_branch(lines[x],x86.CALL_RET) and  max_cnt <= max_inst:
+      #If a test or cmp instruction is found then we need to grab some additional info.
+      if re.search(x86.TEST_CMP,lines[x]):
+        #small state machine to tell the detector that we've found our first hit.
+        if entry_pt == 0:
+          candidate_regs=x86.get("srcs",lines[x]) + [x86.get("dst",lines[x])]
+          for i in candidate_regs:
+            #remove any immediate values
+            if x86.is_imm(i):
+              candidate_regs.remove(i)
+          #reset the window for the next reverse walk in search of conditional jumps.
+          max_cnt=-1
+          entry_pt=1
+        #Ok we have found the second conditional jump, and now we can see if 
+        #any registers in the second find match that of our previous find above.
+        else:
+          for i in candidate_regs:
+            if i in lines[x]:
+              if LC.verbose & 0x10:
+                info_lines('Shortcircuits with these %s' % candidate_regs, lines[-(len(lines)-x):] + [line])
+              inc_stat('ShortCircuits')
+              break
+      max_cnt+=1
+      x-=1
+
 def edge_stats(line, lines, xip, size):
   info = LC.line2info(line)
   if info.is_label() or info.is_tag(): return
@@ -220,44 +263,7 @@ def edge_stats(line, lines, xip, size):
       if C.any_in(vecs, ''.join(v2ii2v_srcs)): inc_stat('V2I transition-Penalty')
       elif C.any_in(vecs, v2ii2v_dst): inc_stat('I2V transition-Penalty')
     elif v2ii2v_dst: inc_stat('V2I transition-Penalty')
-  #Shortcircuit detection finds cases when at least two nested conditionals exist. We first anchor on a setcc instruction and walk up the instruction sequence in search of two conditional branches within an 8 instruction window. For example:
-  #xor    %eax,%eax
-  #cmp    %rdi,%rsi <-
-  #ja     12ee <is_goodrange+0x1e>
-  #add    %rdx,%rsi
-  #xor    %eax,%eax
-  #cmp    %rsi,%rdi <-
-  #setb   %al       <-
-  if 'set' in x86.get('inst',line):
-    x = len(lines)-1
-    max_inst=8
-    max_cnt=0
-    candidate_regs=[]
-    entry_pt=0
-    #walk in reverse and fail if there is a call/ret or we've reached the max_inst window.
-    while x > 0 and not x86.is_branch(lines[x],x86.CALL_RET) and  max_cnt <= max_inst:
-      #If a test or cmp instruction is found then we need to grab some additional info.
-      if re.search(x86.TEST_CMP,lines[x]):
-        #small state machine to tell the detector that we've found our first hit.
-        if entry_pt == 0:
-          candidate_regs=x86.get("srcs",lines[x]) + [x86.get("dst",lines[x])]
-          for i in candidate_regs:
-            #remove any immediate values
-            if x86.is_imm(i):
-              candidate_regs.remove(i)
-          #reset the window for the next reverse walk in search of conditional jumps.
-          max_cnt=-1
-          entry_pt=1
-        #Ok we have found the second conditional jump, and now we can see if any registers in the second find match that of our previous find above.
-        else:
-          for i in candidate_regs:
-            if i in lines[x]:
-              if LC.verbose & 0x10:
-                info_lines('Shortcircuits with these %s' % candidate_regs, lines[-(len(lines)-x):] + [line])
-              inc_stat('ShortCircuits')
-              break
-      max_cnt+=1
-      x-=1
+  shortcircuit_stats(lines,line)
   if size > 1:
     xline = LC.prev_line(lines)
     xinfo = LC.line2info(xline)

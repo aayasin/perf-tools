@@ -55,7 +55,7 @@ def print_metrics(app):
 
 def write_stat(app): return csv2stat(C.command_basename(app) + '.toplev-vl6-perf.csv')
 
-debug = C.env2int('STATS_DEBUG')
+debug = C.env2int('STATS_DBG')
 sDB = {}
 stats = {'verbose': 0}
 
@@ -167,11 +167,15 @@ def read_histos(info, as_histos=False, groups=False):
   for l in file2lines(info):
     if 'IPC histogram of' in l: break  # stops upon detailed loops stats
     if 'WARNING' in l: pass
+    if debug > 5: print('debug:', l)
     l = l.strip()
     if 'histogram:' in l:  # histogram start
       histo = '%s' % l.split()[0].replace(C.color.DARKCYAN, '')
       continue
     if 'summary:' in l:  # histogram end
+      if rgx(): # FIXME:07 this code doesn't work for a study on permute workload
+        histo = None
+        continue
       if not histo: histo = l.split()[0]
       l_list = l.split('{')[1][:-1].split(',')
       for e in l_list:

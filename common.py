@@ -73,7 +73,6 @@ def info_p(msg, extra):
   return warn(msg, col=color.GREY, type='info', suppress_after=1, extra='; %s' % extra if extra else '.')
 def info(msg):  return info_p(msg, None)
 
-dump_stack_on_error = 0
 def error(msg):
   # get caller info
   frame = inspect.currentframe().f_back
@@ -86,7 +85,6 @@ def error(msg):
          (module, inspect.getframeinfo(frame).function, frame.f_lineno, msg), color.RED, log_only=True)
   logs = [log[1] for log in re.findall(r"(>|tee) (\S+\.log)", msg) if log[1][0].isalpha()]
   if len(logs): exe_cmd('tail ' + ' '.join(set(logs)), debug=True)
-  if dump_stack_on_error: assert 0
   sys.exit(to_print)
 
 def exit(msg=None):

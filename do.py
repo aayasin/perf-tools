@@ -61,7 +61,6 @@ do = {'run':        C.RUN_DEF,
   'container':      0,
   'core':           1,
   'cpuid':          0 if not C.isfile('/etc/os-release') or C.any_in(['Red Hat', 'CentOS'], C.os_release()) else 1,
-  'debug':          0,
   'dmidecode':      0,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
   'flameg':         0,
@@ -496,9 +495,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     return log
   def samples_count(d):
     if windows_file: return int(C.exe_one_line(C.grep(pmu.lbr_event(win=True), windows_file, '-c')))
-    return 1e5 if args.mode == 'profile' else int(exe_1line(
-    '%s script -i %s -D 2>/dev/null | %sgrep -F RECORD_SAMPLE | wc -l' % (perf, d,
-    ('tee >(tail -50 > %s.debug.log) | ' % d) if do['debug'] else '') ))
+    return 1e5 if args.mode == 'profile' else int(exe_1line('%s script -i %s -D 2>/dev/null | grep -F RECORD_SAMPLE | wc -l' % (perf, d)))
   def get_comm(data):
     if not do['perf-filter']: return None
     if do['comm']: return do['comm']
@@ -1110,7 +1107,6 @@ def main():
   if args.print_only and args.verbose <= 0: args.verbose = 1
   handle_tunables()
   pmu.pmutools = args.pmu_tools
-  if do['debug']: C.dump_stack_on_error, stats.debug = 1, do['debug']
   if any(perf_version() == x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')):
     C.error('Unsupported perf tool: ' + perf_version())
   do_cmd = '%s # version %s' % (C.argv2str(), version())

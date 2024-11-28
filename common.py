@@ -122,7 +122,7 @@ def log_callchain():
 # @log:   log the command's output into log_stdio (if any)
 # @fail:  1: exit with error if command fails; 0: warn; -1: no-warn
 # @background: run the specified command in background (do not block)
-def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=1, background=False):
+def exe_cmd(x, msg=None, redir_out=None, debug=0, run=True, log=True, fail=1, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
   x = x.replace('| ./', '| %s/' % dirname())
   if x.startswith('./'): x.replace('./', '%s/' % dirname(), 1)
@@ -130,7 +130,8 @@ def exe_cmd(x, msg=None, redir_out=None, debug=False, run=True, log=True, fail=1
     if '@' in msg: msg='\t' + msg.replace('@', '')
     else: msg = msg + ' ..'
     if run or msg.endswith('..'): printc(msg, color.BOLD)
-  if debug: printct('@@\t' + x, color.BLUE)
+  if debug > 1: printct('@@\t' + x, color.BLUE)
+  elif debug: printc(x, color.BLUE)
   sys.stdout.flush()
   if background: return subprocess.Popen(x.split())
   ret = 0
@@ -217,6 +218,7 @@ def env2int(x, default=0, base=10): y=os.getenv(x); return int(y, base) if y els
 def env2str(x, default=0, prefix=0): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
 def env2list(x, default): y = os.getenv(x); return y.split() if y else default
 def envfile(x): x = os.getenv(x); return x if isfile(x) else None
+def env2int_bo(x, val, base=10): return int(env2int(x)) | val # read & return a bitwise-or (bo) of int env var
 
 def print_env(std=sys.stderr):
   for k, v in sorted(os.environ.items()):

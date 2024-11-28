@@ -79,7 +79,6 @@ do = {'run':        C.RUN_DEF,
   'lbr-jcc-erratum': 0,
   'lbr-stats':      '- 0 10 0 ' + DSB,
   'lbr-stats-tk':   '- 0 20 1',
-  'lbr-verbose':    0,
   'ldlat':          int(globs['ldlat-def']),
   'levels':         2,
   'llvm-mca-args':  '--iterations=1000 --dispatch=%d --print-imm-hex' % pmu.cpu_pipeline_width(),
@@ -179,7 +178,7 @@ def bash(x, px=None):
   cond = (('tee >(' in x or x.startswith(globs['time']) or px) and not win) or (win and px)
   return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if cond else x
 def exe_1line(x, f=None, heavy=True):
-  return "-1" if args.mode == 'profile' and heavy or args.print_only else C.exe_one_line(bash(x), f, args.verbose > 1)
+  return "-1" if args.mode == 'profile' and heavy else C.exe_one_line(bash(x), f, args.verbose > 1)
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
 
 def error(x): C.warn(x) if do['forgive'] > 1 else C.error(x)
@@ -663,7 +662,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
     logs['bott'] = perf_stat('-B -r1', 'bottlenecks-view', 16, tma.get('perf-groups'),
       perfmetrics=None, basic_events=False, last_events='', grep="| grep -E 'seconds [st]|inst_retired_any '", warn=False)
-    if do['help'] >= 0: stats.perf_log2stat(logs['bott'], 0)
+    if do['help'] >= 0 and not args.print_only: stats.perf_log2stat(logs['bott'], 0)
 
   if en(14) and (pmu.retlat() or do['help']<0):
     flags, raw, events = '-W -c 20011', 'raw' in do['model'], pmu.get_events(do['model'])
@@ -706,7 +705,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       print_info.first = False
     print_info.first = True
     def static_stats():
-      if args.mode == 'profile' or windows_file: return
+      if args.mode == 'profile' or args.print_only or windows_file: return
       bins = exe2list(perf + r" script -i %s | awk -F'\\(' '{print $NF}' | cut -d\) -f1 "
         "| grep -E -v '^\[|anonymous|/tmp/perf-' | %s | tail -5" % (data, sort2u))[1:][::2]
       assert len(bins)
@@ -774,8 +773,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
         lbr_env = "LBR_LOOPS_LOG=%s LBR_FUNCS_LOG=%s" % (loops, funcs)
         cycles = get_stat(pmu.event('cycles')) or get_stat('cycles', 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
-        if args.verbose > 2: do['lbr-verbose'] |= 0x800
-        if do['lbr-verbose']: lbr_env += " LBR_VERBOSE=0x%x" % (do['lbr-verbose'] | C.env2int('LBR_VERBOSE', base=16))
+        if args.verbose > 2: lbr_env += ' LBR_VERBOSE=%x' % C.env2int_bo('LBR_VERBOSE', 0x800)
         if type(do['lbr-indirects']) == int:
           do['lbr-indirects'] = (get_indirects('%s.indirects.log' % data, int(do['lbr-indirects'])) + ',' +
                                  get_indirects('%s.tk-mispreds.log' % data, int(do['lbr-indirects']))).rstrip(',')
@@ -798,7 +796,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
         if (do['imix'] & 0x4) == 0:
           cmd += ' > /dev/null'
         perf_script(cmd, msg, data)
-        if do['lbr-verbose'] & 0x1 and args.mode != "profile": inst_fusions(hits, info)
+        if args.verbose > 1 and args.mode != "profile": inst_fusions(hits, info)
         if do['imix'] & 0x4: exe("%s && %s" % (C.tail('%s.imix-no.log' % data), log_count('instructions', hits)),
             "@instruction-mix no operands")
         if args.verbose > 0: exe("grep 'LBR samples:' %s && tail -4 %s" % (info, ips), "@top-3 hitcounts of basic-blocks to examine in " + hits)
@@ -855,7 +853,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
         ip_log = '%s.ip%s.log' % (data, top_ip)
         x = exe_1line("%s | %s" % (C.grep('callchain names .* summary', ip_log), sed_cut)).strip('|')
         x = re.sub(r'\+\d+', '', x)
-        if x != '?':
+        if x not in ('', '?'):
           for c in '()[]*+': x = x.replace(c, '\\' + c)
           exe('echo modules of functions in mode callchain: >> %s && %s >> %s' % (ip_log, C.grep(x, funcs_log), ip_log))
         top -= 1
@@ -929,7 +927,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
 
   if do['help'] < 0: profile_mask_help()
   elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)):
-    stats.csv2stat(C.toplev_log2csv(logs['tma']))
+    if not args.print_only: stats.csv2stat(C.toplev_log2csv(logs['tma']))
     d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])
       ), 'num_not_counted_stats', 'num_not_supported_stats', 'DurationTimeInMilliSeconds'
     not_counted, not_supported = d[not_counted_name], d[not_supported_name]

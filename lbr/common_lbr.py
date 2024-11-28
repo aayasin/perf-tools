@@ -161,6 +161,8 @@ def is_header(line):
                               re.match(r"([^:]*):(\s+)(\w+:)\s", line) or
 # instruction trace error type 1 time 1021983.206228655 cpu 1 pid 105468 tid 105468 ip 0 code 8: Lost trace data
                               re.match(r"(\s)(\w[\w\s]+\d) time ([\d\.]+)", line))
+## FIXME:07 handle this header from MySQL
+# AssertionError: Not a head of sample:    rs:main Q:Reg    6268 [130] 3043937.067683:     500001 cycles:p:      7f96c8097216 [unknown] (/usr/lib64/libc.so.6 (deleted))
 
 def is_label(line):
   line = line.strip()

@@ -59,7 +59,7 @@ if 1:
   elif not (LC.edge_en or loop or filter): print(c)
   if filter:
     print(LC.stat)
-    loops.print_loop(loop)
+    if loop: loops.print_loop(loop)
     LC.paths_print(hsts)
     C.warn_summary()
   else: # in case of edge_en or loop_stats

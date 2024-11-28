@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.60 # see version line of do.py
+__version__= x86.__version__ + 2.61 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -362,6 +362,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           inc(LC.stat['IPs'], header_ip_str(line))
       # a sample ended
       if info.is_empty():
+        if ip_filter: LC.paths_inc(ip_filter, hsts, takens, lines)
         if not skip_bad and (not min_lines or check_min_lines()): break
         len_m1 = len(lines)-1 if len(lines) else 0
         if len_m1 < 2 or\
@@ -381,7 +382,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           # else: note a truncated tripcount, i.e. unknown in 1..31, is not accounted for by default.
         if mispred_ip and valid < 2: valid = 0
         if func: funcs.detect_functions(lines[func:])
-        if ip_filter: LC.paths_inc(ip_filter, hsts, takens, lines)
         if LC.debug and LC.debug == timestamp:
           exit((line.strip(), len(lines)), lines, 'sample-of-interest ended')
         break

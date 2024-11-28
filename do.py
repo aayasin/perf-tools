@@ -11,7 +11,6 @@
 #
 # TODO list:
 #   let bottlenecks-view use instructions,cycles to watch IPC
-#   add a tunable of string to pass to all perf stat/record and toplev profile-steps
 #   report PEBS-based stats for DSB-miss types (loop-seq, loop-jump_to_mid)
 #   move profile code to a separate module, arg for output dir
 #   quiet mode

@@ -14,7 +14,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.97
+__version__= 0.98
 
 import common as C, pmu, stats
 import sys, time, re
@@ -78,7 +78,7 @@ Conf = {
   'Toplev': {'imix-loops': ' --frequency --metric-group +Summary',
   },
   'Tune': {'dsb-align': [[':perf-record:"\' -g -c 20000003\'"']],
-    'openmp': [[':perf-stat-ipc:"\'stat -e instructions,cycles,r0106\'"']],
+    'openmp': [[':perf-track:"\'-e instructions,cycles,r0106\'"']],
   },
 }
 
@@ -139,6 +139,7 @@ def parse_args():
   def add_arg(name, default, help):
     l = name.split('-')
     side_by_side.add_argument('-%s%s' % (l[0][0], l[1][0]), '--%s' % name, default=default, type=type(default), help=help)
+  side_by_side.add_argument('--score', default='time', help="metric name to use as performance-metric")
   side_by_side.add_argument('--loop-id', default='imix-ID', choices=['imix-ID', 'srcline'],
                             help="loop stat to use as loop ID")
   side_by_side.add_argument('-dt', '--diff-threshold', nargs='*', default=[1e4, 2.0],
@@ -336,6 +337,7 @@ def main():
   do = do0 + ' profile' + C.argp_get_common(args)
   if args.repeat != 3: do += ' -r %d' % args.repeat
   extra = ' :perf-stat-add:-1' if pmu.skylake() else (' :perf-stat-add:0' if args.mode != 'imix-loops' else '')
+  if args.mode in ('code-l2pf', 'mem-bw'): extra += ' :imix:0x6f'
   do += C.argp_tune_prepend(args, ':batch:1 :help:0 :lbr-jcc-erratum:1 :loops:%d :msr:1 :dmidecode:1%s' % (
     int(pmu.cpu('corecount')/2), extra))
   if args.verbose > 1: do += ' -v %d' % (args.verbose - 1)
@@ -393,9 +395,12 @@ def main():
       if args.verbose > 1:
         stats.print_metrics(app(x))
     if len(args.config) == 2:
-      bef, aft = args.config[0], args.config[1]
-      C.printc('Speedup (%s/%s): %sx' % (aft, bef, str(round(stats.get('time', app(bef)) / stats.get('time', app(aft)),
-               3 if args.verbose else 2))))
+      bef, aft, score = args.config[0], args.config[1], args.score
+      score_a, score_b = stats.get(score, app(aft)), stats.get(score, app(bef))
+      if score == 'time': score_a, score_b = 1 / score_a, 1 / score_b
+      C.printc('Speedup (%s/%s): %sx' % (aft, bef, str(round(score_a / score_b, 3 if args.verbose else 2))))
+      if args.verbose: C.printc('\t%s for %s = %s , %s = %s' % (
+        "1/"+score if score == 'time' else score, bef, str(score_b), aft, str(score_a)))
       compare_stats(app(bef), app(aft))
 
   if args.stages & 0x10:

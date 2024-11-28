@@ -20,7 +20,7 @@
 from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.72
+__version__ = 3.73
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -92,6 +92,7 @@ do = {'run':        C.RUN_DEF,
   'package-mgr':    C.os_installer(),
   'packages':       ['cpuid', 'dmidecode', 'numactl'] + list(globs['tunable2pkg'].keys()),
   'perf-annotate':  3,
+  'perf-common':    '', # common flags to pass to all of perf-stat, perf-record & toplev
   'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c %d' % (pmu.lbr_event(), pmu.lbr_period()),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(globs['ldlat-def']),
@@ -104,7 +105,7 @@ do = {'run':        C.RUN_DEF,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
   'perf-stat-add':  2, # additional events using general counters
   'perf-stat-def':  'context-switches,cpu-migrations,page-faults', # JIRA LFE-9106
-  'perf-stat-ipc':  'stat -e instructions,cycles',
+  'perf-track':     '-e instructions,cycles',
   'pin':            'taskset 0x4',
   'plot':           0,
   'python':         sys.executable,
@@ -213,7 +214,7 @@ def perf_record_true(): return '%s record true > /dev/null' % get_perf_toplev()[
 def analyze_it():
   exe_v0(msg="Analyzing '%s'" % uniq_name())
   analyze.analyze(uniq_name(), args, do,
-                  len(do['perf-stat-ipc']) < 99) # hack for yperf which uses really long tunable
+                  len(do['perf-track']) < 99) # hack for yperf which uses really long tunable
 
 def tools_install(packages=[]):
   installer='sudo %s -y install ' % do['package-mgr']
@@ -438,6 +439,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       f1.write('\n')
     C.info('wrote: %s' % filename)
   def mask_eq(mask, var=args.profile_mask): return var & mask == mask
+  def perf_common(cmd='record', p=perf):  return ' '.join([p, cmd, do['perf-common'], ''])
   def perf_view(cmd='report', src=True):
     append = '%s%s' % (do['perf-report-append'], ' --objdump %s' % do['objdump'] if do['objdump'] != 'objdump' else '')
     return ' '.join((perf, cmd, append if src else ''))
@@ -481,12 +483,12 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     else:
       assert 'msr/tsc/' not in perf_args
       tscperf = perf_stat_TSC(log)
-    stat = ' stat %s ' % perf_args + ('-o %s -- %s' % (log, r) if csv else '-- %s | tee %s %s' % (r, log, grep))
-    ret = profile_exe(tscperf + perf + stat, msg, step, mode='perf-stat', fail=0 if warn else -1)
+    stat_args = perf_args + ('-o %s -- %s' % (log, r) if csv else ' -- %s | tee %s %s' % (r, log, grep))
+    ret = profile_exe(tscperf + perf_common('stat') + stat_args, msg, step, mode='perf-stat', fail=0 if warn else -1)
     if args.stdout or do['tee']==0 or do['help']<0: return C.error('perf-stat failed') if ret else None
-    if args.mode == 'process': return log
+    if args.mode == 'process' or args.print_only: return log
     if not C.isfile(log) or os.path.getsize(log) == 0:
-      ret = profile_exe(env + ' ' + tscperf + ocperf + stat, msg + '@; retry w/ ocperf', step, mode='perf-stat')
+      ret = profile_exe(env + ' ' + tscperf + perf_common('stat', p=ocperf) + stat_args, msg + '@; retry w/ ocperf', step, mode='perf-stat')
     if not C.isfile(log) or int(exe_1line('wc -l ' + log, 0, False)) < 5:
       if perfmetrics: return perf_stat(flags, msg + '@; no PM', step, events=events, perfmetrics=0, csv=csv, grep=grep)
       else: C.error('perf-stat failed for %s (despite multiple attempts)' % log)
@@ -547,7 +549,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
                       events=a_events() if do['perf-stat-add'] > -1 else '')
   if en(3) and do['sample']:
     data = '%s.perf.data' % record_name(do['perf-record'])
-    profile_exe(perf + ' record -c %d -o %s %s -- %s' % (pmu.default_period(), data, do['perf-record'], r),
+    profile_exe(perf_common() + ' -c %d -o %s %s -- %s' % (pmu.default_period(), data, do['perf-record'], r),
                 'sampling %s' % do['perf-record'].replace(' -g ', 'w/ stacks'), 3, tune='sample')
     if do['log-stdout'] and profiling():
       record_out = C.file2lines(C.log_stdio)
@@ -584,8 +586,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       retlat = '%s/%s-retlat.json' % (C.dirname(), out)
       tlargs += ' --ret-latency %s' % retlat
       if profiling() and (not C.isfile(retlat) or os.path.getsize(retlat) < 100):
-        exe('%s -q -o %s -- %s' % (genretlat, retlat, r), 'calibrating retire latencies')
-    c = "%s %s --nodes '%s' -V %s %s -- %s" % (toplev, v, nodes, C.toplev_log2csv(o), tlargs, r)
+        exe('%s -q -o %s -- %s' % (perf_common(p=genretlat), retlat, r), 'calibrating retire latencies')
+    c = "%s %s --nodes '%s' -V %s %s -- %s" % (perf_common('', p=toplev), v, nodes, C.toplev_log2csv(o), tlargs, r)
     if ' --global' in c:
       # https://github.com/andikleen/pmu-tools/issues/453
       C.warn('Global counting is subject to system noise (cpucount=%d)' % pmu.cpu('cpucount'))
@@ -668,20 +670,20 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     flags, raw, events = '-W -c 20011', 'raw' in do['model'], pmu.get_events(do['model'])
     nevents = events.count('/p' if raw else ':p')
     data = '%s_tpebs-perf.data' % record_name('_%s-%d' % (do['model'], nevents))
-    cmd = "%s record %s -e %s -o %s -- %s" % (perf if raw else '%s %s' % (env, ocperf), flags, events, data, r)
+    cmd = perf_common(p=perf if raw else '%s %s' % (env, ocperf)) + " %s -e %s -o %s -- %s" % (flags, events, data, r)
     profile_exe(cmd, "TMA sampling (%s with %d events)" % (do['model'], nevents), 14)
     n = samples_count(data)
     if n < 1e4: C.warn("Too little samples collected (%s in %s); rerun with: --tune :model:'MTLraw:2'" % (n, data))
     exe("%s script -i %s -F event,retire_lat > %s.retire_lat.txt" % (perf, data, data))
     exe("sort %s.retire_lat.txt | uniq -c | sort -n | ./ptage | tail" % (data, ))
 
-  def perf_record(tag, step, msg=None, record='record', track_ipc=do['perf-stat-ipc']):
+  def perf_record(tag, step, msg=None, record='record', track=do['perf-track']):
     perf_data, flags = '%s.perf.data' % record_calibrate('perf-%s' % tag), do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or (do['forgive'] > 1), 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     if not windows_file:
       log = '%s.perf_stat%s.log' % (out, C.chop(flags.strip()))
-      cmd = "bash -c '%s %s %s -o %s %s'" % (perf_stat_TSC(log), perf, track_ipc, log, r) if len(track_ipc) else '-- %s' % r
-      profile_exe(perf + ' %s %s -o %s %s && %s' % (record, flags, perf_data, cmd, C.grep('insn|time', log)),
+      cmd = "bash -c '%s %s %s -o %s %s'" % (perf_stat_TSC(log), perf_common('stat'), track, log, r) if len(track) else '-- ' + r
+      profile_exe(perf_common(record) + ' %s -o %s %s && %s' % (flags, perf_data, cmd, C.grep('insn|time', log)),
                   'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
       warn_file(perf_data)
       if tag not in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
@@ -902,14 +904,14 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   if en(18):
     assert do['msr']
     perf_data = '%s.perf.data' % record_name('-e msr')
-    profile_exe('sudo %s record -e msr:* -o %s -- %s' % (perf, perf_data, r), 'tracing MSRs', 18, tune='msr')
+    profile_exe('sudo %s -e msr:* -o %s -- %s' % (perf_common(), perf_data, r), 'tracing MSRs', 18, tune='msr')
     x = '-i %s | cut -d: -f3-4 | cut -d, -f1 | sort | uniq -c | sort -n' % perf_data
     exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None)
 
   if en(20) and do['flameg']:
     flags = '-ag -F 49' # -c %d' % pmu.period()
     perf_data = '%s.perf.data' % record_name(flags)
-    profile_exe('%s record %s -o %s -- %s' % (perf, flags, perf_data, r), 'FlameGraph', 20, tune='flameg')
+    profile_exe('%s %s -o %s -- %s' % (perf_common(), flags, perf_data, r), 'FlameGraph', 20, tune='flameg')
     x = '-i %s %s > %s.svg ' % (perf_data,
       ' | ./FlameGraph/'.join(['', 'stackcollapse-perf.pl', 'flamegraph.pl']), perf_data)
     exe(' '.join((perf, 'script', x)), msg=None, redir_out=None)
@@ -926,8 +928,9 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       pipeline_view(csv_file,widths) 
 
   if do['help'] < 0: profile_mask_help()
+  elif args.print_only: pass
   elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)):
-    if not args.print_only: stats.csv2stat(C.toplev_log2csv(logs['tma']))
+    stats.csv2stat(C.toplev_log2csv(logs['tma']))
     d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])
       ), 'num_not_counted_stats', 'num_not_supported_stats', 'DurationTimeInMilliSeconds'
     not_counted, not_supported = d[not_counted_name], d[not_supported_name]
@@ -1129,18 +1132,15 @@ def main():
   if args.sys_wide:
     if profiling(): do_info('system-wide profiling for %d seconds' % args.sys_wide)
     do['run'] = 'sleep %d'%args.sys_wide
-    for x in ('stat', 'stat-ipc') + record_steps: do['perf-'+x] += ' -a'
-    args.toplev_args += ' -a'
+    do['perf-common'] += ' -a'
     if not do['comm']: do['perf-filter'] = 0
     args.profile_mask &= ~0x4 # disable system-wide profile-step
   if args.delay:
     if profiling(): do_info('delay profiling by %d seconds' % args.delay)
-    delay = ' -D %d' % (args.delay * 1000)
-    for x in ('stat', 'stat-ipc'): do['perf-'+x] += delay
-    for x in record_steps: do['perf-'+x] += delay
-    args.toplev_args += delay
+    do['perf-common'] += ' -D %d' % (args.delay * 1000)
   if do['container']:
     if profiling(): C.info('container profiling')
+    # TODO: see if this should use :perf-common tunable (i.e. if the flags are accepted by perf-stat too)
     for x in record_steps: do['perf-'+x] += ' --buildid-all --all-cgroup'
   if args.verbose > globs['V_timing']: C.info('timing perf tool post-processing')
   if args.app and '|' in args.app: C.error("Invalid use of pipe in app: '%s'. try putting it in a .sh file" % args.app)

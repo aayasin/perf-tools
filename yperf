@@ -10,11 +10,11 @@
 # yperf - profiles (system) in a single run, generates reports and advises for SW optimizations
 #
 # TODO:
-#  - try toplev instread of perf-stat in "perf-stat-ipc" to avoid the PROXY of BV warning
+#  - try toplev instead of perf-stat in "perf-track" to avoid the PROXY of BV warning
 #
 from __future__ import print_function
 __author__  = 'ayasin'
-__version__ = 0.32      # see version line of do.py
+__version__ = 0.33      # see version line of do.py
 
 import common as C, pmu, tma
 
@@ -68,12 +68,12 @@ def main():
   # FIXME:03: high overhead with :srcline:1
   # FIXME:04: :funcs:0 can reduce processing time too (not used by advise mode)
   tune = '' # :funcs:0 :srcline:1
-  tune += ":loops:0 :perf-stat-ipc:\"'stat -e %s'\"" % events
+  tune += ":loops:0 :perf-track:\"'-e %s'\"" % events
   cmd = ' '.join([C.realpath('do.py'), mode, C.argp_get_common(args),
                   '-pm %x -v %d' % (args.profile_mask, args.verbose),
                   C.argp_tune_prepend(args, tune),
                   "-a '%s'" % args.app if args.app else '', '-o %s' % args.output])
-  C.exe_cmd(cmd, debug=1 if args.verbose >= 0 else 0)
+  C.exe_cmd(cmd, debug=args.verbose + 1)
 
 if __name__ == "__main__":
   main()

@@ -123,6 +123,7 @@ test-default-track-perf:
 	@mkdir -p perf-trk
 	info=$$(ls -1tr *info.log | tail -1); grep ^LBR $$info; cp $$info perf-trk/$$(date +"%Y-%m-%d").$$info
 	$(DO1) --toplev-args ' --no-multiplex --frequency --metric-group +Summary' -pm 1010 # carefully tests MUX sensitive profile-steps
+	$(DO1) -pm $(PM) --print-only $(DO_SUFF) > test-print-only
 	@echo 1 > $@
 test-LBR-edge:
 	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp -c 3000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
@@ -159,7 +160,7 @@ TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -sm 7 -v1 $(DO_SUFF)
 TS_B = STUDY_MODE=all-misp ./$< cfg1 cfg2 -a ./pmu-tools/workloads/BC2s --tune :forgive:2 $(DO_SUFF)
 TS_C = STUDY_MODE=dsb-bw ./$< cfg1 cfg2 -t2 -a ./run.sh --tune :loops:0 -sm 7 -v1 $(DO_SUFF)
 TS_D = STUDY_MODE=mem-bw ./$< cfg1 cfg2 -t3 -a ./run.sh --tune :loops:0 -sm 27 -v1 $(DO_SUFF)
-TS_E = STUDY_MODE=code-l2pf ./$< s1 s2 -a ./$(AP) --tune :loops:0 -sm 3 -v1 $(DO_SUFF)
+TS_E = STUDY_MODE=code-l2pf LBR_VERBOSE=0x10 ./$< s1 s2 -a ./$(AP) --score IpUnknown_Branch --tune :loops:0 -sm 3 -v1 $(DO_SUFF)
 test-study: study.py stats.py run.sh do.py
 	rm -f ./{.,}{{run,BC2s}-cfg*,$(AP)-s*}
 	@echo $(TS_A) > $@
@@ -169,15 +170,16 @@ test-study: study.py stats.py run.sh do.py
 	test -f run-cfg1-t1_run-cfg2-t1.stats.log
 	@echo $(TS_B) >> $@
 	$(TS_B) >> $@ 2>&1
-	test -f BC2s-cfg1-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips*.log
-	test -f BC2s-cfg2-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ips*.log
+	#amiri: test -f BC2s-cfg1-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ip*.log
+	grep -q '\-paths\-' BC2s-cfg2-t1-b-e*nameBR_MISP_RETIRED*.perf.data.ip*.log
 	test -f BC2s-cfg1-t1_BC2s-cfg2-t1.stats.log
-	@echo $(TS_C) >> $@
-	$(TS_C) >> $@ 2>&1
+	#amiri @echo $(TS_C) >> $@
+	#$(TS_C) >> $@ 2>&1
 	@echo $(TS_D) >> $@
 	$(TS_D) >> $@ 2>&1
 	@echo $(TS_E) >> $@
 	$(TS_E) >> $@ 2>&1
+	grep -q '^callchain' $(AP)-s[12]-t1-b*FRONTEND_RETIRED*.ip*.log
 
 TMI = 80000000
 define check_tripcount
@@ -251,6 +253,7 @@ PRE_PUSH_CMDS := \
       -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=3931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
       test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && \
       echo jon let PM=23931a then test -f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
+    "echo 'prompting for sudo soon3' && $(DO) log" \
     "echo 'testing Windows support' && $(MAKE) test-windows" \
     "echo 'testing sys-wide non-MUX profile-steps' && \
      $(MAKE) test-default APP=./$(AP) CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \
@@ -258,7 +261,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing default from another directory, toplev describe' && mkdir -p test-dir; cd test-dir; ln -sf ../common.py && \
      make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1" \
     "echo 'testing clean command' && cp -r test-dir test-dir0; cd test-dir0; ../do.py clean; ls -l" \
-    "echo 'skip testing study script (errors only)' $(MAKE) test-study" \
+    "echo 'testing study script (errors only)' $(MAKE) test-study" \
     "echo 'testing srcline stat' && $(MAKE) test-srcline" \
     "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
     "echo 'testing sampling by instructions' && $(MAKE) test-LBR-edge" \

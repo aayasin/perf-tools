@@ -257,13 +257,13 @@ def csv2dict(f):
 def zprefix(file): return 'z' if file.endswith(('.gz', '.zip')) else ''
 
 # (colored) grep with 0 exit status
-def grep(what, file='', flags='', color=False):
-  cmd = "%sgrep -E %s '%s' %s" % (zprefix(file), flags, what, file)
+def grep(what, file='', flags='', color=False, empty_lines=True):
+  cmd = "%sgrep -E %s '%s' %s%s" % (zprefix(file), flags, what, file, "" if empty_lines else " | grep -v '^$'")
   if color: cmd = 'script -q /dev/null -c "%s"' % cmd.replace('grep', 'grep --color')
   return "(%s || true)" % cmd
 # grep lines from start till end or max lines
 def grep_start_end(start, end, log, max=33):
-  return "%s | sed '/%s/q' | grep -v '^$'" % (grep(start, log, '-A%d' % max), end)
+  return "%s | sed '/%s/q'" % (grep(start, log, '-A%d' % max, empty_lines=False), end)
 
 # auxiliary: strings, argv, python-stuff
 #
@@ -369,6 +369,7 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   add_argument2('nodes', 'user metrics to pass to toplev\'s --nodes')
   add_prof_arg('sys-wide')
   add_prof_arg('delay')
+  ap.add_argument('--cpu', '-C', help='filter profiling on selected CPUs')
   if not usg: return common_args
   ap.add_argument('-r', '--repeat', default=3, type=int, help='times to run per-app counting and topdown-primary profile steps')
   ap.add_argument('-a', '--app', default=def_value('app', RUN_DEF), help='name of user-application/kernel/command to profile')

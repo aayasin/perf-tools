@@ -29,5 +29,5 @@ if sys.argv[2].startswith('--'):
 app = ' '.join(sys.argv[a:])
 
 cmd = 'OMP_NUM_THREAD=%d taskset %s  %s' % (n, mask, app)
-C.exe_cmd(cmd, debug=verbose, run=not dontrun)
+C.exe_cmd(cmd, debug=verbose if verbose else 0, run=not dontrun)
 

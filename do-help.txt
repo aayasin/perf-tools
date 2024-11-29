@@ -34,6 +34,7 @@ optional arguments:
                         system-wide profiling for x seconds (default: 0)
   --delay DELAY, -d DELAY
                         delay profiling for x seconds (default: 0)
+  --cpu CPU, -C CPU     filter profiling on selected CPUs (default: None)
   -r REPEAT, --repeat REPEAT
                         times to run per-app counting and topdown-primary
                         profile steps (default: 3)

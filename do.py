@@ -18,8 +18,9 @@
 #   support disable nmi_watchdog in CentOS
 from __future__ import print_function
 __author__ = 'ayasin'
-# pump version for changes with collection/report impact: by .01 on fix/tunable, by .1 on new command/profile-step/report or TMA revision
-__version__ = 3.73
+# pump version for changes with collection/report impact: by .01 on fix/tunable,
+#   by .1 on new command/profile-step/report/flag or TMA revision
+__version__ = 3.83
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -482,7 +483,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     else:
       assert 'msr/tsc/' not in perf_args
       tscperf = perf_stat_TSC(log)
-    stat_args = perf_args + ('-o %s -- %s' % (log, r) if csv else ' -- %s | tee %s %s' % (r, log, grep))
+    stat_args = perf_args + (' -o %s -- %s' % (log, r) if csv else ' -- %s | tee %s %s' % (r, log, grep))
     ret = profile_exe(tscperf + perf_common('stat') + stat_args, msg, step, mode='perf-stat', fail=0 if warn else -1)
     if args.stdout or do['tee']==0 or do['help']<0: return C.error('perf-stat failed') if ret else None
     if args.mode == 'process' or args.print_only: return log
@@ -530,7 +531,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   def record_calibrate(x):
     if not windows_file:
       factor = do['calibrate']
-      if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs_utilized', 1)))
+      if not (factor or args.sys_wide): factor = int(log10(get_stat('CPUs_Utilized', 1)))
       if factor:
         if '000' not in C.flag_value(do[x], '-c'): error("cannot calibrate '%s' with '%s'" % (x, do[x]))
         else:
@@ -702,7 +703,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     info, comm = '%s.info.log' % data, get_comm(data) if not windows_file else None
     clean = r"sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def print_info(x):
-      if args.mode != 'profile': exe_v0('printf "%s" >%s %s' % (x, '' if print_info.first and do['reprocess'] > 0 else '>', info))
+      if args.mode != 'profile' and not args.print_only:
+        exe_v0('printf "%s" >%s %s' % (x, '' if print_info.first and do['reprocess'] > 0 else '>', info))
       print_info.first = False
     print_info.first = True
     def static_stats():
@@ -957,7 +959,7 @@ def do_logs(cmd, ext=[], tag=''):
     if C.isfile('run.sh'): files += ['run.sh']
     exe('tar -cz%sf %s ' % ('v' if args.verbose > 0 else '', r) + ' '.join(files), 'tar into %s' % r, log=False)
     print_cmd('tar -czvf %s setup*.log .%s*.cmd %s*.{%s}' % (r, s, s, ','.join(log_files[1:])))
-  if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + ' *-out.txt *perf.data* $(find -name __pycache__) results.tar.gz')
+  if cmd == 'clean': exe('rm -rf ' + ' *.'.join(log_files) + " *-out.txt *perf.data* $(find -name __pycache__ -or -name '*.pyc') results.tar.gz")
 
 def build_kernel(dir='./kernels/'):
   def fixup(x): return x.replace('./', dir)
@@ -1137,6 +1139,10 @@ def main():
   if args.delay:
     if profiling(): do_info('delay profiling by %d seconds' % args.delay)
     do['perf-common'] += ' -D %d' % (args.delay * 1000)
+  if args.cpu:
+    if profiling(): do_info('filtered profiling on CPUs: ' + args.cpu)
+    do['perf-common'] += ' -C %s' % args.cpu
+    if not do['comm']: do['perf-filter'] = 0
   if do['container']:
     if profiling(): C.info('container profiling')
     # TODO: see if this should use :perf-common tunable (i.e. if the flags are accepted by perf-stat too)

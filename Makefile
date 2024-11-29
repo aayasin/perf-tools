@@ -76,11 +76,15 @@ test-yperf: run-mem-bw-yperf workloads/permute
 	./yperf report -pm 100 -o permute-yperf -- ./workloads/permute abcdefghijk
 	./yperf record -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
 	./yperf report -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
+	./yperf record -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- perf bench numa mem -p 16 -C0-15
+	./yperf report -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- perf bench numa mem -p 16 -C0-15
 	./yperf report -o $<
 ifneq ($(CPU), ICX)
 	./yperf advise -o $<
 	./yperf advise -o permute-yperf
 	./yperf advise -o CLTRAMP3D-yperf
+	./yperf report -o perf-bench-numa-mem-yperf
+	$(DO) profile -C4-7 -pm 11116 -a 'perf bench numa mem -p 16 -C0-15'"
 endif
 
 run-mt:
@@ -247,7 +251,7 @@ PRE_PUSH_CMDS := \
     "echo 'prompting for sudo soon2' && $(DO) log" \
     "echo 'running the yperf profiler' && $(MAKE) test-yperf" \
     "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL)" \
-    "echo 'testing prof-no-aux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
+    "echo 'testing prof-no-mux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
     "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view, pipeline-view & over-time profile-steps, tar command' && \
       $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
       -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=3931a && test -f $(AP)-u.$(CPU).results.tar.gz && \

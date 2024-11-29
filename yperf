@@ -14,7 +14,7 @@
 #
 from __future__ import print_function
 __author__  = 'ayasin'
-__version__ = 0.33      # see version line of do.py
+__version__ = 0.34      # see version line of do.py
 
 import common as C, pmu, tma
 
@@ -39,7 +39,7 @@ def parse_args():
   ap = C.argument_parser(usage, mask=0x101,
     defs={'app': None, 'delay': 0, 'events': events, 'sys-wide': 10, 'verbose': -1,
     })
-  ap.add_argument('mode', default=prof_modes, help='mode for prof: ' + ' '.join(prof_modes))
+  ap.add_argument('mode', choices=prof_modes, help='mode for prof: ' + ' '.join(prof_modes))
   ap.add_argument('-o', '--output', default='myprofile', help='basename to use for output files')
   args, rest = ap.parse_known_args()
   if rest:
@@ -64,7 +64,7 @@ def main():
     C.warn('Using a PROXY of Bottlenecks View that is subject to INACCURACIES. Use do.py for in-depth analysis!')
     mode = 'analyze'
   else:
-    assert args.mode == 'record'
+    assert args.mode == 'record', "unsupported mode: '%s'" % args.mode
   # FIXME:03: high overhead with :srcline:1
   # FIXME:04: :funcs:0 can reduce processing time too (not used by advise mode)
   tune = '' # :funcs:0 :srcline:1
@@ -72,6 +72,7 @@ def main():
   cmd = ' '.join([C.realpath('do.py'), mode, C.argp_get_common(args),
                   '-pm %x -v %d' % (args.profile_mask, args.verbose),
                   C.argp_tune_prepend(args, tune),
+                  "-C %s" % args.cpu if args.cpu else '',
                   "-a '%s'" % args.app if args.app else '', '-o %s' % args.output])
   C.exe_cmd(cmd, debug=args.verbose + 1)
 

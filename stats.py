@@ -308,8 +308,9 @@ def parse_perf(l):
   elif 'Performance counter stats for' in l:
     name = 'app'
     val = l.split("'")[1]
-    name2 = '#-runs'
-    val2 = int(l.split("(")[1].split(' ')[0]) if '(' in l else 1
+    if 'runs)' in l:
+      name2 = '#-runs'
+      val2 = int(l.split("(")[2 if 'CPU' in l else 1].split(' ')[0]) if '(' in l else 1
   elif 'seconds' in l:
     name = items[4 if multirun else 2]
     val = convert(items[0])
@@ -497,7 +498,7 @@ def perf_log2stat(log, smt_on, d={}):
       if re.match('^\s*$', l) or 'perf stat ' in l: continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val
-      if name2 in ('CPUs_utilized', 'Frequency'): ue[name2] = val2
+      if name2 in ('Frequency', ): ue[name2] = val2
     ue['TSC'] = get_TSC(f)
     return ue
   uarch = params(smt_on)

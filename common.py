@@ -393,10 +393,10 @@ def argp_tune_prepend(args, prep):
   tune.insert(0, [prep])
   return ' --tune ' + ' '.join([' '.join(i) for i in tune])
 
-def commands_list():
+def commands_list(extra_cmds):
   return ' '.join(chop(exe_output("grep -E 'elif c (==|in) ' %s | cut -d\\' -f2- | cut -d: -f1 | sort" % sys.argv[0], sep=' '), "),'").split() +
          [("%s-" % c) + x[:-1].replace("'", '') for x in exe_output(grep('com2cond =', sys.argv[0]), sep='').split()
-         if x.endswith(':') for c in ['enable', 'disable', 'suspend']])
+         if x.endswith(':') for c in ['enable', 'disable', 'suspend']] + extra_cmds)
 
 def command_basename(comm, iterations=None):
   if comm is None or comm.isdigit(): return 'run%d' % (int(comm) if comm else os.getpid())

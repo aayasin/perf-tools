@@ -1,6 +1,7 @@
 .PHONY: clean clean-all help
 AP = CLTRAMP3D
 APP = taskset 0x4 ./$(AP)
+AP_MT = perf bench numa mem -p 16 -C0-15
 CC = clang
 CPP = clang++
 CLONE = git clone --recurse-submodules https://github.com/aayasin/perf-tools
@@ -76,15 +77,15 @@ test-yperf: run-mem-bw-yperf workloads/permute
 	./yperf report -pm 100 -o permute-yperf -- ./workloads/permute abcdefghijk
 	./yperf record -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
 	./yperf report -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
-	./yperf record -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- perf bench numa mem -p 16 -C0-15
-	./yperf report -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- perf bench numa mem -p 16 -C0-15
+	./yperf record -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- $(AP_MT)
 	./yperf report -o $<
 ifneq ($(CPU), ICX)
 	./yperf advise -o $<
 	./yperf advise -o permute-yperf
 	./yperf advise -o CLTRAMP3D-yperf
+	./yperf report -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- $(AP_MT) # fails on ICX!
 	./yperf report -o perf-bench-numa-mem-yperf
-	$(DO) profile -C4-7 -pm 11116 -a 'perf bench numa mem -p 16 -C0-15'"
+	$(DO) profile -C4-7 -pm 11116 -a "$(AP_MT)"
 endif
 
 run-mt:

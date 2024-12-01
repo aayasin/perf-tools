@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.83
+__version__ = 3.84
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -252,6 +252,15 @@ def tools_install(packages=[]):
   if do['loop-ideal-ipc'] & 0x2:
     if C.isfile(C.Globals['uica']): exe('./build-uica.sh -u' ,'updating uiCA')
     else: exe('./build-uica.sh' ,'installing uiCA')
+
+def install1(pkg):
+  all_packages = do['packages'] + ['flameg']
+  if not pkg: return sorted(['install:%s' % x for x in all_packages])
+  if pkg not in all_packages: error("Unsupported package: '%s'" % pkg)
+  tune = ' '.join([':%s:0' % x for x in do['packages']])
+  if pkg == 'python': pass
+  else: tune += " :%s:1" % pkg
+  return exe('./do.py setup-all -v%d --tune :tee:0 %s' % (args.verbose, tune))
 
 def tools_update(kernels=[], mask=0x7):
   if mask & 0x1: 
@@ -910,13 +919,13 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None)
 
   if en(20) and do['flameg']:
-    flags = '-ag -F 49' # -c %d' % pmu.period()
+    flags = '-a -g -F 49' # -c %d' % pmu.period()
     perf_data = '%s.perf.data' % record_name(flags)
     profile_exe('%s %s -o %s -- %s' % (perf_common(), flags, perf_data, r), 'FlameGraph', 20, tune='flameg')
     x = '-i %s %s > %s.svg ' % (perf_data,
       ' | ./FlameGraph/'.join(['', 'stackcollapse-perf.pl', 'flamegraph.pl']), perf_data)
     exe(' '.join((perf, 'script', x)), msg=None, redir_out=None)
-    print('firefox %s.svg &' % perf_data)
+    if args.mode != 'profile': print('firefox %s.svg &' % perf_data)
 
   if en(21): 
     widths = pmu.cpu_pipeline_width('all_widths')
@@ -983,7 +992,7 @@ def parse_args():
     defs={'perf': 'perf', 'pmu-tools': '%s %s/pmu-tools' % (do['python'], C.dirname()),
           'toplev-args': C.TOPLEV_DEF, 'nodes': do['metrics'], 'sys-wide': 0, 'delay': 0}, epilog=epilog)
   ap.add_argument('command', nargs='+', help='setup-perf log profile analyze tar, all (for these 5) '
-                  '\nsupported options: ' + C.commands_list())
+                  '\nsupported options: ' + C.commands_list(install1(None)))
   ap.add_argument('--mode', nargs='?', choices=modes, default=modes[-1], help='analysis mode options: profile-only, (post)process-only or both')
   ap.add_argument('--install-perf', nargs='?', default=None, const='install', help='perf tool installation options: [install]|patch|build')
   ap.add_argument('--print-only', action='store_const', const=True, default=False, help='print the commands without running them')
@@ -1054,8 +1063,8 @@ def run_commands(commands, windows_file=None):
       func, arg = com2func[key][0], com2func[key][1]
       func() if arg is None else func(*arg) if type(arg) is tuple else func(arg)
     elif c == 'help':         do['help'] = 1; toplev_describe(args.metrics, mod='')
-    elif c == 'install-python': exe('./do.py setup-all -v%d --tune %s' % (args.verbose,
-                                    ' '.join([':%s:0' % x for x in (do['packages'] + ('tee', ))])))
+    elif c == 'install-python':   install1('python')
+    elif c.startswith('install'): install1(param[0])
     elif c == 'analyze':      analyze_it()
     elif c == 'log':          log_setup()
     elif c == 'profile':      profile(args.profile_mask)

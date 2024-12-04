@@ -3,7 +3,7 @@ AP = CLTRAMP3D
 APP = taskset 0x4 ./$(AP)
 AP_MT = perf bench numa mem -p 16 -C0-15
 CC = clang
-CPP = clang++
+CPP = /usr/bin/clang++
 CLONE = git clone --recurse-submodules https://github.com/aayasin/perf-tools
 CMD = profile
 CPU = $(shell ./pmu.py CPU)
@@ -15,6 +15,7 @@ MAKE = make --no-print-directory
 METRIC = -m IpCall
 MGR = sudo $(shell python -c 'import common; print(common.os_installer())') -y -q
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
+OPT = -static -fcf-protection=none
 PM = $(shell python -c 'import common; print("0x%x" % common.PROF_MASK_DEF)')
 PY2 = python2.7
 PY3 = python3
@@ -55,8 +56,8 @@ intel:
 	cd dtlb; ./build.sh
 	#git clone https://github.com/intel-innersource/applications.benchmarking.cpu-micros.inst-lat-bw
 	#wget https://downloadmirror.intel.com/763324/mlc_v3.10.tgz
-workloads/permute: workloads/src/permute.cpp /usr/bin/clang++
-	$(CPP) -g -std=c++17 -static $< -o $@
+workloads/permute: workloads/src/permute.cpp $(CPP)
+	$(CPP) -g -std=c++17 $(OPT) $< -o $@
 tramp3d-v4: pmu-tools/workloads/CLTRAMP3D $(CPP)
 	cd pmu-tools/workloads; ./CLTRAMP3D; cp tramp3d-v4.cpp CLTRAMP3D ../..; rm tramp3d-v4.cpp
 	sed -i "s/11 tramp3d-v4.cpp/11 tramp3d-v4.cpp -o $@/" CLTRAMP3D

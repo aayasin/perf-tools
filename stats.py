@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.05
+__version__= 1.06
 
 import common as C, pmu, tma
 import csv, json, os.path, re, sys
@@ -43,7 +43,7 @@ def get_val(s, c):
       val = tma.estimate(s, strip(sDB[c]))
       sDB[c][s] = (val, 'Bottleneck')
     else: C.warn('KeyError for stat: %s, in config: %s' % (s, c))
-  if debug > 0: print('stats: get_stat(%s, %s) = %s' % (s, c, str(val)))
+  if debug > 0: print('stats: get_val(%s, %s) = %s' % (s, c, str(val)))
   return val
 
 def strip(d): return {k: v[0] for k, v in d.items()}
@@ -62,7 +62,7 @@ stats = {'verbose': 0}
 # internal methods
 def get_file_int(prefix, ext):
   for filename in C.glob(prefix + '*', True):
-    if re.search("%s-janysave_type-e([a-z0-9]+)ppp-c([0-9]+)(\-a)?%s.log" % (prefix, ext), filename):
+    if re.search("%s-janysave_type-e([a-z0-9_]+)ppp-c([0-9]+)(\-a)?%s.log" % (prefix, ext), filename):
       return filename
   return None
 
@@ -284,6 +284,7 @@ def read_perf(f):
     try:
       name, group, val, var, name2, group2, val2, name3, group3, val3 = parse_perf(l)
       if name:
+        if name.startswith('cpu_core/'): name = name[9:-1]
         d[name] = (val, group)
         if var: d[name + ':var'] = (var, group)
         calc_metric(name, val)

@@ -40,7 +40,7 @@ metrics = {
   'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
                     C.flag2str(',+IpAssist', pmu.v4p()) +
                     C.flag2str(',+Memory_Bound*/3', pmu.goldencove_on()),
-  'key-nodes':    ("+CoreIPC,+CORE_CLKS" if pmu.lunarlake_on() else "+IPC,+CLKS") +
+  'key-nodes':    ("+IPC,+CLKS" if pmu.lunarlake_on() else "+CoreIPC,+CORE_CLKS") +
                     ",+Instructions,+Time,-CPUs_Utilized,-CPU_Utilization",
   'version':      '4.8-full-perf',
   'num-mux-groups':   58, # -pm 0x80 on ICX

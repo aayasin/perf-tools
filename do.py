@@ -364,8 +364,9 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
       exe('echo "MSR 0x%03x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
   if do['cpuid']:
     exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x000000(01|0a|23 0x0[0-5])', 'cpuid'), out))
-    if pmu.hybrid(): exe("cpuid -r | tee %s | %s | uniq -c >> %s" % (c.replace('.log', '-all.log'), C.grep('0x00000023 0x00'), out))
-  exe("dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d,
+    if pmu.hybrid() and pmu.redwoodcove_on():
+      exe("cpuid -r | tee %s | %s | uniq -c >> %s" % (c.replace('.log', '-all.log'), C.grep('0x00000023 0x00'), out))
+  if do['super']: exe("dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d,
     label('Command line|Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
   new_line()          #PMU

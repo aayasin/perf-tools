@@ -58,7 +58,7 @@ def lbr_info():
   return lbr_info.info_d
 lbr_info.info_d = None
 
-def advise(m, prefix='Advise'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
+def advise(m, prefix='Advice'): C.printc('\t%s:: %s' % (prefix, m), C.color.PURPLE)
 def exe(x, msg=None): return C.exe_cmd(x, msg=msg, debug=handles['verbose'] > 1)
 def file2lines(f, pop=False): return C.file2lines(f, fail=True, pop=pop, debug=handles['verbose'] > 3)
 def hint(m): advise(m, '\tHint')

@@ -14,7 +14,7 @@
 #
 from __future__ import print_function
 __author__  = 'ayasin'
-__version__ = 0.34      # see version line of do.py
+__version__ = 0.35      # see version line of do.py
 
 import common as C, pmu, tma
 

@@ -125,7 +125,7 @@ def log_callchain():
 def exe_cmd(x, msg=None, redir_out=None, debug=0, run=True, log=True, fail=1, background=False):
   if redir_out: x = x.replace(' |', redir_out + ' |', 1) if '|' in x else x + redir_out
   x = x.replace('| ./', '| %s/' % dirname())
-  if x.startswith('./'): x.replace('./', '%s/' % dirname(), 1)
+  if x.startswith('./'): x = x.replace('./', '%s/' % dirname(), 1)
   if msg:
     if '@' in msg: msg='\t' + msg.replace('@', '')
     else: msg = msg + ' ..'

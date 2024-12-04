@@ -57,7 +57,7 @@ intel:
 	#wget https://downloadmirror.intel.com/763324/mlc_v3.10.tgz
 workloads/permute: workloads/src/permute.cpp /usr/bin/clang++
 	$(CPP) -g -std=c++17 -static $< -o $@
-tramp3d-v4: pmu-tools/workloads/CLTRAMP3D /usr/bin/clang++
+tramp3d-v4: pmu-tools/workloads/CLTRAMP3D $(CPP)
 	cd pmu-tools/workloads; ./CLTRAMP3D; cp tramp3d-v4.cpp CLTRAMP3D ../..; rm tramp3d-v4.cpp
 	sed -i "s/11 tramp3d-v4.cpp/11 tramp3d-v4.cpp -o $@/" CLTRAMP3D
 	./CLTRAMP3D

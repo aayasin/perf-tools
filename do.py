@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.84
+__version__ = 3.85
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -29,7 +29,7 @@ from lbr.stats import inst_fusions
 from getpass import getuser
 from math import log10
 from platform import python_version
-from pipeline import pipeline_view
+#from pipeline import pipeline_view
 
 globs = {
   'cmds_file':          None,
@@ -349,6 +349,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   exe('uname -a | sed s/Linux/Linux:/ > ' + out, 'logging setup')
   log_patch("cat /etc/os-release | grep -E -v 'URL|ID_LIKE|CODENAME'")
   for f in ('/sys/kernel/mm/transparent_hugepage/enabled',
+            '/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor',
             '/sys/devices/system/node/node0/memory_side_cache/index1/size'):
     if C.isfile(f): prn_sysfile(f, out)
   log_patch("sysctl -a | tee setup-sysctl.log | grep -E 'randomize_va_space|hugepages ='")
@@ -363,7 +364,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
       exe('echo "MSR 0x%03x: %s" >> %s' % (m, ('0'*(16 - len(v)) if C.is_num(v, 16) else '\t\t') + v, out))
   if do['cpuid']:
     exe("cpuid -1 > %s && cpuid -1r | tee -a %s | %s >> %s" % (c, c, label(' 0x000000(01|0a|23 0x0[0-5])', 'cpuid'), out))
-    if pmu.hybrid(): exe("cpuid -r | tee %s | grep '0x00000023 0x00' | uniq -c >> %s" % (c.replace('.log', '-all.log'), out))
+    if pmu.hybrid(): exe("cpuid -r | tee %s | %s | uniq -c >> %s" % (c.replace('.log', '-all.log'), C.grep('0x00000023 0x00'), out))
   exe("dmesg -T | tee %s | %s >> %s && cat %s | %s | tail -1 >> %s" % (d,
     label('Command line|Performance E|micro'), out, d, label('BIOS '), out))
   exe("%s && %s report -I --header-only > setup-cpu-topology.log" % (perf_record_true(), get_perf_toplev()[0]))
@@ -571,6 +572,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     def show(n=7): return r"| grep -wA%d Overhead | cut -c-150 | grep -E -v '^[#\s]*$| 0\.0.%%' | sed 's/[ \\t]*$//' " % n
     exe(perf_report_syms + " -n --no-call-graph -i %s | tee %s-funcs.log %s| nl -v-1" % (data, base, show()), '@report functions')
     exe(perf_report + " --stdio --hierarchy --header -i %s | tee %s-modules.log %s" % (data, base, show(22)), '@report modules')
+    # works only with -g lbr : exe(perf_report + " --stdio -g folded -i %s | tee %s-callchains.log | grep '^[0-9]' | sort -nr | head -5" % (data, base), '@report callchains')
     if do['perf-annotate']:
       exe(r"%s --stdio -n -l -i %s | c++filt | tee %s "
         r"| tee >(grep -E '^\s+[0-9]+ :' | sort -n | ./ptage > %s-code-ips.log) "
@@ -934,8 +936,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     do['interval'] = max(do['interval'],1000)
     csv_file = perf_stat('-r1 -I%d' % do['interval'], 'Pipeline View every %dms' % do['interval'], step=21,
                          csv=True, events=evts, basic_events='', first_events='', last_events='', perfmetrics='') 
-    if args.mode != 'profile':
-      pipeline_view(csv_file,widths) 
+    #if args.mode != 'profile':
+    #  pipeline_view(csv_file, widths)
 
   if do['help'] < 0: profile_mask_help()
   elif args.print_only: pass
@@ -1039,7 +1041,7 @@ def run_commands(commands, windows_file=None):
     elif c == 'setup-all':    tools_install()
     elif c == 'prof-no-mux':  profile(args.profile_mask if args.profile_mask != C.PROF_MASK_DEF else 0x80,
                                       toplev_args=['vl6', ' --metric-group +Summary --single-thread'])
-    elif c == 'build-perf':   exe('%s ./do.py setup-all --install-perf build -v%d --tune %s' % (do['python'],
+    elif c == 'build-perf':   exe('./do.py setup-all --install-perf build -v%d --tune %s' % (
       args.verbose, ' '.join([':%s:0' % x for x in (do['packages']+['xed', 'tee', 'loop-ideal-ipc'])])))
     elif c == 'setup-perf':   setup_perf()
     elif c == 'find-perf':    find_perf()

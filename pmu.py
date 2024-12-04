@@ -276,6 +276,10 @@ def cpu(what, default=None):
     if forcecpu and retlat():
       if forcecpu in ('ADL', 'SPR'): cpu.state['CPUID.23H'] = 0
       else: C.error('FORCECPU=%s is not supported for %s' % (forcecpu, name(True)))
+    if hybrid():
+      p_core_el = cpu.state['eventlist']
+      hybrid_el = p_core_el.replace('-core.json', '-hybridcore-Core.json')
+      if C.isfile(hybrid_el) and not C.isfile(p_core_el): C.exe_cmd('ln -s %s %s' % (hybrid_el, p_core_el), debug=1)
     return cpu(what, default)
   except ImportError:
     C.warn("could not import tl_cpu")

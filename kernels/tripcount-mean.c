@@ -19,7 +19,7 @@ int main(int argc, const char* argv[])
     asm ("      mov %1,%0"
                  : "=r" (n)
                  : "r" (atol(argv[1])));
-    asm("	PAUSE");
+    asm volatile("	PAUSE");
     for (i0=0; i0<n; i0++) {
         for(i1=0; i1<20; i1++) {
             asm("   nop");

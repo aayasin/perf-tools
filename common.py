@@ -410,7 +410,7 @@ def command_basename(comm, iterations=None):
         break
   if '/' in name[0]:
     if not name[0] == RUN_DEF: check_executable(name[0].replace("'", ''))
-    name[0] = name[0].split('/')[-1].replace('.sh', '')
+    name[0] = name[0].split('/')[-1].replace('.sh', '').replace('.py', '')
   if len(name) == 1 and ('kernels' in comm or iterations): assert iterations; name.append(iterations)
   namestr = name.pop(0)
   for x in name: namestr += "-%s" % x.strip('-')

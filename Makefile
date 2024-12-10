@@ -78,14 +78,14 @@ test-yperf: run-mem-bw-yperf workloads/permute
 	./yperf report -pm 100 -o permute-yperf -- ./workloads/permute abcdefghijk
 	./yperf record -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
 	./yperf report -pm 102 -o CLTRAMP3D-yperf -- ./CLTRAMP3D
-	./yperf record -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- $(AP_MT)
 	./yperf report -o $<
 ifneq ($(CPU), ICX)
 	./yperf advise -o $<
 	./yperf advise -o permute-yperf
 	./yperf advise -o CLTRAMP3D-yperf
+	./yperf record -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- $(AP_MT)
 	./yperf report -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- $(AP_MT) # fails on ICX!
-	./yperf report -o perf-bench-numa-mem-yperf
+	./yperf advise -o perf-bench-numa-mem-yperf
 	$(DO) profile -C4-7 -pm 11116 -a "$(AP_MT)"
 endif
 
@@ -199,8 +199,9 @@ test-tripcount-mean: lbr/lbr.py do.py lbr/x86.py
 	$(call check_tripcount,1,90,110)
 	$(call check_tripcount,2,60,80)
 
+blender_barbershop_arls_baseline-c4000003.perf.script.gz:
+	wget https://github.com/user-attachments/assets/967ec1db-a481-4923-8517-def77e20b58d && mv 967ec1db-a481-4923-8517-def77e20b58d $@
 test-windows: blender_barbershop_arls_baseline-c4000003.perf.script.gz
-	wget https://github.com/user-attachments/assets/967ec1db-a481-4923-8517-def77e20b58d && mv 967ec1db-a481-4923-8517-def77e20b58d $<
 	$(DO) process-win -a $<
 	python < scripts/test-windows.py
 

@@ -229,6 +229,13 @@ do-help.txt: do.py common.py pmu.py tma.py
 update:
 	$(DO) tools-update -v1
 
+L = 7
+PMUTOOLS = $(shell python -c 'import common; print(common.dirname())')/pmu-tools
+TMA_V = $(shell $(DO) version | cut -d= -f7)
+test-pmu-tools: do.py pmu.py
+	RUN_NLOOP=$(L) PMUTOOLS=$(PMUTOOLS) $(DO) --pmu-tools $(PMUTOOLS) profile --tune :help:0  -pm 80   -o python-l$(L)-tma$(TMA_V) $(DO_SUFF)
+	RUN_NLOOP=$(L) PMUTOOLS=$(PMUTOOLS) $(DO) --pmu-tools $(PMUTOOLS) profile --tune :help:0  -pm 1012 -o python-l$(L)-tma$(TMA_V) $(DO_SUFF)
+
 PT=perf-tools.1
 clean:
 	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \

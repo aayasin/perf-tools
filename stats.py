@@ -362,7 +362,7 @@ def read_toplev(filename, metric=None):
   d = {}
   for l in file2lines(filename):
     try:
-      if not re.match(r"^(|core )(FE|BE|BAD|RET|Info|warning.*zero)", l): continue
+      if not re.match(r"^(|core )(FE|BE|BAD|RET|Bottleneck|Info|warning.*zero)", l): continue
       l = l.replace('% ', '%_')
       items = l.strip().split()
       if debug > 5: print('debug:', len(items), items, l)

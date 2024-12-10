@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.85
+__version__ = 3.86
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -599,6 +599,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       tlargs += ' --ret-latency %s' % retlat
       if profiling() and (not C.isfile(retlat) or os.path.getsize(retlat) < 100):
         exe('%s -q -o %s -- %s' % (perf_common(p=genretlat), retlat, r), 'calibrating retire latencies')
+    if not args.sys_wide: tlargs += ' --no-uncore'
     c = "%s %s --nodes '%s' -V %s %s -- %s" % (perf_common('', p=toplev), v, nodes, C.toplev_log2csv(o), tlargs, r)
     if ' --global' in c:
       # https://github.com/andikleen/pmu-tools/issues/453
@@ -648,7 +649,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
         exe("%s --stdio -i %s > %s " % (perf_view(c), perf_data, log.replace('toplev--drilldown', 'locate-'+c)), '@'+c)
 
   if en(12):
-    cmd, logs['info'] = toplev_V('-mvl2 --no-sort %s' % ('' if args.sys_wide else ' --no-uncore'),
+    cmd, logs['info'] = toplev_V('-mvl2 --no-sort',
                         nodes='+IPC,-CPUs_Utilized,'+tma.get('bottlenecks-only').replace('+', '-'))
     profile_exe(cmd + ' | tee %s | %s' % (logs['info'], grep_nz), 'Info metrics', 12)
 

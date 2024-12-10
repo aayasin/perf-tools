@@ -15,7 +15,7 @@ positional arguments:
                         install:dmidecode install:flameg install:loop-ideal-
                         ipc install:msr install:numactl install:xed
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --perf PERF           use a custom perf tool (default: perf)
   --pmu-tools PMU_TOOLS
@@ -31,7 +31,7 @@ optional arguments:
   --nodes NODES, -n NODES
                         user metrics to pass to toplev's --nodes (default: +Lo
                         ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,
-                        +UopPI,+IpAssist)
+                        +UopPI,+IpAssist,+Memory_Bound*/3)
   --sys-wide SYS_WIDE, -s SYS_WIDE
                         system-wide profiling for x seconds (default: 0)
   --delay DELAY, -d DELAY

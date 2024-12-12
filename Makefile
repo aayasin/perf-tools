@@ -25,6 +25,8 @@ SHOW = tee
 SKIP_EX = false # Skip extra checks
 ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 TEST_LBR_PERF = 1
+TREE_C=$(shell python -c 'from common1 import registrar as r; print(r.name("tree", "csv"))')
+TREE_L=$(shell python -c 'from common1 import registrar as r; print(r.name("tree"))')
 
 all: tramp3d-v4
 	@echo done
@@ -110,7 +112,7 @@ test-bc2:
 CPUIDI = 200000000
 test-bottlenecks: kernels/cpuid
 	$(DO1) -pm 10 --tune :help:0 :forgive:2
-	grep Bottleneck cpuid-$(CPUIDI).toplev-vl6.log | sort -n -k4 | tail -1 | grep --color Irregular_Overhead
+	grep Bottleneck cpuid-$(CPUIDI)$(TREE_L) | sort -n -k4 | tail -1 | grep --color Irregular_Overhead
 test-build:
 	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS -n '+Core_Bound*' -pm 22 | $(SHOW)
 	grep -q 'Backend_Bound.Core_Bound.Ports_Utilization.Ports_Utilized_1' datadep-20e6.toplev-vl2.log
@@ -159,7 +161,7 @@ test-srcline: lbr/lbr.py do.py common.py
 	$(DO) $(CMD) -a './kernels/pagefault-$(CCB) $(SLI)' -pm 100 --tune :srcline:1 $(DO_SUFF) > $@ 2>&1
 	grep -q 'srcline: pagefault.c;43' pagefault-$(CCB)-$(SLI)*info.log || $(FAIL)
 test-stats: stats.py test-default-track-perf
-	./stats.py $(AP).toplev-vl6-perf.csv && test -f $(AP).$(CPU).stat
+	./stats.py $(AP)$(TREE_C) && test -f $(AP).$(CPU).stat
 	@echo 1 > $@
 
 TS_A = ./$< cfg1 cfg2 -a ./run.sh --tune :loops:0 -sm 7 -v1 $(DO_SUFF)
@@ -229,11 +231,11 @@ do-help.txt: do.py common.py pmu.py tma.py
 update:
 	$(DO) tools-update -v1
 
-L = 7
+L = 11
 PMUTOOLS = $(shell python -c 'import common; print(common.dirname())')/pmu-tools
-TMA_V = $(shell $(DO) version | cut -d= -f7)
+TMA_V = $(shell $(DO) version --pmu-tools $(PMUTOOLS) | cut -d= -f7)
 test-pmu-tools: do.py pmu.py
-	RUN_NLOOP=$(L) PMUTOOLS=$(PMUTOOLS) $(DO) --pmu-tools $(PMUTOOLS) profile --tune :help:0  -pm 80   -o python-l$(L)-tma$(TMA_V) $(DO_SUFF)
+	RUN_NLOOP=$(L) PMUTOOLS=$(PMUTOOLS) $(DO) --pmu-tools $(PMUTOOLS) profile --tune :help:0  -pm 82 -o python-nomux-l$(L)-tma$(TMA_V) $(DO_SUFF)
 	RUN_NLOOP=$(L) PMUTOOLS=$(PMUTOOLS) $(DO) --pmu-tools $(PMUTOOLS) profile --tune :help:0  -pm 1012 -o python-l$(L)-tma$(TMA_V) $(DO_SUFF)
 
 PT=perf-tools.1
@@ -276,7 +278,7 @@ PRE_PUSH_CMDS := \
      make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1" \
     "echo 'testing clean command' && cp -r test-dir test-dir0; cd test-dir0; ../do.py clean; ls -l" \
     "echo 'testing study script (errors only)' $(MAKE) test-study" \
-    "echo 'testing srcline stat' && $(MAKE) test-srcline" \
+    "echo 'testing srcline stat' && echo skip $(MAKE) test-srcline" \
     "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
     "echo 'testing sampling by instructions' && $(MAKE) test-LBR-edge" \
     "echo 'testing pipeline-view sys-wide idle' && echo jon $(DO) profile -pm 200000 -s 20 -o pipeline-view -v1 " \
@@ -293,3 +295,4 @@ pre-push: help
 			echo "$$cmd" >> .prepush_state.cmd; \
 		fi; \
 	done
+

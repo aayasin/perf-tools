@@ -21,7 +21,9 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
   * **ocperf** -- perf wrapper that converts Intel event names to perf-events syntax
   * **genretlat** -- a profiler to collect Retire Latencies on recent Intel processors
 * **workloads/** -- an evolving collection of "micro-workloads"
-  * BC.sh -- wrapper of the Linux bc utility
+  * **aibenchmark.py** -- wraps ai-benchmark use on CPU
+  * **BC.sh** -- wrapper of the Linux bc utility
+  * **permute** -- calculates permutations of input string at O(n!)
   * **mmm/** -- the matrix-matrix mutiply (mmm) HPC kernel - multiple optimizations as demonstrated in [Tuning Performance via Metrics with Expectations](https://ieeexplore.ieee.org/document/8714063)
   * **src/** -- collection of sources for microbenchmarks
     * **permute** -- calculates permutations of input string
@@ -36,6 +38,8 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
   * **fp-arith-mix.c** -- demonstrates utilization of extra counters in Icelake's PMU
   * **rfetch3m** -- a random fetcher across 3MB code footprint (auto-generated)
   * There are more kernels produced by **build.py** though not uploaded to git
+* **common/** -- common functionality used all over the package
+  * **registrar** -- common registry for global names, parameters
 ### Checkout with: 
 `git clone --recurse-submodules https://github.com/aayasin/perf-tools`
 

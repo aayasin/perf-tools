@@ -15,16 +15,16 @@ __author__ = 'ayasin'
 __version__= 1.06
 
 import common as C, pmu, tma
+from common1 import registrar
 import csv, json, os.path, re, sys
 
-# FIXME:01: add a "namer" module to assign filename for all logs;
+# FIXME:01: complete the registrar module which assigns filenames for all logs;
 #       to replace this function, so analyze.ext() can call it directly, many in do.py, and
 #       to replace other instances of finding filename below:
 #         get_stat_log()
 #         get_TSC()
 #         rollup_all()
 #         rollup() (start and toward end)
-#         return from csv2stat() which removed common.toplev_log2csv too!
 def get_file(app, ext): return get_file_int(C.command_basename(app), '.perf.data.' + ext)
 
 def get_stat_log(s, perf_stat_file):
@@ -53,7 +53,7 @@ def print_metrics(app):
   rollup(c)
   return print_DB(c)
 
-def write_stat(app): return csv2stat(C.command_basename(app) + '.toplev-vl6-perf.csv')
+def write_stat(app): return csv2stat(C.command_basename(app) + registrar.name('tree', 'csv'))
 
 debug = C.env2int('STATS_DBG')
 sDB = {}
@@ -222,14 +222,15 @@ def read_info(info, read_loops=False, loop_id='imix-ID', sep=None, groups=True):
 
 def rollup(c, perf_stat_file=None):
   if c in sDB: return
-  perf_stat_file, info, vl6 = perf_stat_file or c + '.perf_stat-r3.log', c + '.toplev-mvl2.log', c + '.toplev-vl6.log'
+  fs = {e: c+registrar.name(e) for e in ('stat', 'info', 'tree')}
   perf_stat_lbr = get_file_int(c + '.perf_stat', '')
-  sDB[c] = read_perf(perf_stat_file) if C.isfile(perf_stat_file) else {}
-  if C.isfile(vl6): sDB[c].update(read_toplev(vl6))
+  sDB[c] = read_perf(fs['stat']) if C.isfile(fs['stat']) else {}
+  if C.isfile(fs['tree']): sDB[c].update(read_toplev(fs['tree']))
   elif C.isfile(perf_stat_lbr): sDB[c].update(read_perf(perf_stat_lbr))
-  if C.isfile(info):
-    sDB[c].update(read_toplev(info))
-    sDB[c]['sig-misp'] = (read_mispreds(info.replace('.info', '.mispreds')), 'list')
+  if C.isfile(fs['info']):
+    sDB[c].update(read_toplev(fs['info']))
+    # FIXME:07 next lines seems buggy; info here is toplev-mvl2.log not LBR info.log!
+    sDB[c]['sig-misp'] = (read_mispreds(fs['info'].replace('.info', '.mispreds')), 'list')
   if debug > 1: print_DB(c)
 
 def read_mispreds(mispreds_file, sig_threshold=1.0):
@@ -460,7 +461,7 @@ def csv2stat(filename):
   NOMUX = 'vl6-nomux-perf.csv'
   def nomux(): return filename.endswith(NOMUX)
   def basename():
-    x = re.match(r'.*(\.toplev\-[m]?vl\d(\-nomux)?\-perf\.csv)', filename)
+    x = re.match(r'.*(\.toplev\-[m]?vl\d(\-nomux)?(\-perf)?\.csv)', filename)
     if not x: C.error('stats.csv2stat(): unexpected filename: %s' % filename)
     return filename.replace(x.group(1), '')
   d = patch_metrics(d)
@@ -479,7 +480,7 @@ def csv2stat(filename):
     if len(info_files) > 1:
       C.warn('multiple info.log files exist for same app, %s will be added to .stat file' % info)
     d.update(read_info(info, sep='_', groups=False))
-  return perf_log2stat(base + '.perf_stat-r3.log', read_toplev(C.toplev_log2csv(filename), 'SMT_on'), d)
+  return perf_log2stat(base + '.perf_stat-r3.log', read_toplev(registrar.log2csv(filename), 'SMT_on'), d)
 
 def perf_log2stat(log, smt_on, d={}):
   suff = re.findall('(.perf_stat(-B)?-r[1-9].log)', log)[0]

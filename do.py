@@ -434,6 +434,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       if ' -r3' in cmd: tune = '[--repeat 3%s]' % (' --tune :tma-levels:2' if ' -vl2 ' in cmd else '')
       elif ' -I10' in cmd: tune = '[--tune :interval:10]'
       elif ' record' in cmd and C.any_in((' -b', ' -j'), cmd): tune = '--tune :sample:3' if 'PEBS' in msg else '[--tune :sample:2]'
+      elif 'topdown full' in msg: tune = '[--tune :tma-num-levels:6]'
       elif len(tune): tune = '[--tune :%s:1]' % tune if 'stacks' in msg else 'setup-all --tune :%s:1' % tune
       profile_help[step] = '%x | %-50s | %s' % (2 ** step, msg, tune)
       return

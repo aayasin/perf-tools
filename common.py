@@ -250,7 +250,7 @@ def csv2dict(f):
   d = {}
   for l in file2lines(f):
     k = l.split(',')[0]
-    if not re.match(r'^[A-Z]', k): k = k[1:]
+    #if not re.match(r'^[A-Z]', k): k = k[1:]
     d[k] = l.split(',')[1]
   return d
 
@@ -286,7 +286,6 @@ def iter2str(x, sep=",\n\t"):
 def dict2str(d, sep=",\n\t"): return iter2str(sorted(d.items()), sep)
 def hist2str(h, top=20): return iter2str(hist2slist(h)[-top:])
 def hist2slist(h): return sorted(h.items(), key=lambda x: x[1])
-def toplev_log2csv(f): return f.replace('.log', '-perf.csv')
 
 # chop - clean a list of characters from a string
 # @s:     input string

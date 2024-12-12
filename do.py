@@ -20,12 +20,13 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.86
+__version__ = 3.87
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
 from lbr import x86
 from lbr.stats import inst_fusions
+from common1 import registrar
 from getpass import getuser
 from math import log10
 from platform import python_version
@@ -80,7 +81,6 @@ do = {'run':        C.RUN_DEF,
   'lbr-stats':      '- 0 10 0 ' + DSB,
   'lbr-stats-tk':   '- 0 20 1',
   'ldlat':          int(globs['ldlat-def']),
-  'levels':         2,
   'llvm-mca-args':  '--iterations=1000 --dispatch=%d --print-imm-hex' % pmu.cpu_pipeline_width(),
   'metrics':        tma.get('key-info'),
   'model':          'GNR' if pmu.granite() else 'MTL',
@@ -117,7 +117,9 @@ do = {'run':        C.RUN_DEF,
   'super':          0,
   'tee':            1,
   'time':           0,
+  'tma-num-levels': tma.get('num-levels'),
   'tma-group':      None,
+  'tma-levels':     2,
   'xed':            1 if pmu.cpu('x86', 0) else 0,
 }
 for b in analyze.bottlenecks(): do['az-%s' % b] = tma.threshold_of(b);
@@ -429,7 +431,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   def prepend_PERF(cmd): return env + cmd.replace(env, '') if 'PERF=' in cmd else cmd
   def profile_exe(cmd, msg, step, mode='redirect', tune='', fail=0):
     if do['help'] < 0:
-      if ' -r3' in cmd: tune = '[--repeat 3%s]' % (' --tune :levels:2' if ' -vl2 ' in cmd else '')
+      if ' -r3' in cmd: tune = '[--repeat 3%s]' % (' --tune :tma-levels:2' if ' -vl2 ' in cmd else '')
       elif ' -I10' in cmd: tune = '[--tune :interval:10]'
       elif ' record' in cmd and C.any_in((' -b', ' -j'), cmd): tune = '--tune :sample:3' if 'PEBS' in msg else '[--tune :sample:2]'
       elif len(tune): tune = '[--tune :%s:1]' % tune if 'stacks' in msg else 'setup-all --tune :%s:1' % tune
@@ -586,7 +588,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   
   toplev += ' --no-desc'
   if do['plot']: toplev += ' --graph -I%d --no-multiplex' % do['interval']
-  grep_bk= r"grep -E '<==|MUX|Bottleneck|Info(.*Time|.*\sIPC)|warning.*zero' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
+  grep_bk= r"grep -E '<==|MUX|^(Bottleneck|Info(.*Time|.*\sIPC))|warning.*zero' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
   tl_skip= "not (found|referenced|supported)|Unknown sample event|^unreferenced "
   grep_NZ= r"grep -E -iv '^(all|core |)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|%s|##placeholder##' " % tl_skip
   grep_nz= grep_NZ
@@ -600,7 +602,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       if profiling() and (not C.isfile(retlat) or os.path.getsize(retlat) < 100):
         exe('%s -q -o %s -- %s' % (perf_common(p=genretlat), retlat, r), 'calibrating retire latencies')
     if not args.sys_wide: tlargs += ' --no-uncore'
-    c = "%s %s --nodes '%s' -V %s %s -- %s" % (perf_common('', p=toplev), v, nodes, C.toplev_log2csv(o), tlargs, r)
+    c = "%s %s --nodes '%s' %s -V %s -- %s" % (perf_common('', p=toplev), v, nodes, tlargs, registrar.log2csv(o), r)
     if ' --global' in c:
       # https://github.com/andikleen/pmu-tools/issues/453
       C.warn('Global counting is subject to system noise (cpucount=%d)' % pmu.cpu('cpucount'))
@@ -615,7 +617,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
 
   # +Info metrics that would not use more counters
   if en(4):
-    cmd, logs['tma'] = toplev_V('-vl6', nodes=tma.get('bottlenecks'),
+    cmd, logs['tma'] = toplev_V('-vl%d' % do['tma-num-levels'], nodes=tma.get('bottlenecks'),
       tlargs=tl_args('--tune \'DEDUP_NODE = "%s"\'' % tma.get('dedup-nodes')))
     profile_exe(cmd + ' | tee %s | %s' % (logs['tma'], grep_bk if args.verbose <= 1 else grep_nz), 'topdown full tree + All Bottlenecks', 4)
     if profiling():
@@ -632,8 +634,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     topdown_describe(logs['tma'])
 
   if en(5):
-    cmd, log = toplev_V('-vl%d' % do['levels'], tlargs=tl_args('-r%d' % args.repeat))
-    profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown primary, %d-levels %d runs' % (do['levels'], args.repeat), 5)
+    cmd, log = toplev_V('-vl%d' % do['tma-levels'], tlargs=tl_args('-r%d' % args.repeat))
+    profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown primary, %d-levels %d runs' % (do['tma-levels'], args.repeat), 5)
   
   if en(6):
     cmd, log = toplev_V('--drilldown --show-sample -l1', nodes='+IPC,+Heavy_Operations,+Time',
@@ -944,13 +946,14 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   if do['help'] < 0: profile_mask_help()
   elif args.print_only: pass
   elif args.repeat == 3 and (mask_eq(0x1010) or mask_eq(0x82)):
-    stats.csv2stat(C.toplev_log2csv(logs['tma']))
-    d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(C.toplev_log2csv(logs['tma'])
-      ), 'num_not_counted_stats', 'num_not_supported_stats', 'DurationTimeInMilliSeconds'
+    tma_csv = registrar.log2csv(logs['tma'])
+    stats.csv2stat(tma_csv)
+    d, not_counted_name, not_supported_name, time = stats.read_perf_toplev(tma_csv),\
+      'num_not_counted_stats', 'num_not_supported_stats', 'DurationTimeInMilliSeconds'
     not_counted, not_supported = d[not_counted_name], d[not_supported_name]
     if not mask_eq(0x80) and do['forgive'] < 2:
       assert d[time] > tma.get('num-mux-groups') * globs['perf-mux-interval'], "Too short run time! %f [ms]" % d[time]
-      toplev_d = stats.read_perf_toplev(C.toplev_log2csv(logs['info']))
+      toplev_d = stats.read_perf_toplev(registrar.log2csv(logs['info']))
       not_counted += toplev_d[not_counted_name]
       not_supported += toplev_d[not_supported_name]
     if not_counted > 0 or not_supported > 0:

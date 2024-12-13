@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.87
+__version__ = 3.88
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -37,7 +37,6 @@ globs = {
   'find-perf':          'sudo find / -name perf -executable -type f | grep ^/',
   'force-cpu':          C.env2str('FORCECPU'),
   'ldlat-def':          '7',
-  'perf-mux-interval':  53,
   'setup-log':          'setup-system.log',
   'time':               '/usr/bin/time',
   'tunable2pkg':        {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python3-pip'},
@@ -96,6 +95,7 @@ do = {'run':        C.RUN_DEF,
   'perf-filter':    1,
   'perf-lbr':       '-j any,save_type -e %s -c %d' % (pmu.lbr_event(), pmu.lbr_period()),
   'perf-ldlat':     '-e %s -c 1001' % pmu.ldlat_event(globs['ldlat-def']),
+  'perf-mux-interval':  23,
   'perf-pebs':      pmu.event_period('dsb-miss', 1000000),
   'perf-pebs-top':  0,
   'perf-pt':        "-e '{intel_pt//u,%su}' -c %d -m,64M" % (pmu.lbr_event(), pmu.lbr_period()), # noretcomp
@@ -292,7 +292,7 @@ def setup_perf(actions=('set', 'log'), out=None):
     ('/proc/sys/kernel/perf_event_paranoid', -1, ),
     ('/proc/sys/kernel/perf_event_mlock_kb', 60000, ),
     ('/proc/sys/kernel/perf_event_max_sample_rate', int(1e6), 'root'),
-    ('/sys/devices/%s/perf_event_mux_interval_ms' % pmu.pmu(), globs['perf-mux-interval'], ),
+    ('/sys/devices/%s/perf_event_mux_interval_ms' % pmu.pmu(), do['perf-mux-interval'], ),
     ('/proc/sys/kernel/kptr_restrict', 0, ),
     ('/proc/sys/kernel/nmi_watchdog', 0, ),
     ('/proc/sys/kernel/soft_watchdog', 0, ),
@@ -953,7 +953,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       'num_not_counted_stats', 'num_not_supported_stats', 'DurationTimeInMilliSeconds'
     not_counted, not_supported = d[not_counted_name], d[not_supported_name]
     if not mask_eq(0x80) and do['forgive'] < 2:
-      assert d[time] > tma.get('num-mux-groups') * globs['perf-mux-interval'], "Too short run time! %f [ms]" % d[time]
+      assert d[time] > tma.get('num-mux-groups') * do['perf-mux-interval'], "Too short run time! %f [ms]" % d[time]
       toplev_d = stats.read_perf_toplev(registrar.log2csv(logs['info']))
       not_counted += toplev_d[not_counted_name]
       not_supported += toplev_d[not_supported_name]
@@ -1025,6 +1025,8 @@ def handle_tunables():
         if t.startswith(':'):
           l = t.split(':')
           if l[1] not in do.keys(): error("Unsupported tunable: '%s'" % l[1])
+          if l[1] == 'perf-mux-interval' and 'setup-perf' not in args.command:
+            error("using :perf-mux-interval while no 'setup-perf' in commands")
           t = "do['%s']=%s" % (l[1], l[2] if len(l)==3 else ':'.join(l[2:]))
         if args.verbose > 3: print(t)
         exec(t)

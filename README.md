@@ -7,15 +7,18 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
 
 ## Overview
 * **do.py** -- The main driver with handy shortcuts for setting up and doing profiling, over [Linux perf](https://perf.wiki.kernel.org)
-* **study.py** -- A driver to study and compare multiple flavors of an application (it wraps do.py and employs parallel post-processing)
+* **study.py** -- A driver to study and compare multiple flavors of an application> E.g. it wraps do.py and employs parallel post-processing, can be used for A-B stats comparison of two configs (-sm 0x4)
 * **analyze.py** -- A module for analyzing profiling logs. It automates the process of software optimizations described in [From Top-down Microarchitecture Analysis to Structured Performance Optimizations](https://doi.org/10.52843/cassyni.gtjvgt)
 * **pmu.py** -- A module for interface to the Performance Monitoring Unit (PMU)
-* **stats.py** --  A module for processing counters and profiling logs
+* **stats.py** -- A module for processing counters and profiling logs
+* **tma.py** -- A module with modern encapsulation of the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method
+* **common/** -- common functionality used all over the package
+  * **common.py** -- common generic functionality (to be moved here; then this folder can be renamed common1 -> common)
+  * **registrar** -- common registry for global names, parameters
 * **lbr/** -- functionality for processing Last Branch Record (LBR) streams
   * **loops.py** -- A module for handling loops
   * **funcs.py** -- A module for handling functions / procedures
   * **x86.py** -- A module for handling x86 instructions
-* **tma.py** -- A module with modern encapsulation of the [Top-down Microarchitecture Analysis](http://bit.ly/tma-ispass14) (TMA) method
 * **pmu-tools/** -- linked Andi Kleen's perf-based great tools
   * **toplev** -- profiler featuring TMA method on Intel processors
   * **ocperf** -- perf wrapper that converts Intel event names to perf-events syntax
@@ -23,11 +26,10 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
 * **workloads/** -- an evolving collection of "micro-workloads"
   * **aibenchmark.py** -- wraps ai-benchmark use on CPU
   * **BC.sh** -- wrapper of the Linux bc utility
-  * **permute** -- calculates permutations of input string at O(n!)
   * **mmm/** -- the matrix-matrix mutiply (mmm) HPC kernel - multiple optimizations as demonstrated in [Tuning Performance via Metrics with Expectations](https://ieeexplore.ieee.org/document/8714063)
   * **src/** -- collection of sources for microbenchmarks
-    * **permute** -- calculates permutations of input string
-* **kernels/** -- an evolving collection of x86 kernels
+    * **permute.cc** -- calculates permutations of input string. See Makefile, workloads/permute.sh.
+* **kernels/** -- an evolving collection of x86 kernels (to be moved under workloads/)
   * **gen-kernel.py** -- generator of X86 kernels
   * **jumpy.py** -- module for different jumping constructs
   * **peakXwide.c** -- sample kernels for a X-wide superscalar machine, e.g. 4 for Skylake
@@ -37,9 +39,7 @@ It is the home for a collection of performance analysis tools, recipes, micro-be
   * **pagefault.c** -- a custom kernel for page faults on memory data accesses
   * **fp-arith-mix.c** -- demonstrates utilization of extra counters in Icelake's PMU
   * **rfetch3m** -- a random fetcher across 3MB code footprint (auto-generated)
-  * There are more kernels produced by **build.py** though not uploaded to git
-* **common/** -- common functionality used all over the package
-  * **registrar** -- common registry for global names, parameters
+  * There are more kernels, not listed here and/or produced by **build.py** though not uploaded to git
 ### Checkout with: 
 `git clone --recurse-submodules https://github.com/aayasin/perf-tools`
 
@@ -92,22 +92,23 @@ System-wide profiling is supported as well.
 
 ### tools
 A set of command-line tools to facilitate profiling
-* **addrbits** -- extracts certain bit-range of hexa input
-* **lbr_filter** -- filters LBR-based profile on certain IPs
-* **lbr_stats** -- calculates stats on LBR-based profile
-* **llvm-mca** -- calculates IPC-ideal for simple loops in LBR profile-step
-* **loop_stats** -- calculates stats for a particular loop in an LBR-based profile
-* **n-copies** -- invokes N-copies of an app, with CPU affinity (uses sibling thread N=2, 1 thread/core when N <= nproc)
-* **n-loop** -- run a given app n-times in a loop
-* **ptage** -- computes percentages & sum of number-prefixed input
-* **slow-branch** -- extracts slow sequences from Timed-LBR profile
 * **yperf** -- profiles (system) in one shot, generates reports and advises for SW optimizations
+* **slow-branch** -- extracts slow sequences from Timed-LBR profile
+* **lbr_stats** -- calculates stats on LBR-based profile
+* **lbr_filter** -- filters LBR-based profile on certain IPs
+* **lbr/llvm-mca.py** -- calculates IPC-ideal for simple loops using LLVM-mca
+* **lbr/uiCA.py** -- calculates IPC-ideal using the uops.info Code Analyzer
+* **loop_stats** -- calculates stats for a particular loop in an LBR-based profile
+* **ptage** -- computes percentages & sum of number-prefixed input
+* **addrbits** -- extracts certain bit-range of hexa input
 
 ### wrappers
-Shortcuts to set-up certain tools
+Shortcuts to set-up required tools or run workloads
 * **build-perf.sh** -- builds the perf tool from scratch; invoke with `./do.py build-perf` to let it
     use the installer of your Linux distribution (Ubuntu is the default).
 * **build-xed.sh** -- downloads & builds Intel's xed. Enabled by default with `./do.py setup-all --tune :xed:1`.
+* **n-copies** -- invokes N-copies of an app, with CPU affinity (uses sibling thread N=2, 1 thread/core when N <= nproc)
+* **n-loop** -- run a given app n-times in a loop
 * **omp-bin[.sh]** -- wrapper for OpenMP apps setting # of threads and CPU affinity
 
 ## More information

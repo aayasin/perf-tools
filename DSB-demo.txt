@@ -1,7 +1,0 @@
-git clone --recurse-submodules https://github.com/aayasin/perf-tools
-cd perf-tools
-make
-./do.py setup-all --tune :xed:1
-sudo apt install clang
-./do.py profile -a ./CLTRAMP3D -v1 --tune :xed:1 :sample:3 -pm 200
-

@@ -468,7 +468,7 @@ def csv2stat(filename):
   base = basename()
   retlat = base + '-retlat.json'
   if os.path.isfile(retlat): d.update(read_retlat_json(retlat))
-  tl_info = base + '.toplev-mvl2-perf.csv'
+  tl_info = base + registrar.name('info', 'csv')
   if not nomux():
     if not os.path.isfile(tl_info): C.warn('file is missing: ' + tl_info)
     else: d.update(read_perf_toplev(tl_info))

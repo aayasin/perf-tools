@@ -4,11 +4,16 @@
 RUN_NLOOP=${RUN_NLOOP:-5}
 RUN_APP=${RUN_APP:-./pmu-tools/workloads/PYTHON1s}
 App=`echo $RUN_APP | rev | cut -d/ -f1 | rev`
-
+I=100
+if [ $# -ge 1 ]; then
+   I=$1
+fi
 # taskset set CPU affinity for consistent measurements (for CPUs 0,1 in this example)
 #taskset 0x3 \
 #./n-loop $RUN_NLOOP \			# enlarge duration for repeatitiveness
-./n-loop $RUN_NLOOP $RUN_APP 2>&1 | 	# a sample command with no arguments
+					# turns out has drawback with counter multiplexing!
+#./n-loop $RUN_NLOOP $RUN_APP 2>&1 | 	# a sample command
+taskset 0x2 python -c "for x in range($I*1000000): pass" 2>&1 |
  tee .run-$App-$1-$$.log |  		# redirect bulk output to some log file
  grep seconds				# grep for execution-time & some work metric
  

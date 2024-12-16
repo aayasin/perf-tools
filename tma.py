@@ -53,6 +53,9 @@ for x in ('version', 'num-levels', 'num-mux-groups'):
 def get(tag):
   combo_tags = '[fe-]bottlenecks[-only|-as-list] zero-ok '
   def prepend_info(x): return ','.join((metrics['fixed'], x))
+  def lookup(d, model):
+    if model not in d.keys(): C.error("No support for model: %s" % model)
+    return d[model]
   if tag =='bottlenecks': return prepend_info(','.join((metrics['bot-fe'], metrics['bot-rest'])))
   if tag =='bottlenecks-only': return ','.join((metrics['bot-fe'], metrics['bot-rest']))
   if tag =='fe-bottlenecks': return prepend_info(metrics['bot-fe'])
@@ -64,10 +67,10 @@ def get(tag):
   model = pmu.cpu_CPU('SPR')
   if tag == 'zero-ok':
     ZeroOk = setting2dict('tma-zero-ok')
-    return ZeroOk[model].split(';')
+    return lookup(ZeroOk, model).split(';')
   if tag == 'dedup-nodes':
     Dedup = setting2dict('tma-many-counters')
-    return Dedup[model].replace(';', ',')
+    return lookup(Dedup, model).replace(';', ',')
   if tag == 'perf-groups':
     groups = ','.join(C.file2lines(settings_file('bottlenecks/%s.txt' % model), True))
     td_groups = [f for f in os.listdir(pmu.sys_devices_cpu('/events')) if f.startswith('topdown')]

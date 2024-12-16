@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.90
+__version__ = 3.91
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -301,7 +301,7 @@ def setup_perf(actions=('set', 'log'), out=None):
   superv = 'sup' in actions or do['super']
   if superv:
     set_it(TIME_MAX, 25)
-    perf_params += [('/sys/devices/cpu/rdpmc', 1, ),
+    perf_params += [(pmu.sys_devices_cpu('/rdpmc'), 1, ),
       ('/sys/bus/event_source/devices/cpu/rdpmc', 2, )]
   perf_params += [(TIME_MAX, 0, 'root')] # has to be last
   for x in perf_params: 
@@ -355,7 +355,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
             '/sys/devices/system/node/node0/memory_side_cache/index1/size'):
     if C.isfile(f): prn_sysfile(f, out)
   log_patch("sysctl -a | tee setup-sysctl.log | grep -E 'randomize_va_space|hugepages ='")
-  C.fappend('IP-address: %s' % exe_1line('hostname -i'), out)
+  C.fappend('IP-address: %s' % exe_1line('hostname -I'), out)
   exe("env > setup-env.log")
   new_line()          #CPU
   exe(r"lscpu | tee setup-lscpu.log | grep -E 'family|L3 cache|Model|Step|(Socket|node|Core|Thread)\(' >> " + out)

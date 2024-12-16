@@ -242,7 +242,7 @@ def cpu(what, default=None):
       'git clone --recurse-submodules https://github.com/aayasin/perf-tools'))
   forcecpu = C.env2str('FORCECPU')
   def versions():
-    def Cpu(m): M={'sprmax': 'spr-hbm'}; return (M[m] if m in M else m).upper()
+    def Cpu(m): M={'arl': 'lnl', 'sprmax': 'spr-hbm'}; return (M[m] if m in M else m).upper()
     d, v = {}, C.exe_one_line("%s/toplev.py --version%s 2>&1 | tail -1" %
                               (pmutools, (' --force-cpu %s' % force_cpu_toplev(forcecpu)) if forcecpu else '')).strip()
     for x in v.split(','):

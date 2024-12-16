@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.88
+__version__ = 3.90
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma

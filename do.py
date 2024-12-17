@@ -30,7 +30,7 @@ from common1 import registrar
 from getpass import getuser
 from math import log10
 from platform import python_version
-#from pipeline import pipeline_view
+from pipeline import pipeline_view
 
 globs = {
   'cmds_file':          None,
@@ -941,8 +941,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     do['interval'] = max(do['interval'],1000)
     csv_file = perf_stat('-r1 -I%d' % do['interval'], 'Pipeline View every %dms' % do['interval'], step=21,
                          csv=True, events=evts, basic_events='', first_events='', last_events='', perfmetrics='') 
-    #if args.mode != 'profile':
-    #  pipeline_view(csv_file, widths)
+    if args.mode != 'profile':
+      pipeline_view(csv_file, widths)
 
   if do['help'] < 0: profile_mask_help()
   elif args.print_only: pass

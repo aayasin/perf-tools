@@ -318,7 +318,9 @@ def cpu_pipeline_width(all_widths=None):
     elif goldencove() or redwoodcove():
       full_widths = {'dsb':('IDQ.DSB_UOPS',8), 'mite':('IDQ.MITE_UOPS',6), 'decoders':('INST_DECODED.DECODERS',6), 'ms':('IDQ.MS_UOPS',4),
                      'issued':('UOPS_ISSUED.ANY',6),'executed':('UOPS_EXECUTED.THREAD',12),'retired':('UOPS_RETIRED.SLOTS',8)}
-    elif lunarlake(): assert 0, "LNL not supported"
+    elif lunarlake():
+      full_widths = {'dsb':('IDQ.DSB_UOPS',12), 'mite':('IDQ.MITE_UOPS',8), 'decoders':('INST_DECODED.DECODERS',8), 'ms':('IDQ.MS_UOPS',4),
+                     'issued':('UOPS_ISSUED.ANY',8),'executed':('UOPS_EXECUTED.THREAD',18),'retired':('UOPS_RETIRED.SLOTS',12)}
     return full_widths
   width = 4
   if icelake(): width = 5
@@ -328,12 +330,25 @@ def cpu_pipeline_width(all_widths=None):
 
 def widths_2_cmasks(widths):
   events = ""
+  group_ctr=0
+  if v4p(): #TODO: This will change from v4p() to pnc_on()
+    max_pmus=4
+  else:
+    max_pmus=4  #TODO: This will eventually return vp4()
   for i in widths:
     e = widths[i][0]
     for j in range(int(widths[i][1])):
+      if group_ctr == 0:
+        events+="{"
       event_cmask = e + ':c' + str(j+1)
-      events += perf_event(event_cmask).replace(e, event_cmask) + ','
-  return events[:-1]
+      events += perf_event(event_cmask).replace(e, event_cmask)
+      if group_ctr == (max_pmus-1):
+        events+="},"
+        group_ctr=0
+      else:
+        events+=","
+        group_ctr+=1
+  return events[:-1]+"}"
 
 # deeper uarch stuff
 

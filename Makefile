@@ -266,9 +266,9 @@ PRE_PUSH_CMDS := \
     "echo 'testing prof-no-mux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
     "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view, pipeline-view & over-time profile-steps, tar command' && \
       $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
-      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=3931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
+      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
       test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && \
-      echo jon let PM=23931a then test -f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
+      test -f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
     "echo 'prompting for sudo soon3' && $(DO) log" \
     "echo 'testing Windows support' && $(MAKE) test-windows" \
     "echo 'testing sys-wide non-MUX profile-steps' && \
@@ -281,7 +281,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing srcline stat' && echo skip $(MAKE) test-srcline" \
     "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
     "echo 'testing sampling by instructions' && $(MAKE) test-LBR-edge" \
-    "echo 'testing pipeline-view sys-wide idle' && echo jon $(DO) profile -pm 200000 -s 20 -o pipeline-view -v1 " \
+    "echo 'testing pipeline-view sys-wide idle' && $(DO) profile -pm 200000 -s 20 -o pipeline-view -v1 " \
     "$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1" \
     "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)" \
     "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL)" \

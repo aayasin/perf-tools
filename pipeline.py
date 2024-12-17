@@ -8,8 +8,9 @@
 
 # Processes a custom perf_stat output file into a visual time-based snapshot of the core pipeline.
 import pmu,common
-from tabulate import tabulate
 import itertools,sys,re
+try: from tabulate import tabulate
+except: common.warn("Failed to import tabulate, pipeline-view post-processing will fail. Please run './do.py setup-all'")
 
 def pipeline_view(log, depths):
   # FIXME:01: add a "namer" module to assign filename for all logs

@@ -146,6 +146,10 @@ REGS_32 = ['eax', 'ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp', 'esp'] + \
           ['r' + str(n) + 'd' for n in range(8, 16)]
 REGS_64 = [x.replace('e', 'r') for x in REGS_32 if x.startswith('e')] + \
           [x.replace('d', '') for x in REGS_32 if x.startswith('r')]
+REGS_XMM = ['xmm' + str(n) for n in range(0, 31)]
+REGS_YMM = ['ymm' + str(n) for n in range(0, 31)]
+REGS_ZMM = ['zmm' + str(n) for n in range(0, 31)]
+
 
 # 64-bit, 32-bit & 16-bit sub regs for 32/64 bit regs
 def sub_regs(reg):

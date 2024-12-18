@@ -224,11 +224,19 @@ def edge_stats(line, lines, xip, size):
   #MoveEliminationDetection
   #########################
   if x86.is_type(x86.MOV,line):
+    me_src=info.srcs()[0]
+    me_dst=info.dst()
     if not info.is_memory() and not info.is_imm():
-      if info.srcs()[0] in x86.REGS_64 and info.dst() in x86.REGS_64:
+      if me_src in x86.REGS_64 and me_dst in x86.REGS_64:
         inc_stat('R64 Move-Elimination')
-      elif info.srcs()[0] in x86.REGS_32 and info.dst() in x86.REGS_32:
+      elif me_src in x86.REGS_32 and me_dst in x86.REGS_32:
         inc_stat('R32 Move-Elimination')
+      elif me_src in x86.REGS_XMM and me_dst in x86.REGS_XMM:
+        inc_stat('XMM Move-Elimination')
+      elif me_src in x86.REGS_YMM and me_dst in x86.REGS_YMM:
+        inc_stat('YMM Move-Elimination')
+      elif me_src in x86.REGS_ZMM and me_dst in x86.REGS_ZMM:
+        inc_stat('ZMM Move-Elimination')
   #########################
   if size > 1:
     xline = LC.prev_line(lines)

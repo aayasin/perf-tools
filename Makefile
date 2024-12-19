@@ -71,7 +71,7 @@ run-mem-bw:
 test-mem-bw: run-mem-bw
 	sleep 2s
 	set -o pipefail; $(DO) profile -s3 $(ST) -o $< $(RERUN) | $(SHOW)
-	grep -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log
+	grep -E -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth.*<==' $<.toplev-mvl6-nomux.log
 	./yperf record -o $<-yperf && touch $<-yperf # collect for later
 	kill -9 `pidof m0-n8192-u01.llv`
 	@echo 1 | tee $< > $@
@@ -142,7 +142,7 @@ test-false-sharing: kernels/false-sharing
 	$(DO) profile --tune :help:0 -a "$< $(FSI)" -pm 40
 	grep -E -q '^BE.*False_Sharing.*<==' $<-$(FSI)-out.txt
 
-CPUS = ICX SPR SPR-HBM TGL ADL
+CPUS = GNR LNL ICX SPR SPR-HBM TGL ADL
 test-forcecpu:
 	passed=true; set -x;\
 	for cpu in $(CPUS); do \

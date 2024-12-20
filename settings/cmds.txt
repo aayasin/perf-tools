@@ -1,6 +1,7 @@
 LINUXK=6 LINUXV=6.6.6 ./build-perf.sh
 
 strace -o strace.log -s999 my-command
+echo $USER@`hostname -I`:$PWD | sed 's/ //g'
 
 sed 's/^[[:space:]]*//'
 sed -E 's/\[[0-9]+\]//'

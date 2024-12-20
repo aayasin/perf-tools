@@ -4,7 +4,7 @@
 RUN_NLOOP=${RUN_NLOOP:-5}
 RUN_APP=${RUN_APP:-./pmu-tools/workloads/PYTHON1s}
 App=`echo $RUN_APP | rev | cut -d/ -f1 | rev`
-I=100
+I=200
 if [ $# -ge 1 ]; then
    I=$1
 fi

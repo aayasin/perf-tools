@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.91
+__version__ = 3.92
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -416,8 +416,8 @@ def get_perf_toplev():
   forcecpu = globs['force-cpu']
   if forcecpu:
     ptools['toplev.py'] += ' --force-cpu=%s' % pmu.force_cpu_toplev(forcecpu)
+    if pmu.is_retlat(forcecpu): ptools['genretlat'] += ' --cpu=%s' % forcecpu.lower()
     env += 'EVENTMAP=%s ' % pmu.force_cpu(forcecpu)
-    # TODO: handle forcing for genretlat
   elif do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
     if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
@@ -601,7 +601,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       retlat = '%s/%s-retlat.json' % (C.dirname(), out)
       tlargs += ' --ret-latency %s' % retlat
       if profiling() and (not C.isfile(retlat) or os.path.getsize(retlat) < 100):
-        exe('%s -q -o %s -- %s' % (perf_common(p=genretlat), retlat, r), 'calibrating retire latencies')
+        exe('%s -q -o %s -- %s' % (perf_common(cmd='', p=genretlat), retlat, r), 'calibrating retire latencies')
     if not args.sys_wide: tlargs += ' --no-uncore'
     c = "%s %s --nodes '%s' %s -V %s -- %s" % (perf_common('', p=toplev), v, nodes, tlargs, registrar.log2csv(o), r)
     if ' --global' in c:
@@ -674,7 +674,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
 
-  if en(16):
+  if en(16) and pmu.lunarlake(): C.warn('bottlenecks-view: no support for Lunar Lake yet')
+  elif en(16):
     if profiling():
       if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
       if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')

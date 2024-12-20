@@ -40,7 +40,7 @@ metrics = {
   'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
                     C.flag2str(',+IpAssist', pmu.v4p()) +
                     C.flag2str(',+Memory_Bound*/3', pmu.goldencove_on()),
-  'key-nodes':    ("+IPC,+CLKS" if pmu.lunarlake_on() else "+CoreIPC,+CORE_CLKS") +
+  'key-nodes':    ("+IPC,+CLKS" if pmu.lioncove_on() else "+CoreIPC,+CORE_CLKS") +
                     ",+Instructions,+Time,-CPUs_Utilized,-CPU_Utilization",
 }
 

@@ -32,7 +32,7 @@ def parse_args():
   if pmu.goldencove_on(): bott_events += ['INT_MISC.UNKNOWN_BRANCH_CYCLES',             # BigC
     # 'UOPS_RETIRED.MS', # overloads frontend!
     ]
-  if pmu.lunarlake_on(): bott_events += ['IDQ.MS_CYCLES_ANY']                           # Misps, IFetchBW
+  if pmu.lioncove_on(): bott_events += ['IDQ.MS_CYCLES_ANY']                            # Misps, IFetchBW
   assert len(bott_events) < 8
   events = tma.fixed_metrics()[0] + ',' + ','.join([pmu.event(e) for e in bott_events])
   if len(bott_events) < 7: events += ',cycles:k'

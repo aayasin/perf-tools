@@ -47,14 +47,18 @@ def v4p(): return os.path.exists(sys_devices_cpu() + '/format/frontend') # PEBS_
   # int(msr_read(0x345)[2], 16) >= 3 # Skylake introduced PEBS_FMT=3 (!= PerfMon Version 4)
 # Icelake onward PMU, e.g. Intel PerfMon Version 5+
 def v5p(): return perfmetrics()
+
+# FIXME:09: next *cove_on() do not support FORCECPU!
 # Golden Cove onward PMUs have Arch LBR
 def goldencove_on():  return cpu_has_feature('arch_lbr')
 # Redwood Cove onward PMUs have CPUID.0x23
-def redwoodcove_on(): return cpu('CPUID.23H')
+def redwoodcove_on(): return cpu_has_feature('CPUID.23H')
 # For now
-def lunarlake_on():  return lunarlake()
+def lioncove_on():    return lunarlake()
 
-def retlat():     return redwoodcove_on()
+def retlat(real=False): return cpu_has_feature('CPUID.23H', real=real)
+# FIXME:09: extract next tuple from genretlat -h output
+def is_retlat(x): return x and x in ('MTL', 'GNR', 'LNL')
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
 def hybrid():     return 'hybrid' in name()
 def intel():      return 'Intel' in cpu('vendor')
@@ -194,9 +198,9 @@ def perf_event(e):
 #
 # CPU, cpu_ prefix
 #
-def cpu_has_feature(feature):
+def cpu_has_feature(feature, real=False):
   if feature == 'CPUID.23H': # a hack as lscpu Flags isn't up-to-date
-    if C.env2int('CPUID23H'): return 1
+    if C.env2int('CPUID23H') and not real: return 1
     cpuid_f = '%s/setup-cpuid.log' % perftools
     if not os.path.exists(cpuid_f):
       C.warn("Missing file: %s" % cpuid_f)
@@ -241,6 +245,8 @@ def cpu(what, default=None):
   if not os.path.isdir(pmutools): C.error("'%s' is invalid!\nDid you cloned the right way: '%s'" % (pmutools,
       'git clone --recurse-submodules https://github.com/aayasin/perf-tools'))
   forcecpu = C.env2str('FORCECPU')
+  if is_retlat(forcecpu) and not retlat():
+    os.environ['CPUID23H'] = "1"
   def versions():
     def Cpu(m): M={'arl': 'lnl', 'sprmax': 'spr-hbm'}; return (M[m] if m in M else m).upper()
     d, v = {}, C.exe_one_line("%s/toplev.py --version%s 2>&1 | tail -1" %
@@ -273,7 +279,7 @@ def cpu(what, default=None):
     }
     cpu.state.update(versions())
     # Forcing cpu to one with no retlat is done here to avoid infinite recursion
-    if forcecpu and retlat():
+    if forcecpu and retlat(real=True):
       if forcecpu in ('ADL', 'SPR'): cpu.state['CPUID.23H'] = 0
       else: C.error('FORCECPU=%s is not supported for %s' % (forcecpu, name(True)))
     if hybrid():

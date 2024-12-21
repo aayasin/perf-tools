@@ -39,7 +39,7 @@ def parse_args():
   ap = C.argument_parser(usage, mask=0x101,
     defs={'app': None, 'delay': 0, 'events': events, 'sys-wide': 10, 'verbose': -1,
     })
-  ap.add_argument('mode', choices=prof_modes, help='mode for prof: ' + ' '.join(prof_modes))
+  ap.add_argument('mode', choices=prof_modes, help='mode for yperf: ' + ' '.join(prof_modes))
   ap.add_argument('-o', '--output', default='myprofile', help='basename to use for output files')
   args, rest = ap.parse_known_args()
   if rest:

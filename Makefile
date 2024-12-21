@@ -23,6 +23,7 @@ RERUN = -pm 0x80
 SHELL := /bin/bash
 SHOW = tee
 SKIP_EX = false # Skip extra checks
+SS = 4
 ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 TEST_LBR_PERF = 1
 TREE_C=$(shell python -c 'from common1 import registrar as r; print(r.name("tree", "csv"))')
@@ -67,13 +68,17 @@ tramp3d-v4: pmu-tools/workloads/CLTRAMP3D $(CPP)
 
 run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
-	@echo $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s3 --tune :perf-stat:\"\'-C2\'\" # for debugging
+	@echo "#" $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s$(SS) --tune :perf-stat:\"\'-C2\'\" # for debugging
 test-mem-bw: run-mem-bw
 	sleep 2s
-	set -o pipefail; $(DO) profile -s3 $(ST) -o $< $(RERUN) | $(SHOW)
-	grep -E -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth.*<==' $<.toplev-mvl6-nomux.log
+	set -o pipefail; $(DO) profile -s$(SS) $(ST) -o $< $(RERUN) | $(SHOW)
 	./yperf record -o $<-yperf && touch $<-yperf # collect for later
 	kill -9 `pidof m0-n8192-u01.llv`
+ifneq ($(CPU), SPR)
+	grep -E -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth.*<==' $<.toplev-mvl6-nomux.log
+else
+	grep -E -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log
+endif
 	@echo 1 | tee $< > $@
 test-yperf: run-mem-bw-yperf workloads/permute
 	./yperf record -pm 100 -o permute-yperf -- ./workloads/permute abcdefghijk

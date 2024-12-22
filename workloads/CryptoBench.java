@@ -43,7 +43,8 @@ public class CryptoBench {
                 ts = tf;
         }
         long bt = System.nanoTime() - bs;
-        System.out.print(String.format("Hash rate: %.2f Mm/s", 0.01 * (N * TimeUnit.SECONDS.toNanos(1) / bt / 10000)));
+        System.out.print(String.format("%.3f Hash-rate-score:Mm/s # %.3f roi-time:seconds",
+		0.01 * (N * TimeUnit.SECONDS.toNanos(1) / bt / 10000), bt / 1_000_000_000.0));
         if (trackTime) {
                 System.out.print(String.format(" | Generation: %.1f %%",  0.1 * (1000 * timer1 / (timer1 + timer2))));
                 System.out.print(String.format(" | Hasing: %.1f %%", 0.1 * (1000 * timer2 / (timer1 + timer2))));

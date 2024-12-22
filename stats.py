@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.06
+__version__= 1.07
 
 import common as C, pmu, tma
 from common1 import registrar
@@ -313,7 +313,7 @@ def parse_perf(l):
     if 'runs)' in l:
       name2 = '#-runs'
       val2 = int(l.split("(")[2 if 'CPU' in l else 1].split(' ')[0]) if '(' in l else 1
-  elif 'seconds' in l:
+  elif 'seconds time' in l:
     name = items[4 if multirun else 2]
     val = convert(items[0])
     var = get_var(2)
@@ -500,7 +500,8 @@ def perf_log2stat(log, smt_on, d={}):
       if re.match('^\s*$', l) or 'perf stat ' in l: continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
       if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val
-      if name2 in ('Frequency', ): ue[name2] = val2
+      #if name2 in ('Frequency', ): ue[name2] = val2
+      if name2: ue[name2] = val2
     ue['TSC'] = get_TSC(f)
     return ue
   uarch = params(smt_on)
@@ -518,6 +519,8 @@ def perf_log2stat(log, smt_on, d={}):
 def main():
   a1 = C.arg(1)
   if a1.endswith('.info.log'): return rollup_all()
+  if a1.endswith('-B-r1.log'): return perf_log2stat(a1, 0)
+  if a1.endswith('perf_stat-r3.log'): return perf_log2stat(a1, 0, {'dummy': -1})
   if ' ' in a1: return print_metrics(a1)
   stats['verbose'] = 1
   print(pmu.cpu('eventlist'))

@@ -1,0 +1,5 @@
+#!/bin/sh
+sleep $1
+#date +"%Y-%m-%d-%H-%M-%S"
+#tail -3 /home/mysql/batch-bench/HammerDB-4.11/hammerdb.log | grep tpm | tail -1
+tail -n1 $2

@@ -154,13 +154,14 @@ install-jit:
 run-jit: ./workloads/CryptoBench.java
 	$(DO) profile --tune :perf-jit:1 -s1 -pm 4 #hack to create next txt file
 	find1=$(shell tail -1 find-jvmti.txt);\
-	$(JAVA) -XX:+PreserveFramePointer -agentpath:$$find1 $< 999 2>&1 > $@ &
+	$(JAVA) -XX:+PrintFlagsFinal -XX:+PreserveFramePointer -agentpath:$$find1 $< 999 2>&1 > $@ &
 	pidof java
 	xterm -T "java $<" -e "tail -f $@" &
-DO_JIT = $(DO) $(CMD) -pm 1333a --tune :perf-jit:1 :forgive:2 :help:0 :sample:3 :perf-pebs:"'-b -e cpu/event=0xc2,umask=0x2,inv=1,cmask=1,name=UOPS_RETIRED.STALLS/p -c 90001'" -s$(SS) -a java-s$(SS)
+DO_JIT = $(DO) $(CMD) -pm 1333a --tune :perf-jit:1 :run:"'scripts/sleep @@ run-jit'" :forgive:2 :help:0 :sample:3 :perf-pebs:"'-b -e cpu/event=0xc2,umask=0x2,inv=1,cmask=1,name=UOPS_RETIRED.STALLS/p -c 90001'" -s$(SS) -a java-s$(SS)
 test-jit: run-jit
 	sleep 20
 	$(DO_JIT) --mode profile
+	@grep UseAVX run-jit | tee -a java-s$(SS)-out.txt
 	$(DO_JIT) --mode process -pm 8 &
 	$(DO_JIT) --mode process -pm 200 &
 	$(DO_JIT) --mode process -pm 102
@@ -168,6 +169,7 @@ test-jit: run-jit
 kill-jit: run-jit
 	kill -9 `pidof java`
 	mv run-jit{,.$$PPID}
+	echo run-jit.$$PPID >> java-s$(SS)-out.txt
 
 FSI = 400000000
 test-false-sharing: kernels/false-sharing

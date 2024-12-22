@@ -485,7 +485,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'],
                 csv=False, # note !csv implies to collect TSC
                 basic_events=do['perf-stat-add'] > 1, first_events='cpu-clock,', last_events=',' + do['perf-stat-def'], warn=True,
-                grep = "| grep -E 'seconds [st]|CPUs|GHz|insn|topdown|Work|System|all branches' | grep -v 'perf stat' | uniq"):
+                grep = "| grep -E 'seconds [st]|CPUs|GHz|insn|score|topdown|System|all branches' | grep -v 'perf stat' | uniq"):
     def append(x, y): return x if y == '' else ',' + x
     evts, perf_args, user_events = events, [flags, '-x,' if csv else '--log-fd=1', do['perf-stat'] ], args.events and step != 16
     if args.metrics: perf_args += ['--metric-no-group', '-M', args.metrics] # 1st is workaround bug 4804e0111662 in perf-stat -r2 -M
@@ -622,7 +622,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   
   toplev += ' --no-desc'
   if do['plot']: toplev += ' --graph -I%d --no-multiplex' % do['interval']
-  grep_bk= r"grep -E '<==|MUX|^(Bottleneck|Info(.*Time|.*\sIPC))|warning.*zero' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
+  grep_bk= r"grep -E '<==|MUX|^(Bottleneck|Info(.*Time|.*\sIPC))|warning.*zero|score' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
   tl_skip= "not (found|referenced|supported)|Unknown sample event|^unreferenced "
   grep_NZ= r"grep -E -iv '^(all|core |)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|%s|##placeholder##' " % tl_skip
   grep_nz= grep_NZ
@@ -713,7 +713,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
       if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
     logs['bott'] = perf_stat('-B -r1', 'bottlenecks-view', 16, tma.get('perf-groups'),
-      perfmetrics=None, basic_events=False, last_events='', grep="| grep -E 'seconds [st]|inst_retired_any '", warn=False)
+      perfmetrics=None, basic_events=False, last_events='', grep="| grep -E 'seconds [st]|inst_retired_any |score'", warn=False)
     if do['help'] >= 0 and not args.print_only: stats.perf_log2stat(logs['bott'], 0)
 
   if en(14) and (pmu.retlat() or do['help']<0):
@@ -1186,7 +1186,7 @@ def main():
     args.profile_mask &= ~0x10000
   if args.sys_wide:
     if profiling(): do_info('system-wide profiling for %d seconds' % args.sys_wide)
-    do['run'] = 'sleep %d'%args.sys_wide
+    do['run'] = do['run'].replace('@@', str(args.sys_wide)) if '@@' in do['run'] else 'sleep %d' % args.sys_wide
     do['perf-common'] += ' -a'
     if not do['comm']: do['perf-filter'] = 0
     args.profile_mask &= ~0x4 # disable system-wide profile-step

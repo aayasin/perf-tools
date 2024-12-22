@@ -11,6 +11,7 @@ DO = ./do.py # Use e.g. DO="do.py --perf /my/perf" to init things, or DO_SUFF to
 DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10
 DO2 = $(DO) $(CMD) -a 'workloads/BC.sh 3'
 FAIL = (echo 'failed! $$?'; exit 1)
+JAVA = java
 MAKE = make --no-print-directory
 METRIC = -m IpCall
 MGR = sudo $(shell python -c 'import common; print(common.os_installer())') -y -q
@@ -50,6 +51,10 @@ install: /usr/bin/python openmp tramp3d-v4
 	$(MGR) install $(PKG)
 install1:
 	$(MGR) install $(PKG)
+install-python3.12:
+	wget https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tgz
+	tar -xf Python-3.12.0.tgz
+	cd Python-3.12.0 && export PYTHON_CFLAGS='-fno-omit-frame-pointer -mno-omit-leaf-frame-pointer' && ./configure --enable-optimizations && make -j `nproc` && realpath python
 link-python:
 	sudo ln -f -s $$(find /usr/bin -name 'python[1-9]*' -executable | grep -E -v config | sort -n -tn -k3 | tail -1) /usr/bin/python
 diff:
@@ -141,6 +146,28 @@ test-default-track-perf:
 test-LBR-edge:
 	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp -c 3000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e cycles:p -c 2000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
+
+install-jit:
+	$(MAKE) install1 PKG="openjdk-17-jdk openjdk-17-jre xterm"
+	#cd .. && git clone https://github.com/jvm-profiling-tools/perf-map-agent && cd perf-map-agent && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && cmake . && make && echo "Successfully built perf-map-agent"
+	#cd .. && git clone https://github.com/brendangregg/FlameGraph && cd FlameGraph && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && sed -i -e "s|JAVA_HOME=\${JAVA_HOME:-.*|JAVA_HOME=\${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}|g;s|AGENT_HOME=\${AGENT_HOME:-.*|AGENT_HOME=\${AGENT_HOME:-../perf-map-agent}|g" jmaps
+run-jit: ./workloads/CryptoBench.java
+	$(DO) profile --tune :perf-jit:1 -s1 -pm 4 #hack to create next txt file
+	find1=$(shell tail -1 find-jvmti.txt);\
+	$(JAVA) -XX:+PreserveFramePointer -agentpath:$$find1 $< 999 2>&1 > $@ &
+	pidof java
+	xterm -T "java $<" -e "tail -f $@" &
+DO_JIT = $(DO) $(CMD) -pm 1333a --tune :perf-jit:1 :forgive:2 :help:0 :sample:3 :perf-pebs:"'-b -e cpu/event=0xc2,umask=0x2,inv=1,cmask=1,name=UOPS_RETIRED.STALLS/p -c 90001'" -s$(SS) -a java-s$(SS)
+test-jit: run-jit
+	sleep 20
+	$(DO_JIT) --mode profile
+	$(DO_JIT) --mode process -pm 8 &
+	$(DO_JIT) --mode process -pm 200 &
+	$(DO_JIT) --mode process -pm 102
+	$(MAKE) kill-jit
+kill-jit: run-jit
+	kill -9 `pidof java`
+	mv run-jit{,.$$PPID}
 
 FSI = 400000000
 test-false-sharing: kernels/false-sharing

@@ -33,9 +33,11 @@ options:
                         ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,
                         +UopPI,+IpAssist,+Memory_Bound*/3)
   --sys-wide SYS_WIDE, -s SYS_WIDE
-                        system-wide profiling for x seconds (default: 0)
+                        system-wide profiling for x seconds (float ok too)
+                        (default: 0)
   --delay DELAY, -d DELAY
-                        delay profiling for x seconds (default: 0)
+                        delay profiling for x seconds (float ok too) (default:
+                        0)
   --cpu CPU, -C CPU     filter profiling on selected CPUs (default: None)
   -r REPEAT, --repeat REPEAT
                         times to run per-app counting and topdown-primary

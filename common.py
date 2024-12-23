@@ -358,8 +358,8 @@ def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefa
   def def_value(a, dv=None): return defs[a] if defs and a in defs else dv
   def add_argument(a, h): ap.add_argument('--' + a, default=common_def(a), help=h)
   def add_argument2(a, h): ap.add_argument('--'+a, '-'+a[0], default=common_def(a), help=h)
-  def add_prof_arg(a): ap.add_argument('--'+a, '-'+a[0], type=int, default=common_def(a),
-                                       help=a.replace('sys-', 'system-') + ' profiling for x seconds')
+  def add_prof_arg(a): ap.add_argument('--'+a, '-'+a[0], type=float, default=common_def(a),
+                                       help=a.replace('sys-', 'system-') + ' profiling for x seconds (float ok too)')
   add_argument('perf', 'use a custom perf tool')
   add_argument('pmu-tools', 'use a custom pmu-tools')
   add_argument('toplev-args', 'arguments to pass-through to toplev')

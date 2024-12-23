@@ -7,7 +7,7 @@
 1 | logging setup details                              | 
 2 | per-app counting 3 runs                            | [--repeat 3]
 4 | system-wide counting                               | 
-8 | sampling w/ stacks                                 | [--tune :sample:1]
+8 | sampling w/ stacks-e cycles:pp                     | [--tune :sample:1]
 10 | topdown full tree + All Bottlenecks                | [--tune :tma-num-levels:6]
 20 | topdown primary, 2-levels 3 runs                   | [--repeat 3 --tune :tma-levels:2]
 40 | topdown auto-drilldown                             | 

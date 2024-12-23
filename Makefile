@@ -73,7 +73,7 @@ tramp3d-v4: pmu-tools/workloads/CLTRAMP3D $(CPP)
 
 run-mem-bw:
 	make -s -C workloads/mmm run-textbook > /dev/null
-	@echo "#" $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s$(SS) --tune :perf-stat:\"\'-C2\'\" # for debugging
+	@echo "#" $(DO) profile -a workloads/mmm/m0-n8192-u01.llv -s$(SS) -C2 # for debugging
 test-mem-bw: run-mem-bw
 	sleep 2s
 	set -o pipefail; $(DO) profile -s$(SS) $(ST) -o $< $(RERUN) | $(SHOW)
@@ -98,7 +98,6 @@ ifneq ($(CPU), ICX)
 	./yperf record -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- $(AP_MT)
 	./yperf report -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- $(AP_MT) # fails on ICX!
 	./yperf advise -o perf-bench-numa-mem-yperf
-	$(DO) profile -C4-7 -pm 11116 -a "$(AP_MT)"
 endif
 
 run-mt:
@@ -157,7 +156,7 @@ run-jit: ./workloads/CryptoBench.java
 	$(JAVA) -XX:+PrintFlagsFinal -XX:+PreserveFramePointer -agentpath:$$find1 $< 999 2>&1 > $@ &
 	pidof java
 	xterm -T "java $<" -e "tail -f $@" &
-DO_JIT = $(DO) $(CMD) -pm 1333a --tune :perf-jit:1 :run:"'scripts/sleep @@ run-jit'" :forgive:2 :help:0 :sample:3 :perf-pebs:"'-b -e cpu/event=0xc2,umask=0x2,inv=1,cmask=1,name=UOPS_RETIRED.STALLS/p -c 90001'" -s$(SS) -a java-s$(SS)
+DO_JIT = $(DO) $(CMD) -pm 1333a --tune :perf-jit:1 :run:"'scripts/sleep @1 run-jit'" :forgive:2 :help:0 :sample:3 :perf-pebs:"'-b -e cpu/event=0xc2,umask=0x2,inv=1,cmask=1,name=UOPS_RETIRED.STALLS/p -c 90001'" -s$(SS) -a java-s$(SS)
 test-jit: run-jit
 	sleep 20
 	$(DO_JIT) --mode profile
@@ -165,7 +164,10 @@ test-jit: run-jit
 	$(DO_JIT) --mode process -pm 8 &
 	$(DO_JIT) --mode process -pm 200 &
 	$(DO_JIT) --mode process -pm 102
+	$(MAKE) test-jit-analyze CMD=analyze
 	$(MAKE) kill-jit
+test-jit-analyze:
+	$(DO_JIT)
 kill-jit: run-jit
 	kill -9 `pidof java`
 	mv run-jit{,.$$PPID}
@@ -296,6 +298,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing analyze module' && $(MAKE) test-analyze" \
     "echo 'prompting for sudo soon2' && $(DO) log" \
     "echo 'running the yperf profiler' && $(MAKE) test-yperf" \
+    "echo 'testing --cpu' && $(DO) profile -C4-7 -pm 11116 -a \"$(AP_MT)\" > AP-mt.log 2>&1 || $(FAIL)" \
     "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL)" \
     "echo 'testing prof-no-mux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
     "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view, pipeline-view & over-time profile-steps, tar command' && \

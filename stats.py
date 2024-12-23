@@ -25,7 +25,9 @@ import csv, json, os.path, re, sys
 #         get_TSC()
 #         rollup_all()
 #         rollup() (start and toward end)
-def get_file(app, ext): return get_file_int(C.command_basename(app), '.perf.data.' + ext)
+def get_file(app, ext):
+  return get_file_int(C.command_basename(app), '.perf.data.' + ext) or\
+         get_file_int(C.command_basename(app), '-k1.perf.datj.' + ext)
 
 def get_stat_log(s, perf_stat_file):
   repeat = re.findall('.perf_stat-r([1-9]).log', perf_stat_file)[0]

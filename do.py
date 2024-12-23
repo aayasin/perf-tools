@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.93
+__version__ = 3.94
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -101,7 +101,7 @@ do = {'run':        C.RUN_DEF,
   'perf-pebs':      pmu.event_period('dsb-miss', 1000000),
   'perf-pebs-top':  0,
   'perf-pt':        "-e '{intel_pt//u,%su}' -c %d -m,64M" % (pmu.lbr_event(), pmu.lbr_period()), # noretcomp
-  'perf-record':    ' -g ', # FIXME:11:force -e cycles:p GLC onwards; '-e BR_INST_RETIRED.NEAR_CALL:pp ',
+  'perf-record':    ' -g -e ' + pmu.event('cycles', precise=2, user_only=0),
   'perf-report-append': '',
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
@@ -187,6 +187,7 @@ def exe_1line(x, f=None, heavy=True):
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
 
 def error(x): C.warn(x) if do['forgive'] > 1 else C.error(x)
+def error_if(x, cond): return error(x) if cond else None
 def do_info(x):  return C.info(x) if args.verbose >= 0 and not do['batch'] else None
 def warn_file(x):
   if not args.mode == 'profile' and not args.print_only and not C.isfile(x): C.warn('file does not exist: %s' % x)
@@ -606,7 +607,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if do['perf-annotate']:
       exe(r"%s --stdio -n -l -i %s | c++filt | tee %s "
         r"| tee >(grep -E '^\s+[0-9]+ :' | sort -n | ./ptage > %s-code-ips.log) "
-        r"| grep -E -v -E '^(-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
+        r"| grep -E -v '^(-|\s+([A-Za-z:]|[0-9] :))' > %s-code_nz.log" % (perf_view('annotate'), data,
         logs['code'], base, base), '@annotate code', redir_out='2>/dev/null')
       exe("grep -E -w -5 '(%s) :' %s" % ('|'.join(exe2list(r"grep -E '\s+[0-9]+ :' %s | cut -d: -f1 | sort -n | uniq | tail -%d | grep -E -vw '^\s+0'" %
         (logs['code'], do['perf-annotate']))), logs['code']), '@hottest %d+ blocks, all commands' % do['perf-annotate'])
@@ -875,8 +876,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       else: warn_file(loops)
 
   if en(9) and do['sample'] > 2:
-    if   '/' in do['perf-pebs'] and 'pp' not in do['perf-pebs'].split('/')[2]: error("Expect a precise event/")
-    elif ':' in do['perf-pebs'] and 'pp' not in do['perf-pebs'].split(':')[1]: error("Expect a precise event:")
+    if   '/' in do['perf-pebs']: error_if("Expect a precise event/", 'pp' not in do['perf-pebs'].split('/')[2])
+    elif ':' in do['perf-pebs']: error_if("Expect a precise event:", 'pp' not in do['perf-pebs'].split(':')[1])
     else: assert 0, "Expect a precise event in '%s'" % do['perf-pebs']
     if pmu.retlat(): assert ' -W' in do['perf-pebs'] or do['forgive'] > 1, "Expect use of Timed PEBS"
     if 'frontend' in do['perf-pebs'] and pmu.granite() and pmu.cpu('kernel-version') < (6, 4):
@@ -957,8 +958,9 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     assert do['msr']
     perf_data = '%s.perf.data' % record_name('-e msr')
     profile_exe('sudo %s -e msr:* -o %s -- %s' % (perf_common(), perf_data, r), 'tracing MSRs', 18, tune='msr')
-    x = '-i %s | cut -d: -f3-4 | cut -d, -f1 | sort | uniq -c | sort -n' % perf_data
-    exe(' '.join(('sudo', perf, 'script', x)), msg=None, redir_out=None)
+    def script_msr(x): exe(' '.join(('sudo', perf, 'script -i', perf_data, x, '|', sort2u)), msg=None, redir_out=None)
+    script_msr('| cut -d: -f3-4 | cut -d, -f1')
+    script_msr("| cut -d: -f2- | grep -E -v 'msr: (%s)|rdpmc'" % '|'.join(['%x' % m for m in pmu.cpu_msrs('data')]))
 
   if en(20) and do['flameg']:
     flags = '-a -g -F 49' # -c %d' % pmu.period()
@@ -1186,7 +1188,7 @@ def main():
     args.profile_mask &= ~0x10000
   if args.sys_wide:
     if profiling(): do_info('system-wide profiling for %d seconds' % args.sys_wide)
-    do['run'] = do['run'].replace('@@', str(args.sys_wide)) if '@@' in do['run'] else 'sleep %d' % args.sys_wide
+    do['run'] = do['run'].replace('@1', str(args.sys_wide)) if '@1' in do['run'] else 'sleep %d' % args.sys_wide
     do['perf-common'] += ' -a'
     if not do['comm']: do['perf-filter'] = 0
     args.profile_mask &= ~0x4 # disable system-wide profile-step

@@ -81,7 +81,7 @@ def lbr_unfiltered_events(cut=False):
     e = lbr_event()
     return (e[:-1] if cut else e, 'instructions:ppp', 'cycles:p', 'BR_INST_RETIRED.NEAR_TAKENpdir')
 
-def event(x, precise=0):
+def event(x, precise=0, user_only=1):
   def misp_event(sub): return perf_event('BR_MISP_RETIRED.%s%s' % (sub, '_COST' if retlat() else ''))
   def rename_event(m, n): return perf_event(m).replace(m, n)
   aliases = {'lbr':     lbr_event(),
@@ -90,10 +90,12 @@ def event(x, precise=0):
     'cond-misp':  misp_event('COND'),
     'cycles':     '%s/cycles/' % pmu() if hybrid() else 'cycles',
     'dsb-miss':   perf_event('FRONTEND_RETIRED.ANY_DSB_MISS'),
-    'sentries':   rename_event('BR_INST_RETIRED.FAR_BRANCH', 'sentries') + 'u'
+    'sentries':   rename_event('BR_INST_RETIRED.FAR_BRANCH', 'sentries')
   }
   e = aliases[x] if x in aliases else perf_event(x)
-  if precise: e += ('u' + 'p'*precise + (' -W' if retlat() else ''))
+  if (precise or user_only) and not e.endswith('/'): e += ':'
+  e += 'u'*user_only
+  if precise: e += ('p'*precise + (' -W' if retlat() else ''))
   if ':' in x and x.split(':')[0].isupper(): e = e.replace(x.split(':')[0], x)
   return perf_format(e)
 
@@ -297,7 +299,12 @@ def msr_read(m): return C.exe_one_line('sudo %s/msr.py 0x%x' % (pmutools, m))
 
 MSR = {'IA32_MCU_OPT_CTRL': 0x123,
 }
-def cpu_msrs():
+def cpu_msrs(type='control_etc'):
+  if type == 'data':
+    return [0xe7, 0xe8,         # A/MPERF
+            0x6e0,              # TSC_DEADLINE
+            0x830]              # X2APIC_ICR
+  
   msrs = [0x048, 0x08b,         # IA32_SPEC_CTRL, microcode update signature
           0x1a4,                # Prefetch Control
           0x033,                # Memory Control
@@ -308,6 +315,8 @@ def cpu_msrs():
     msrs += [0x610]         # RAPL. TODO: assert SNB-EP onwards
     msrs += [0x1b1, 0x19c]  # Thermal status-prochot for package/core.
     if v5p(): msrs += [0x06d]
+  if v5p(): # hack for not "before Ice Lake and Atom family processors"
+      msrs += [0x10a, 0x1b01]   # DOITM in IA32_ARCH_CAPABILITIES[12], IA32_UARCH_MISC_CTL[0]
   return msrs
 
 def cpu_peak_kernels(widths=(4, 5, 6, 8)):

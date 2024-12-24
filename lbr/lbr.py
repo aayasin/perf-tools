@@ -58,7 +58,7 @@ header_field = {
 }
 def header_ip_str(line):
   x = LC.line2info(line).header()
-  assert x, "Not a head of sample: " + line
+  assert x, "Not a head of sample: line=%s line2info=%s" % (line.rstrip(), LC.line2info(line).info2value)
   #           clang 155371 [062] 1286179.977117:      70001 r20c4:ppp:      7ffff7de04c2 _dl_relocate_object+0xbc2 (/lib/x86_64-linux-gnu/ld-2.27.so)
   if 0:
     x = re.match(r'^\s+(\w+)\s(\d+)\s(\[\d+\])?\s(\d+\.\d+):\s+(\d+)\s(\S+)\s+([0-9a-f]+)', line)

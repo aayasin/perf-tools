@@ -125,7 +125,7 @@ def line_inst(line):
   return None
 
 def is_type(t, l):    return x86.is_type(inst2pred(t), l)
-def is_taken(line):   return '# ' in line
+def is_taken(line):   return '\t# ' in line
 def is_empty(line):   return line.strip() == ''
 def has_timing(line): return line.endswith('IPC')
 

@@ -760,7 +760,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     print_info.first = True
     def static_stats():
       if args.mode == 'profile' or args.print_only or windows_file: return
-      bins = exe2list(perf + r" script -i %s | awk -F'\\(' '{print $NF}' | cut -d\) -f1 "
+      bins = exe2list(perf + r" script -i %s | awk -F'\\(' '{print $NF}' | cut -d\) -f1 | grep -vwE deleted "
         "| grep -E -v '^\[|anonymous|/tmp/perf-' | %s | tail -5" % (data, sort2u))[1:][::2]
       assert len(bins)
       print_info('# %s:\n#\n' % 'Static Statistics')
@@ -1187,13 +1187,13 @@ def main():
     C.warn('bottlenecks view not supported on Hybrid. disabling..')
     args.profile_mask &= ~0x10000
   if args.sys_wide:
-    if profiling(): do_info('system-wide profiling for %d seconds' % args.sys_wide)
+    if profiling(): do_info(f'system-wide profiling for {args.sys_wide} seconds')
     do['run'] = do['run'].replace('@1', str(args.sys_wide)) if '@1' in do['run'] else 'sleep %d' % args.sys_wide
     do['perf-common'] += ' -a'
     if not do['comm']: do['perf-filter'] = 0
     args.profile_mask &= ~0x4 # disable system-wide profile-step
   if args.delay:
-    if profiling(): do_info('delay profiling by %d seconds' % args.delay)
+    if profiling(): do_info(f'delay profiling by {args.delay} seconds')
     do['perf-common'] += ' -D %d' % (args.delay * 1000)
   if args.cpu:
     if profiling(): do_info('filtered profiling on CPUs: ' + args.cpu)

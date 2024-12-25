@@ -1,6 +1,7 @@
 // credit: Alexey Ragozin
 // source: https://bell-sw.com/announcements/2022/04/07/how-to-use-perf-to-monitor-java-performance/
 //
+package workloads;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Random;

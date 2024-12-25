@@ -121,7 +121,7 @@ test-bc2:
 CPUIDI = 200000000
 test-bottlenecks: kernels/cpuid
 	$(DO1) -pm 10 --tune :help:0 :forgive:2
-	grep Bottleneck cpuid-$(CPUIDI)$(TREE_L) | sort -n -k4 | tail -1 | grep --color Irregular_Overhead
+	grep Bottleneck cpuid-$(CPUIDI)$(TREE_L) | sed 's/core Bottleneck/Bottleneck/' | sort -n -k4 | tail -1 | grep --color Irregular_Overhead
 test-build:
 	$(DO) build profile -a datadep -g " -n120 -i 'add %r11,%r12'" -ki 20e6 -e FRONTEND_RETIRED.DSB_MISS -n '+Core_Bound*' -pm 22 | $(SHOW)
 	grep -q 'Backend_Bound.Core_Bound.Ports_Utilization.Ports_Utilized_1' datadep-20e6.toplev-vl2.log
@@ -150,10 +150,13 @@ install-jit:
 	$(MAKE) install1 PKG="openjdk-17-jdk openjdk-17-jre xterm"
 	#cd .. && git clone https://github.com/jvm-profiling-tools/perf-map-agent && cd perf-map-agent && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && cmake . && make && echo "Successfully built perf-map-agent"
 	#cd .. && git clone https://github.com/brendangregg/FlameGraph && cd FlameGraph && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && sed -i -e "s|JAVA_HOME=\${JAVA_HOME:-.*|JAVA_HOME=\${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}|g;s|AGENT_HOME=\${AGENT_HOME:-.*|AGENT_HOME=\${AGENT_HOME:-../perf-map-agent}|g" jmaps
+JAVA_CMD = $(JAVA) -XX:+PrintFlagsFinal -XX:+PreserveFramePointer -agentpath:$(shell tail -1 find-jvmti.txt)
 run-jit: ./workloads/CryptoBench.java
-	$(DO) profile --tune :perf-jit:1 -s1 -pm 4 #hack to create next txt file
-	find1=$(shell tail -1 find-jvmti.txt);\
-	$(JAVA) -XX:+PrintFlagsFinal -XX:+PreserveFramePointer -agentpath:$$find1 $< 999 2>&1 > $@ &
+	$(DO) profile --tune :perf-jit:1 -s1 -pm 4 #hack to create jvmti.txt file
+	$(JAVA_CMD) $< 999 2>&1 > $@ &
+	#$(JAVA)c $< # useful in newer JAVA versions
+	#$(JAVA_CMD) workloads.CryptoBench 999 2>&1 > $@ &
+	@echo $(JAVA_CMD) $< 999 >> java-s$(SS)-out.txt
 	pidof java
 	xterm -T "java $<" -e "tail -f $@" &
 DO_JIT = $(DO) $(CMD) -pm 1333a --tune :perf-jit:1 :run:"'scripts/sleep @1 run-jit'" :forgive:2 :help:0 :sample:3 :perf-pebs:"'-b -e cpu/event=0xc2,umask=0x2,inv=1,cmask=1,name=UOPS_RETIRED.STALLS/p -c 90001'" -s$(SS) -a java-s$(SS)
@@ -286,7 +289,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing help of metric; version; prompts for sudo password' && $(DO) version log help -m GFLOPs --tune :msr:1" \
     "echo 'testing sys-wide + topdown tree; MEM_Bandwidth in L5' && $(MAKE) test-mem-bw SHOW=\"grep --color -E '.*<=='\"" \
     "echo 'testing perf -M IpCall & colored TMA, then toplev --drilldown' && $(MAKE) test-metric SHOW=\"grep --color -E '^|Ret.*<=='\"" \
-    "echo 'prompting for sudo soon' && $(DO) log" \
+    "echo 'prompting for sudo soon1' && $(DO) log" \
     "echo 'testing topdown across-tree tagging; Mispredict' && $(MAKE) test-bc2 PM=40 SHOW=\"grep --color -E '^|Mispredict'\"" \
     "echo 'testing topdown ~overlap in Threshold attribute' && echo skip: $(MAKE) test-false-sharin" \
     "echo 'testing Bottlenecks View' && $(MAKE) test-bottlenecks AP=\"./kernels/cpuid $(CPUIDI)\"" \

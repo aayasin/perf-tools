@@ -88,6 +88,7 @@ def analyze_misp():
   exe(C.tail(ext('mispreds')), '@ top significant (== # executions * # mispredicts) branches')
   misp = file2lines(ext('mispreds'), pop=True)
   while 1:
+    if not len(misp): break
     b = C.str2list(misp.pop())
     verbose('misp', b, 1)
     if float(b[0][:-1]) < threshold['misp-sig']: break

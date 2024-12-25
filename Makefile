@@ -159,7 +159,7 @@ run-jit: ./workloads/CryptoBench.java
 	@echo $(JAVA_CMD) $< 999 >> java-s$(SS)-out.txt
 	pidof java
 	xterm -T "java $<" -e "tail -f $@" &
-DO_JIT = $(DO) $(CMD) -pm 1333a --tune :perf-jit:1 :run:"'scripts/sleep @1 run-jit'" :forgive:2 :help:0 :sample:3 :perf-pebs:"'-b -e cpu/event=0xc2,umask=0x2,inv=1,cmask=1,name=UOPS_RETIRED.STALLS/p -c 90001'" -s$(SS) -a java-s$(SS)
+DO_JIT = $(DO) $(CMD) -pm 1333a --tune :perf-jit:1 :run:"'scripts/sleep @1 run-jit'" :forgive:2 :help:0 :sample:3 :perf-pebs:"'-b -e cpu/event=0xc2,umask=0x2,inv=1,cmask=1,name=UOPS_RETIRED.STALLS/pp -c 90001'" -s$(SS) -a java-s$(SS)
 test-jit: run-jit
 	sleep 20
 	$(DO_JIT) --mode profile

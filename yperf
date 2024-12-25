@@ -14,11 +14,12 @@
 #
 from __future__ import print_function
 __author__  = 'ayasin'
-__version__ = 0.35      # see version line of do.py
+__version__ = 0.40      # see version line of do.py
 
 import common as C, pmu, tma
 
 prof_modes = ['record', 'report', 'advise']
+prof_type = ['java', ]
 def parse_args():
   usage = '\n\t'.join(('prof [options] <mode> [-- app and args]',
                        'profile a workload in one-shot (a single profiling run)',
@@ -40,13 +41,16 @@ def parse_args():
     defs={'app': None, 'delay': 0, 'events': events, 'sys-wide': 10, 'verbose': -1,
     })
   ap.add_argument('mode', choices=prof_modes, help='mode for yperf: ' + ' '.join(prof_modes))
-  ap.add_argument('-o', '--output', default='myprofile', help='basename to use for output files')
+  ap.add_argument('-t', '--type', choices=prof_type, help='workload type: ' + ' '.join(prof_type))
+  ap.add_argument('-o', '--output', help='basename to use for output files')
   args, rest = ap.parse_known_args()
   if rest:
     if rest[0] == '--': rest.pop(0)
     args.app = ' '.join(rest)
     args.sys_wide = 0
-  #else: C.error("Expect '--' for per-app profiling\n" + usage)
+  if args.output: pass
+  elif args.sys_wide: args.output = f'myprofile-{args.sys_wide}'
+  else: args.output = C.command_basename(args.app)
   if not pmu.goldencove_on(): C.warn('old PMU: ' + pmu.name())
   return args
 
@@ -54,27 +58,31 @@ def main():
   args = parse_args()
   events = '\\"%s\\"' % args.events
   args.events = ''
-  mode = 'suspend-smt' if pmu.cpu('smt-on') else ''
-  mode += 'profile --mode profile'
+  cmds = 'suspend-smt' if pmu.cpu('smt-on') else ''
+  cmds += 'profile --mode profile'
   if args.mode == 'report':
     if not len(C.glob(args.output + '*.perf.data', 1)): C.error("run 'yperf record' before 'yperf report'")
-    mode = 'profile tar --mode process'
+    cmds = 'profile tar --mode process'
   elif args.mode == 'advise':
     if not len(C.glob(args.output + '*.info.log', 1)): C.error("run 'yperf report' before 'yperf advise'")
     C.warn('Using a PROXY of Bottlenecks View that is subject to INACCURACIES. Use do.py for in-depth analysis!')
-    mode = 'analyze'
+    cmds = 'analyze'
   else:
-    assert args.mode == 'record', "unsupported mode: '%s'" % args.mode
+    assert args.mode.startswith('record'), f"unsupported mode: '{args.mode}'"
   # FIXME:03: high overhead with :srcline:1
   # FIXME:04: :funcs:0 can reduce processing time too (not used by advise mode)
   tune = '' # :funcs:0 :srcline:1
-  tune += ":loops:0 :perf-track:\"'-e %s'\"" % events
-  cmd = ' '.join([C.realpath('do.py'), mode, C.argp_get_common(args),
+  if args.type == 'java':
+    if args.sys_wide == 0: C.error("Must profile system-wide for Java profiling")
+    tune += " :perf-jit:1"
+  tune += f" :loops:0 :perf-track:\"'-e {events}'\""
+  profile = ' '.join([C.realpath('do.py'), cmds, C.argp_get_common(args),
                   '-pm %x -v %d' % (args.profile_mask, args.verbose),
                   C.argp_tune_prepend(args, tune),
                   "-C %s" % args.cpu if args.cpu else '',
                   "-a '%s'" % args.app if args.app else '', '-o %s' % args.output])
-  C.exe_cmd(cmd, debug=args.verbose + 1)
+  C.exe_cmd(profile, debug=args.verbose + 1, fail=args.verbose>0)
 
 if __name__ == "__main__":
   main()
+

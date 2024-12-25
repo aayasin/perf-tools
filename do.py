@@ -580,7 +580,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       elif do['perf-jit'] == 2:
         x = "%s -m sysconfig | grep -F no-omit-frame-pointer | grep -F no-omit-leaf-frame-pointer" % do['python']
       else: assert 0, 'unsupported perf-jit mode'
-      assert exe(x) == 0, 'JIT-profiling was not launched properly'
+      if exe(x, fail=0): C.error('JIT-profiling was not launched properly')
   if en(1):
     logs['stat'] = perf_stat('-r%d' % args.repeat, 'per-app counting %d runs' % args.repeat, 1)
     if profiling() and (args.sys_wide or '-a' in do['perf-stat']):
@@ -732,12 +732,12 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     perf_data, flags = '%s.perf.data' % record_calibrate('perf-%s' % tag), do['perf-%s' % tag]
     assert C.any_in(('-b', '-j any', 'ldlat', 'intel_pt'), flags) or (do['forgive'] > 1), 'No unfiltered LBRs! for %s: %s' % (tag, flags)
     if not windows_file:
-      log = '%s.perf_stat%s.log' % (out, C.chop(flags.strip()))
+      log = '%s.perf_stat%s.log' % (out, C.chop(flags.replace(' -k1', '').strip()))
       cmd = "bash -c '%s %s %s -o %s %s'" % (perf_stat_TSC(log), perf_common('stat'), track, log, r) if len(track) else '-- ' + r
       profile_exe(perf_common(record) + ' %s -o %s %s && %s' % (flags, perf_data, cmd, C.grep('insn|time', log)),
                   'sampling-%s%s' % (tag.upper(), C.flag2str(' on ', msg)), step)
       warn_file(perf_data)
-      if tag not in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), jit(perf_data)))
+      if tag not in ('ldlat', 'pt'): print_cmd("Try '%s -i %s --branch-history --samples 9' to browse streams" % (perf_view(), perf_data))
     n = samples_count(perf_data)
     def warn(x='little'): C.warn("Too %s samples collected (%s in %s)%s" % (x, n, perf_data if not windows_file else windows_file,
                                   '' if windows_file else "; rerun with '--tune :calibrate:%d'" % (do['calibrate'] + (-1 if x == 'little' else 1))))

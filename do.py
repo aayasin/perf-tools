@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.94
+__version__ = 3.95
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -156,7 +156,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=Fa
     if profiling:
       if args.mode == 'process':
         x, run, debug = '# ' + x, False, args.verbose > 2
-        if 'perf record ' not in x: msg = None
+        if args.verbose < 0 or 'perf record ' not in x: msg = None
     elif args.mode == 'profile':
         x, run, debug = '# ' + x, False, args.verbose > 2
     elif '--xed' in x and not C.isfile(C.Globals['xed']): C.error('!\n'.join(('xed was not installed',
@@ -208,6 +208,7 @@ def module_version(mod_name):
     mod = study
   else: C.error('Unsupported module: ' + mod_name)
   return '%s=%.2f' % (mod_name, mod.__version__)
+def is_yperf(): return len(do['perf-track']) > 99 # hack for yperf which uses really long tunable
 def profiling(): return args.mode != 'process'
 def user_app(): return args.output or args.app != C.RUN_DEF
 def uniq_name(): return args.output or C.command_basename(args.app, args.app_iterations if args.gen_args else None)[:200]
@@ -218,8 +219,7 @@ def read_toplev(l, m): return None if do['help'] < 0 else stats.read_toplev(l, m
 def perf_record_true(): return '%s record true > /dev/null' % get_perf_toplev()[0]
 def analyze_it():
   exe_v0(msg="Analyzing '%s'" % uniq_name())
-  analyze.analyze(uniq_name(), args, do,
-                  len(do['perf-track']) < 99) # hack for yperf which uses really long tunable
+  analyze.analyze(uniq_name(), args, do, not is_yperf())
 
 def tools_install(packages=[]):
   installer='sudo %s -y install ' % do['package-mgr']
@@ -570,6 +570,12 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if C.isfile(datj) and os.path.getmtime(datj) > os.path.getmtime(data): C.info('reuse %s' % datj)
     else: exe('%s inject -j -i %s -o %s' % (perf, data, datj))
     return datj
+  def peek_stdout(what, stop):
+    if do['log-stdout'] and (profiling() or is_yperf()):
+      for l in reversed(C.file2lines(C.log_stdio)):
+        if stop in l: break
+        if what in l: return l
+    return None
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
   if args.profile_mask & ~0x1:
@@ -591,11 +597,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     data = '%s.perf.data' % record_name(do['perf-record'])
     profile_exe(perf_common() + ' -c %d -o %s %s -- %s' % (pmu.default_period(), data, do['perf-record'], r),
                 'sampling %s' % do['perf-record'].replace(' -g ', 'w/ stacks'), 3, tune='sample')
-    if do['log-stdout'] and profiling():
-      record_out = C.file2lines(C.log_stdio)
-      for l in reversed(record_out):
-        if 'sampling ' in l: break
-        if 'WARNING: Kernel address maps' in l: error("perf tool is missing permissions. Try './do.py setup-perf'")
+    if peek_stdout('WARNING: Kernel address maps', 'sampling '): error("perf tool is missing permissions. Try './do.py setup-perf'")
     data = jit(data)
     exe(perf_report + " --header-only -i %s | grep duration" % data)
     print_cmd("Try '%s -i %s' to browse time-consuming sources" % (perf_view(), data))
@@ -751,7 +753,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
            or do['forgive'] > 2, 'Incorrect event for LBR in: %s, use LBR_EVENT=<event>' % do['perf-lbr']
     msg = None if pmu.lbr_event() in do['perf-lbr'] else pmu.find_event_name(do['perf-lbr'])
     data, nsamples = perf_record('lbr', 8, msg)
-    info, comm = '%s.info.log' % data, get_comm(data) if not windows_file else None
+    info, comm = f'{data}.info.log', get_comm(data) if not windows_file else None
+    ipc_lbr = peek_stdout('insn per cycle', 'sampling-LBR'); ipc_lbr = ipc_lbr.split()[3] if ipc_lbr else ''
     clean = r"sed 's/#.*//;s/^\s*//;s/\s*$//;s/\\t\\t*/\\t/g'"
     def print_info(x):
       if args.mode != 'profile' and not args.print_only:
@@ -790,9 +793,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if C.isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, r" grep -E -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      # FIXME:10: reduce overcount of LBR sample with cycles but no IPC
-      slow_cmd = "| tee >(sed -E 's/\[[0-9]+\]//' | %s | ./slow-branch | sort -n | %s > %s.slow.log)" % (
-        sort2u, C.ptage(), data) if mask_eq(0x48, do['imix']) else ''
+      slow_cmd = f"| tee >(sed -E 's/\[[0-9]+\]//' | {sort2u} | ./slow-branch {ipc_lbr} | sort -n | {C.ptage()} > {data}.slow.log)" if mask_eq(0x48, do['imix']) else ''
       perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data, log_br_count('sampled taken',
         'samples').replace('Count', '\\nCount')), '@processing %d samples' % nsamples, data, fail=0)
       if do['xed']:

@@ -4,12 +4,14 @@
 # edited: March 2024
 #
 # Sample usage: perf script -i lbr.perf.data -F +brstackinsn --xed | grep -E '^\s+[0-9a-f]+\s.*#'
-#                 | sed -E 's/\[[0-9]+\]//' | sort | uniq -c | sort -n | ./slow-branch
+#                 | sed -E 's/\[[0-9]+\]//' | sort | uniq -c | sort -n | ./slow-branch [average-IPC]
 #
 from __future__ import print_function
 __author__ = 'ayasin'
 
 import re, sys
+
+avg_ipc = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
 
 while True:
   line = sys.stdin.readline()
@@ -22,5 +24,5 @@ while True:
     print('%s ## Line does not conform to expected syntax by slow-branch' % line.rstrip())
     continue
   ipc = float(r.group(3)) if r.group(3) and r.group(3) != '0.00' else None
-  cost = int(r.group(1)) * ((1 / ipc) if ipc else (float(r.group(2)) if r.group(2) else 99))
+  cost = int(r.group(1)) * ((1 / ipc) if ipc else ((float(r.group(2)) / avg_ipc) if r.group(2) else 99))
   print('%7.1f\t' % round(cost, 1), line, end='')

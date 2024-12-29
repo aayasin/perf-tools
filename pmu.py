@@ -60,6 +60,7 @@ def retlat(real=False): return cpu_has_feature('CPUID.23H', real=real)
 # FIXME:09: extract next tuple from genretlat -h output
 def is_retlat(x): return x and x in ('MTL', 'GNR', 'LNL')
 def server():     return os.path.isdir('/sys/devices/uncore_cha_0')
+def msocket():    return cpu('socketcount') > 1 # multi-socket
 def hybrid():     return 'hybrid' in name()
 def intel():      return 'Intel' in cpu('vendor')
 

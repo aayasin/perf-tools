@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.96
+__version__ = 3.97
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -321,6 +321,10 @@ def smt(x='off'):
   if len(args.command) > 1: exe_v0(msg='setting SMT to: ' + x)
   set_sysfile('/sys/devices/system/cpu/smt/control', x)
   if do['super']: exe(args.pmu_tools + '/cputop "thread == 1" %sline | sudo sh'%x)
+def multisocket(x='offline'):
+  exe(args.pmu_tools + f"/cputop 'socket > 0' {x} | sudo sh")
+  print(".. or try: for x in {56..112}; do echo %d | sudo tee /sys/devices/system/cpu/cpu$x/online; done" %
+    (0 if x == 'offline' else 1))
 def atom(x='offline'):
   exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
   print(".. or try: for x in {16..23}; do echo %d | sudo tee /sys/devices/system/cpu/cpu$x/online; done" %
@@ -1100,6 +1104,7 @@ def run_commands(commands, windows_file=None):
       en = c.startswith('enable')
       com2func = {'aslr':        (set_sysfile, ('/proc/sys/kernel/randomize_va_space', 1 if en else 0)),
                   'atom':        (atom, 'online' if en else None),
+                  'multisocket': (multisocket, 'online' if en else None),
                   'fix-freq':    (fix_frequency, None if en else 'undo'),
                   'hugepages':   (exe, 'echo %s | sudo tee /sys/kernel/mm/transparent_hugepage/enabled' % ('always' if en else 'never')),
                   'prefetches':  (exe, 'sudo wrmsr -a 0x1a4 0x%x && sudo rdmsr 0x1a4' % (msr_clear(0x1a4, 0xf) if en else msr_set(0x1a4, 0xf))),
@@ -1227,7 +1232,7 @@ def main():
   if args.verbose > 6: C.printc('\t' + C.dict2str(do))
   if args.verbose > 9: C.dump_stack_on_error = 1
   # suspend commands
-  com2cond = { 'aslr': True, 'atom': True, 'fix-freq': True, 'hugepages': True, 'prefetches': True, 'smt': pmu.cpu('smt-on') }
+  com2cond = { 'aslr': True, 'atom': True, 'fix-freq': True, 'hugepages': True, 'prefetches': True, 'smt': pmu.cpu('smt-on'), 'multisocket': pmu.msocket() }
   def a_tag(): return uniq_name() if user_app() else C.error('provide a value for -a or -o')
   while True:
     c = next((c for c in args.command if c.startswith('suspend')), None)

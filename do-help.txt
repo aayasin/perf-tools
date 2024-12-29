@@ -11,7 +11,8 @@ positional arguments:
                         disable-fix-freq suspend-fix-freq enable-hugepages
                         disable-hugepages suspend-hugepages enable-prefetches
                         disable-prefetches suspend-prefetches enable-smt
-                        disable-smt suspend-smt install:cpuid
+                        disable-smt suspend-smt enable-multisocket disable-
+                        multisocket suspend-multisocket install:cpuid
                         install:dmidecode install:flameg install:loop-ideal-
                         ipc install:msr install:numactl install:xed
 

@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.07
+__version__= 1.08
 
 import common as C, pmu, tma
 from common1 import registrar
@@ -315,7 +315,7 @@ def parse_perf(l):
     if 'runs)' in l:
       name2 = '#-runs'
       val2 = int(l.split("(")[2 if 'CPU' in l else 1].split(' ')[0]) if '(' in l else 1
-  elif 'seconds time' in l:
+  elif 'seconds ' in l:
     name = items[4 if multirun else 2]
     val = convert(items[0])
     var = get_var(2)
@@ -487,12 +487,13 @@ def csv2stat(filename):
 def perf_log2stat(log, smt_on, d={}):
   suff = re.findall('(.perf_stat(-B)?-r[1-9].log)', log)[0]
   base, bottlenecks = log.replace(suff[0], ''), len(d) == 0
+  def r_dash(n): return n.replace('-', '_')
   def params(smt_on):
     d['knob.ncores'] = int(pmu.cpu('corecount') / pmu.cpu('socketcount'))
     d['knob.nsockets'] = pmu.cpu('socketcount')
     d['knob.nthreads'] = 2 if smt_on else 1
     d['knob.forcecpu'] = 1 if C.env2str('FORCECPU') else 0
-    d['knob.tma_version'] = pmu.cpu('TMA version') or C.env2str('TMA_VER', tma.get('version'))
+    d['knob.tma_version'] = (tma.get('BV-version') if bottlenecks else pmu.cpu('TMA version')) or C.env2str('TMA_VER', tma.get('version'))
     d['knob.uarch'] = pmu.cpu('CPU')
     return d['knob.uarch'] or pmu.cpu_CPU()
   def user_events(f):
@@ -501,7 +502,7 @@ def perf_log2stat(log, smt_on, d={}):
     for l in file2lines(f):
       if re.match('^\s*$', l) or 'perf stat ' in l: continue # skip empty lines
       name, group, val, etc, name2, group2, val2 = parse_perf(l)[0:7]
-      if name: ue[name.replace('-', '_')] = val.replace(' ', '-') if type(val) == str else val
+      if name: ue[r_dash(name)] = val.replace(' ', '-') if type(val) == str else val
       #if name2 in ('Frequency', ): ue[name2] = val2
       if name2: ue[name2] = val2
     ue['TSC'] = get_TSC(f)
@@ -510,6 +511,9 @@ def perf_log2stat(log, smt_on, d={}):
   d.update(user_events(log))
   if bottlenecks:
     d = patch_metrics(d)
+    for x, y in pmu.Legacy_fixed:
+      d[x] = d[r_dash(y)]
+      del d[r_dash(y)]
     d['DurationTimeInMilliSeconds'] = d['time'] * 1000
   stat = '.'.join((base + ('-bottlenecks' if bottlenecks else ''), uarch, 'stat'))
   with open(stat, 'w') as out:

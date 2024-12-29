@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.95
+__version__ = 3.96
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -716,8 +716,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
       if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
     logs['bott'] = perf_stat('-B -r1', 'bottlenecks-view', 16, tma.get('perf-groups'),
-      perfmetrics=None, basic_events=False, last_events='', grep="| grep -E 'seconds [st]|inst_retired_any |score'", warn=False)
-    if do['help'] >= 0 and not args.print_only: stats.perf_log2stat(logs['bott'], 0)
+      perfmetrics=None, basic_events=False, last_events='', grep="| grep -wE 'seconds (sys|time)|insn|score'", warn=False)
+    if do['help'] >= 0 and not args.print_only: stats.perf_log2stat(logs['bott'], pmu.cpu('smt-on'))
 
   if en(14) and (pmu.retlat() or do['help']<0):
     flags, raw, events = '-W -c 20011', 'raw' in do['model'], pmu.get_events(do['model'])

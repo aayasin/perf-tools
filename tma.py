@@ -47,7 +47,7 @@ metrics = {
 def settings_file(x):   return '/'.join((C.dirname(), 'settings', x))
 def setting2dict(x):    return C.csv2dict(settings_file(x + '.csv'))
 settings = setting2dict('tma')
-for x in ('version', 'num-levels', 'num-mux-groups'):
+for x in ('version', 'BV-version', 'num-levels', 'num-mux-groups'):
   metrics[x] = int(settings[x]) if C.is_num(settings[x]) else settings[x]
 
 def get(tag):

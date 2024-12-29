@@ -27,6 +27,7 @@ SKIP_EX = false # Skip extra checks
 SS = 4
 ST = --toplev-args ' --single-thread --frequency --metric-group +Summary'
 TEST_LBR_PERF = 1
+TEST_MEM_Bandwidth = 1
 TREE_C=$(shell python -c 'from common1 import registrar as r; print(r.name("tree", "csv"))')
 TREE_L=$(shell python -c 'from common1 import registrar as r; print(r.name("tree"))')
 
@@ -79,7 +80,7 @@ test-mem-bw: run-mem-bw
 	set -o pipefail; $(DO) profile -s$(SS) $(ST) -o $< $(RERUN) | $(SHOW)
 	./yperf record -o $<-yperf && touch $<-yperf # collect for later
 	kill -9 `pidof m0-n8192-u01.llv`
-ifneq ($(CPU), SPR)
+ifneq ($(TEST_MEM_Bandwidth), 1)
 	grep -E -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth.*<==' $<.toplev-mvl6-nomux.log
 else
 	grep -E -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log

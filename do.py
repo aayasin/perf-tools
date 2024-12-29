@@ -697,7 +697,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     profile_exe(cmd + ' | tee %s | %s' % (logs['info'], grep_nz), 'Info metrics', 12)
 
   if en(13):
-    cmd, log = toplev_V('-vvl2', nodes=tma.get('fe-bottlenecks') + ',+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+CoreIPC')
+    cmd, log = toplev_V('-vvl2', nodes=','.join([tma.get('fe-bottlenecks'), tma.get('extra-fe')]))
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown FE Bottlenecks', 13)
     print_cmd("cat %s | %s"%(log, grep_NZ), False)
 
@@ -714,8 +714,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
 
-  if en(16) and pmu.lunarlake(): C.warn('bottlenecks-view: no support for Lunar Lake yet')
-  elif en(16):
+  if en(16):
     if profiling():
       if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
       if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
@@ -1189,9 +1188,6 @@ def main():
   elif args.mode == 'both' and args.verbose >= 0 and args.profile_mask & 0x100 and not (args.profile_mask & 0x2):
     C.warn("Better enable 'per-app counting' profile-step with LBR; try '-pm %x'" % (args.profile_mask | 0x2))
   record_steps = ('record', 'lbr', 'pebs', 'ldlat', 'pt')
-  if pmu.hybrid() and args.profile_mask & 0x10000 and do['forgive'] < 3:
-    C.warn('bottlenecks view not supported on Hybrid. disabling..')
-    args.profile_mask &= ~0x10000
   if args.sys_wide:
     if profiling(): do_info(f'system-wide profiling for {args.sys_wide} seconds')
     do['run'] = do['run'].replace('@1', str(args.sys_wide)) if '@1' in do['run'] else 'sleep %d' % args.sys_wide

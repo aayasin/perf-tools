@@ -1,16 +1,15 @@
 #!/bin/sh
-CLONE=${CLONE:-2}
-PERFV=${PERFV:-5.15.17}
+CLONE=${CLONE:-3}
+PERFV=${PERFV:-6.12.0}	    # last good: 5.15.111
 LINUXK=${LINUXK:-5}
 LINUXV=${LINUXV:-5.19.17}   # upgrade to 6.7 (may need to set NO_LIBTRACE_EVENT=1
                             # or to <= 6.2.16 for JIT support, not 6.4!.
-                            # last good: 5.15.111
                             # besides: https://github.com/andikleen/pmu-tools/issues/457
 OBJDUMP=${OBJDUMP:-0}
 
 perfdir=linux/tools/perf
 if [ $CLONE -eq 2 ]; then perfdir=linux-$LINUXV/tools/perf; fi
-if [ $CLONE -eq 3 ]; then perfdir==perf-$PERFV/tools/perf; fi
+if [ $CLONE -eq 3 ]; then perfdir=perf-$PERFV/tools/perf; fi
 set -xe
 if [ ! -d "$perfdir" ]; then
   if [ $CLONE -eq 1 ]; then

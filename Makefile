@@ -319,7 +319,7 @@ PRE_PUSH_CMDS := \
      make test-default APP=../pmu-tools/workloads/COMPILE10s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1" \
     "echo 'testing clean command' && cp -r test-dir test-dir0; cd test-dir0; ../do.py clean; ls -l" \
     "echo 'testing study script (errors only)' $(MAKE) test-study" \
-    "echo 'testing srcline stat' && echo skip $(MAKE) test-srcline" \
+    "echo 'testing srcline stat' && $(MAKE) test-srcline" \
     "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
     "echo 'testing sampling by instructions' && $(MAKE) test-LBR-edge" \
     "echo 'testing pipeline-view sys-wide idle' && $(DO) profile -pm 200000 -s 20 -o pipeline-view -v1 " \

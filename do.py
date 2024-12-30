@@ -402,6 +402,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
 def perf_version(): return exe_1line(args.perf + ' --version', heavy=False).replace('perf version ', '')
 def perf_newer_than(to_check):
   ver = perf_version()
+  if ver.count('.') == 2: ver = '.'.join(ver.split('.')[:2])
   if not ver.replace('.', '').isdigit():
     C.warn('unrecognized perf version: %s' % ver)
     return None
@@ -482,6 +483,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   def perf_F(ilen=False):
     ilen = ilen or do['lbr-jcc-erratum'] # or do['lbr-indirects'] // lbr.py handle x2g indirects regardless of ilen
     if ilen and not perf_newer_than(5.17): error('perf is too old: %s (no ilen support)' % perf_version())
+    if do['srcline'] and not perf_newer_than('6.10'): error('perf is too old: %s (misses: support LLVM for addr2line())' % perf_version())
     return "-F +brstackinsn%s%s --xed%s" % ('len' if ilen else '',
                                                         ',+srcline' if do['srcline'] else '',
                                                         ' 2>>' + err if do['srcline'] else '')

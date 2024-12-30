@@ -31,8 +31,8 @@ options:
                         user metrics to pass to perf-stat's -M (default: None)
   --nodes NODES, -n NODES
                         user metrics to pass to toplev's --nodes (default: +Lo
-                        ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,
-                        +UopPI,+IpAssist,+Memory_Bound*/3)
+                        ad_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+L2MPKI_Code,+
+                        IpMispredict,+UopPI,+Memory_Bound*/3)
   --sys-wide SYS_WIDE, -s SYS_WIDE
                         system-wide profiling for x seconds (float ok too)
                         (default: 0)

@@ -629,7 +629,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   
   toplev += ' --no-desc'
   if do['plot']: toplev += ' --graph -I%d --no-multiplex' % do['interval']
-  grep_bk= r"grep -E '<==|MUX|^(core )?(Bottleneck|Info(.*Time|.*\sIPC))|warning.*zero' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
+  grep_bk= r"grep -E '<==|MUX|^(core )?(Bottleneck|Info(.*Time|.*\sIPC))|warning.*zero|score' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
   tl_skip= "not (found|referenced|supported)|Unknown sample event|^unreferenced "
   grep_NZ= r"grep -E -iv '^(all|core |)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|%s|##placeholder##' " % tl_skip
   grep_nz= grep_NZ

@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.62 # see version line of do.py
+__version__= x86.__version__ + 2.63 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -140,6 +140,7 @@ def edge_en_init(indirect_en):
       ipc_ips.add(int(x, 16))
       hsts['IPC_' + x] = {}
   if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'], LC.hsts_threshold['dsb-heatmap']  = {}, 0
+  if pmu.lioncove_on(): hsts['LTT-set-misp'] = {}
 
 def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
   branches, dirjmps, insts_per_call, x = 0, 0, 0, len(lines) - 1
@@ -236,6 +237,11 @@ def edge_stats(line, lines, xip, size):
       #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
     if xinfo.is_cond_br() and xinfo.is_taken():
       LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
+    if 'LTT-set-misp' in hsts and 'MISP' in line:
+      key = '-1'
+      target = ip if xinfo.is_taken() else LC.last_taken_target(lines)
+      if target: key = str(int(f'{target:b}'[::-1][4:13][::-1], 2))
+      inc(hsts['LTT-set-misp'], key)
     # checks all lines but first
     if info.is_cond_br():
       if info.is_taken(): LC.glob['cond_taken-not-first'] += 1
@@ -626,10 +632,6 @@ def print_all(nloops=10, loop_ipc=0):
     for l in ploops:
       loops.print_loop(l[0], nloops)
       nloops -=  1
-  if total and (LC.stat['bad'] + LC.stat['bogus']) / float(total) > 0.5:
-    if LC.verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
-    else: C.error('Too many LBR bad/bogus samples in profile')
-  if 'lbr-cov' in LC.stat and LC.stat['lbr-cov'] < 1: C.error('LBR poor coverage (%.2f%%) of overall time' % LC.stat['lbr-cov'])
   # print functions
   if not loop_ipc:
     funcs_list = sorted(funcs.funcs, reverse=True)
@@ -643,6 +645,10 @@ def print_all(nloops=10, loop_ipc=0):
       for i in range(nfuncs):
         print('function#%d:' % (nfuncs - i), funcs_list[len(funcs_list) - nfuncs + i])
         print(funcs_list[len(funcs_list) - nfuncs + i].__str__(detailed=True, index=nfuncs - i), file=log)
+  if total and (LC.stat['bad'] + LC.stat['bogus']) / float(total) > 0.5:
+    if LC.verbose & 0x800: C.warn('Too many LBR bad/bogus samples in profile')
+    else: C.error('Too many LBR bad/bogus samples in profile')
+  if 'lbr-cov' in LC.stat and LC.stat['lbr-cov'] < 1: C.error('LBR poor coverage (%.2f%%) of overall time' % LC.stat['lbr-cov'])
 
 def print_br(br):
   print('[from: %s, to: %s, taken: %d]' % (LC.hex_ip(br['from']), LC.hex_ip(br['to']), br['taken']))

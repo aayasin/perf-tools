@@ -11,7 +11,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__ = 0.85
+__version__ = 0.86
 # TODO:
 # - functions/calls support
 # - make r9/r10 a list-of-2 arg so user can change them
@@ -39,6 +39,7 @@ ap.add_argument('mode', nargs='?', choices=['basicblock']+J.jumpy_modes, default
 ap.add_argument('--mode-args', default='', help="args to pass-through to mode's sub-module")
 ap.add_argument('--reference', default=None, help="ID of a reference paper (prints a message)")
 ap.add_argument('--init-regs', nargs='+', default=[], help='registers to initialize to non-zero before primary loop e.g. rax')
+ap.add_argument('--modify-regs', action='store_const', const=True, default=False, help="enable modifying generator registers")
 args = ap.parse_args()
 
 def jumpy(): return args.mode in J.jumpy_modes
@@ -70,8 +71,10 @@ if len(args.instructions) == 1 and args.instructions[0].endswith('.txt'):
   args.instructions = insts
   args.unroll_factor = 1
 
-for i in args.instructions:
-  if '%r9' in i or '%r10' in i: error("can't use registers r9 and r10, please use other registers")
+if not args.modify_regs:
+  for i in args.instructions:
+    dst = i.split()[-1]
+    if '%r9' in dst or '%r10' in dst: error("can't write to registers r9 and r10, please use other registers")
 
 paper = '"Reference: %s"' % references.Papers[args.reference] if args.reference else str(0)
 

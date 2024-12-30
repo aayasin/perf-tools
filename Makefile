@@ -80,7 +80,7 @@ test-mem-bw: run-mem-bw
 	set -o pipefail; $(DO) profile -s$(SS) $(ST) -o $< $(RERUN) | $(SHOW)
 	./yperf record -o $<-yperf && touch $<-yperf # collect for later
 	kill -9 `pidof m0-n8192-u01.llv`
-ifneq ($(TEST_MEM_Bandwidth), 1)
+ifeq ($(TEST_MEM_Bandwidth), 1)
 	grep -E -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth.*<==' $<.toplev-mvl6-nomux.log
 else
 	grep -E -q 'Backend_Bound.Memory_Bound.DRAM_Bound.MEM_Bandwidth' $<.toplev-mvl6-nomux.log
@@ -316,7 +316,7 @@ PRE_PUSH_CMDS := \
      $(MAKE) test-default APP=./$(AP) CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \
      :perf-lbr:\\\"'-a -j any,save_type -e r20c4:ppp -c 90001'\\\" :perf-filter:0 -o $(AP)-a\"" \
     "echo 'testing default from another directory, toplev describe' && mkdir -p test-dir; cd test-dir; ln -sf ../common.py && \
-     make test-default APP=../pmu-tools/workloads/BC2s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1" \
+     make test-default APP=../pmu-tools/workloads/COMPILE10s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1" \
     "echo 'testing clean command' && cp -r test-dir test-dir0; cd test-dir0; ../do.py clean; ls -l" \
     "echo 'testing study script (errors only)' $(MAKE) test-study" \
     "echo 'testing srcline stat' && echo skip $(MAKE) test-srcline" \

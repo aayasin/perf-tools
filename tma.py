@@ -36,11 +36,11 @@ metrics = {
   'bot-rest':     '+Cache_Memory_Bandwidth,+Cache_Memory_Latency,+Memory_Data_TLBs,+Memory_Synchronization'
                   ',+Compute_Bound_Est,+Irregular_Overhead,+Other_Bottlenecks,+Useful_Work' +
                   C.flag2str(',+Core_Bound_Likely', pmu.cpu('smt-on')),
-  'extra-fe':     '+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB' +
-                    '' if pmu.lioncove_on() else ',+CoreIPC',
+  'extra-fe':     '+Fetch_Latency*/3,+Branch_Resteers*/4,+IpTB,+L2MPKI_Code*' +
+                    ('' if pmu.lioncove_on() else ',+CoreIPC'),
   'fixed':        '+IPC,+Instructions,+UopPI,+Time,+SLOTS,+CLKS,-CPUs_Utilized',
-  'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+IpMispredict,+UopPI' +
-                    C.flag2str(',+IpAssist', pmu.v4p()) +
+  'key-info':     '+Load_Miss_Real_Latency,+L2MPKI,+ILP,+IpTB,+L2MPKI_Code,+IpMispredict,+UopPI' +
+                    # C.flag2str(',+IpAssist', pmu.v4p()) +
                     C.flag2str(',+Memory_Bound*/3', pmu.goldencove_on()),
   'key-nodes':    ("+IPC,+CLKS" if pmu.lioncove_on() else "+CoreIPC,+CORE_CLKS") +
                     ",+Instructions,+Time,-CPUs_Utilized,-CPU_Utilization",

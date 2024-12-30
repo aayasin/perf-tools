@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.97
+__version__ = 3.98
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -634,14 +634,17 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   grep_NZ= r"grep -E -iv '^(all|core |)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|%s|##placeholder##' " % tl_skip
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', r' < [\[\+]|<$')
+  def gen_retlat():
+    if not do['model'] or not pmu.retlat(): return False
+    retlat = '%s/%s-retlat.json' % (C.dirname(), out)
+    if profiling() and (not C.isfile(retlat) or os.path.getsize(retlat) < 100):
+      exe('%s -q -o %s -- %s' % (perf_common(cmd='', p=genretlat), retlat, r), 'calibrating retire latencies')
+    return retlat
   def toplev_V(v, tag='', nodes=do['nodes'],
                tlargs = toplev_args[1] if toplev_args[1] else args.toplev_args):
     o = '%s.toplev%s%s.log' % (out, v.split()[0]+tag, '-nomux' if 'no-multiplex' in tlargs else '')
-    if do['model'] and pmu.retlat():
-      retlat = '%s/%s-retlat.json' % (C.dirname(), out)
-      tlargs += ' --ret-latency %s' % retlat
-      if profiling() and (not C.isfile(retlat) or os.path.getsize(retlat) < 100):
-        exe('%s -q -o %s -- %s' % (perf_common(cmd='', p=genretlat), retlat, r), 'calibrating retire latencies')
+    retlat = gen_retlat()
+    if retlat: tlargs += ' --ret-latency %s' % retlat
     if not args.sys_wide: tlargs += ' --no-uncore'
     c = "%s %s --nodes '%s' %s -V %s -- %s" % (perf_common('', p=toplev), v, nodes, tlargs, registrar.log2csv(o), r)
     if ' --global' in c:
@@ -718,6 +721,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if profiling():
       if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
       if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
+      gen_retlat()
     logs['bott'] = perf_stat('-B -r1', 'bottlenecks-view', 16, tma.get('perf-groups'),
       perfmetrics=None, basic_events=False, last_events='', grep="| grep -wE 'seconds (sys|time)|insn|score'", warn=False)
     if do['help'] >= 0 and not args.print_only: stats.perf_log2stat(logs['bott'], pmu.cpu('smt-on'))

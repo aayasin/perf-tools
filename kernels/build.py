@@ -100,6 +100,9 @@ if args.GEN:
     kernels.append("tripcount-mean")
     kernels.append("store_fwd_block")
 
+    if args.RF > 1:
+        exe_cmd("wget https://raw.githubusercontent.com/facebookresearch/DCPerf/refs/heads/main/packages/django_workload/templates/gen_icache_buster.py")
+
 #kernels.append('cond_jmp')
 print(kernels)
 

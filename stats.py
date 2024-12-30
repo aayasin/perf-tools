@@ -468,8 +468,6 @@ def csv2stat(filename):
     return filename.replace(x.group(1), '')
   d = patch_metrics(d)
   base = basename()
-  retlat = base + '-retlat.json'
-  if os.path.isfile(retlat): d.update(read_retlat_json(retlat))
   tl_info = base + registrar.name('info', 'csv')
   if not nomux():
     if not os.path.isfile(tl_info): C.warn('file is missing: ' + tl_info)
@@ -509,6 +507,8 @@ def perf_log2stat(log, smt_on, d={}):
     return ue
   uarch = params(smt_on)
   d.update(user_events(log))
+  retlat = base + '-retlat.json'
+  if os.path.isfile(retlat): d.update(read_retlat_json(retlat))
   if bottlenecks:
     d = patch_metrics(d)
     for x, y in pmu.Legacy_fixed:

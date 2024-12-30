@@ -95,6 +95,12 @@ if args.GEN:
     gen_kernel("-i 'cvtsd2si %xmm0,%r8d' -n64 ",'v2i')
     gen_kernel("-i 'comiss 0x100(%rsp),%xmm0' -n64 ",'i2v')
     gen_kernel("-i 'movw $0x1, %ax' -n4000 ",'lcp')
+    gen_kernel("-i 'Lbl_head:' 'add $1, %r9' 'mov %r9, %r8' 'and $0xf, %r8' 'cmp $1, %r8' 'jz Lbl_head' 'cmp $2, %r8' 'jz Lbl_head' "
+               "'cmp $3, %r8' 'jz Lbl_head' 'cmp $4, %r8' 'jz Lbl_head' 'cmp $5, %r8' 'jz Lbl_head' 'cmp $6, %r8' 'jz Lbl_head' "
+               "'cmp $7, %r8' 'jz Lbl_head' 'sub $1, %r9' -n1 --modify-regs", 'loop-jccx7')
+    gen_kernel("-i 'Lbl_head:' 'add $1, %r9' 'mov %r9, %r8' 'and $0xf, %r8' 'cmp $1, %r8' 'jz Lbl_head' 'cmp $2, %r8' 'jz Lbl_head' "
+               "'cmp $3, %r8' 'jz Lbl_head' 'cmp $4, %r8' 'jz Lbl_head' 'cmp $5, %r8' 'jz Lbl_head' 'cmp $6, %r8' 'jz Lbl_head' "
+               "'cmp $7, %r8' 'jz Lbl_head' 'cmp $8, %r8' 'jz Lbl_head' 'sub $1, %r9' -n1 --modify-regs", 'loop-jccx8')
     kernels.append("memcpy")
     kernels.append("pagefault")
     kernels.append("tripcount-mean")

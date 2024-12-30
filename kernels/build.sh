@@ -1,7 +1,7 @@
 #!/bin/sh
 # Author: Ahmad Yasin
 # July 2023
-# Donot modify! Use build.py
+# Do not modify! This is an outdated legacy file, use build.py for recent kernels
 
 CC=${CC:-gcc -g -O2}
 GEN=${GEN:-1}

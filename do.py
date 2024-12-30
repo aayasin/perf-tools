@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.97
+__version__ = 3.98
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -629,7 +629,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   
   toplev += ' --no-desc'
   if do['plot']: toplev += ' --graph -I%d --no-multiplex' % do['interval']
-  grep_bk= r"grep -E '<==|MUX|^(Bottleneck|Info(.*Time|.*\sIPC))|warning.*zero|score' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
+  grep_bk= r"grep -E '<==|MUX|^(core )?(Bottleneck|Info(.*Time|.*\sIPC))|warning.*zero' | sort " #| " + C.grep('^|^warning.*counts:', color=1)
   tl_skip= "not (found|referenced|supported)|Unknown sample event|^unreferenced "
   grep_NZ= r"grep -E -iv '^(all|core |)((FE|BE|BAD|RET).*[ \-][10]\.. |Info.* 0\.0[01]? |RUN|Add)|%s|##placeholder##' " % tl_skip
   grep_nz= grep_NZ

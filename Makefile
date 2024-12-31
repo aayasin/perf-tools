@@ -281,7 +281,7 @@ test-pmu-tools: do.py pmu.py
 PT=perf-tools.1
 clean:
 	rm -rf {$(AP),`echo $(AP_MT)|sed 's/ /-/g'`,CLTRAMP3D[.\-],BC,datadep,openssl,pagefault,permute,run}*{csv,data,old,log,txt,json,.tar.gz} \
-	    $(PT) run-mem-bw* setup-system-* test-{default-track-perf,dir,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
+	    $(PT) run-mem-bw* setup-system-* test-{default-track-perf,dir,ideal-ipc,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
 	rm -f .prepush_state.cmd
 post-push:
 	$(CLONE) $(PT) && cd $(PT) && ./do.py setup-perf log && cd .. && rm -rf $(PT)   # tests a fresh clone
@@ -325,8 +325,8 @@ PRE_PUSH_CMDS := \
     "echo 'testing pipeline-view sys-wide idle' && $(DO) profile -pm 200000 -s 20 -o pipeline-view -v1 " \
     "$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1" \
     "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)" \
-    "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 > .do-ideal-ipc.log 2>&1 || $(FAIL)" \
-    "time $(DO) profile -a \"openssl speed rsa2048\" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)" \
+    "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:0x3 -pm 300 -o test-ideal-ipc > test-ideal-ipc 2>&1 || $(FAIL)" \
+    "echo 'timing openssl' && time $(DO) profile -a \"openssl speed rsa2048\" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)" \
     "echo 'testing default w/ python2 (errors only)' && $(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL)"
 
 pre-push: help

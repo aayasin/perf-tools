@@ -586,7 +586,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   r = do['run'] if args.gen_args or args.sys_wide else args.app
   if en(0): profile_exe('', 'logging setup details', 0, mode='log-setup')
   if args.profile_mask & ~0x1:
-    do_info('App: ' + r)
+    if not args.sys_wide: do_info(f'App: {r}')
     if profiling() and do['perf-jit']:
       if do['perf-jit'] == 1:
         x = "ps -ef | grep java | grep -v 'grep java|hack record' | grep '\-XX:+PreserveFramePointer' | grep '\-agentpath'"
@@ -845,8 +845,9 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if args.verbose > 2: lbr_env += ' LBR_VERBOSE=%x' % C.env2int_bo('LBR_VERBOSE', 0x800)
         if type(do['lbr-indirects']) == int:
-          do['lbr-indirects'] = (get_indirects('%s.indirects.log' % data, int(do['lbr-indirects'])) + ',' +
-                                 get_indirects('%s.tk-mispreds.log' % data, int(do['lbr-indirects']))).rstrip(',')
+          indirects = (get_indirects('%s.indirects.log' % data, int(do['lbr-indirects'])) + ',' +
+            get_indirects('%s.tk-mispreds.log' % data, int(do['lbr-indirects']))).strip(',')
+          do['lbr-indirects'] = indirects if len(indirects) else 0
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         open(err, 'w').close()
         misp, cmd, msg = '', perf_F(), '@info'
@@ -1209,7 +1210,7 @@ def main():
     if profiling(): do_info(f'delay profiling by {args.delay} seconds')
     do['perf-common'] += ' -D %d' % (args.delay * 1000)
   if args.cpu:
-    if profiling(): do_info('filtered profiling on CPUs: ' + args.cpu)
+    if profiling(): do_info(f'filtered profiling on CPUs: {args.cpu}')
     do['perf-common'] += ' -C %s' % args.cpu
     if not do['comm']: do['perf-filter'] = 0
   if do['perf-jit']:

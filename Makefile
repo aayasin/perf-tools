@@ -280,7 +280,7 @@ test-pmu-tools: do.py pmu.py
 
 PT=perf-tools.1
 clean:
-	rm -rf {run,BC,datadep,$(AP),openssl,CLTRAMP3D[.\-]}*{csv,data,old,log,txt} \
+	rm -rf {$(AP),`echo $(AP_MT)|sed 's/ /-/g'`,CLTRAMP3D[.\-],BC,datadep,openssl,pagefault,permute,run}*{csv,data,old,log,txt,json,.tar.gz} \
 	    $(PT) run-mem-bw* setup-system-* test-{default-track-perf,dir,mem-bw,srcline,stats,study} .CLTRAMP3D*cmd .ipc_*.txt
 	rm -f .prepush_state.cmd
 post-push:

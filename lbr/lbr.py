@@ -635,7 +635,7 @@ def print_all(nloops=10, loop_ipc=0):
   # print functions
   if not loop_ipc:
     funcs_list = sorted(funcs.funcs, reverse=True)
-    nfuncs = min(len(funcs_list), 10)
+    nfuncs = min(len(funcs_list), C.env2int('LBR_FUNCS', 10))
     if nfuncs:
       if os.getenv("LBR_FUNCS_LOG"):
         log = open(os.getenv("LBR_FUNCS_LOG"), 'w')

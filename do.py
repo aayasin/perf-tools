@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.98
+__version__ = 3.99
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -402,7 +402,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
 def perf_version(): return exe_1line(args.perf + ' --version', heavy=False).replace('perf version ', '')
 def perf_newer_than(to_check):
   ver = perf_version()
-  if ver.count('.') == 2: ver = '.'.join(ver.split('.')[:2])
+  if ver.count('.') > 1: ver = '.'.join(ver.split('.')[:2])
   if not ver.replace('.', '').isdigit():
     C.warn('unrecognized perf version: %s' % ver)
     return None
@@ -453,7 +453,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if args.sys_wide and not (' -a ' in cmd): C.error("Incorrect system wide in profile-step='%s' cmd='%s'" % (msg, cmd))
     if mode == 'perf-stat': return exe1(prepend_PERF(cmd), msg, fail=fail)
     else:
-      if 'perf record' in cmd and do['perf-jit']: assert ' -k1' in cmd, "JIT profiling: incorrect flags for perf-record"
+      if 'perf record' in cmd and do['perf-jit'] == 1 and ' -k1' not in cmd: error("JIT profiling: incorrect flags for perf-record")
       return exe(cmd, msg)
   def profile_mask_help(filename = 'profile-mask-help.md'):
     hdr = ('%7s' % 'mask', '%-50s' % 'profile-step', 'additional [optional] arguments')
@@ -591,6 +591,9 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
         x = "ps -ef | grep java | grep -v 'grep java|hack record' | grep '\-XX:+PreserveFramePointer' | grep '\-agentpath'"
       elif do['perf-jit'] == 2:
         x = "%s -m sysconfig | grep -F no-omit-frame-pointer | grep -F no-omit-leaf-frame-pointer" % do['python']
+        if exe(x, fail=0): C.error('Improper python for profiling; did you set :python tunable?')
+        # this check must be done after app is started (JIT python isn't limited to system-wide)
+        x = "true" #"ps -ef | grep python | grep -vE 'grep.*python' | tail -1 | grep '\-X perf'"
       else: assert 0, 'unsupported perf-jit mode'
       if exe(x, fail=0): C.error('JIT-profiling was not launched properly')
   if en(1):
@@ -1208,6 +1211,7 @@ def main():
     do['perf-common'] += ' -C %s' % args.cpu
     if not do['comm']: do['perf-filter'] = 0
   if do['perf-jit']:
+    # TODO: turn :perf-jit into a mask so that workloads using both Java & Python may be profiled, Django e.g.
     if do['perf-jit'] == 1:
       assert args.sys_wide > 0, "system-wide profiling is required for JIT profiling"
       if profiling(): C.info("JIT profiling for Java; make sure JVM was started with '-XX:+PreserveFramePointer -agentpath:%s'" % find_jvmti())

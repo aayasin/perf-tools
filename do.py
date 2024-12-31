@@ -726,6 +726,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   if en(16):
     if profiling():
       if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
+      if pmu.msocket(): error('bottlenecks-view: disable-multisocket')
       if not pmu.perfmetrics(): C.error('bottlenecks-view: no support prior to Icelake')
       gen_retlat()
     logs['bott'] = perf_stat('-B -r1', 'bottlenecks-view', 16, tma.get('perf-groups'),

@@ -14,12 +14,12 @@
 #
 from __future__ import print_function
 __author__  = 'ayasin'
-__version__ = 0.40      # see version line of do.py
+__version__ = 0.41      # see version line of do.py
 
 import common as C, pmu, tma
 
 prof_modes = ['record', 'report', 'advise']
-prof_type = ['java', ]
+prof_type = ['java', 'python']
 def parse_args():
   usage = '\n\t'.join(('prof [options] <mode> [-- app and args]',
                        'profile a workload in one-shot (a single profiling run)',
@@ -56,8 +56,7 @@ def parse_args():
 
 def main():
   args = parse_args()
-  events = '\\"%s\\"' % args.events
-  args.events = ''
+  events = f'\\"{args.events}\\"'; args.events = ''
   cmds = 'suspend-smt' if pmu.cpu('smt-on') else ''
   cmds += 'profile --mode profile'
   if args.mode == 'report':
@@ -75,12 +74,13 @@ def main():
   if args.type == 'java':
     if args.sys_wide == 0: C.error("Must profile system-wide for Java profiling")
     tune += " :perf-jit:1"
+  elif args.type == 'python':
+    tune += " :perf-jit:2"
   tune += f" :loops:0 :perf-track:\"'-e {events}'\""
-  profile = ' '.join([C.realpath('do.py'), cmds, C.argp_get_common(args),
-                  '-pm %x -v %d' % (args.profile_mask, args.verbose),
-                  C.argp_tune_prepend(args, tune),
-                  "-C %s" % args.cpu if args.cpu else '',
-                  "-a '%s'" % args.app if args.app else '', '-o %s' % args.output])
+  app = f"-a '{args.app}'" if args.app else ''
+  app +=  f" -C {args.cpu}" if args.cpu else ''
+  profile = ' '.join([C.realpath('do.py'), cmds, C.argp_get_common(args), f'-pm {args.profile_mask:x} -v {args.verbose}',
+    C.argp_tune_prepend(args, tune), app, f'-o {args.output}'])
   C.exe_cmd(profile, debug=args.verbose + 1, fail=args.verbose>0)
 
 if __name__ == "__main__":

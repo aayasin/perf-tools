@@ -27,11 +27,12 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.63 # see version line of do.py
+__version__= x86.__version__ + 2.64 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
 uica_log = C.envfile('UICA_LOG')
+funcs_num = C.env2int('LBR_FUNCS')
 
 def ratio(a, b): return C.ratio(a, b) if b else '-'
 def read_line(): return sys.stdin.readline()
@@ -458,7 +459,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       if (LC.edge_en or 'DSB_MISS' in event) and 'jmp' in info.inst():
         ilen = info.ilen()
         if ilen: ips_after_uncond_jmp.add(ip + ilen)
-      if LC.edge_en and 'call' in line and not func: func = len(lines)
+      if LC.edge_en and 'call' in line and not func and funcs_num: func = len(lines)
       assert len(lines) or event in line
       line = line.rstrip('\r\n')
       info.line = line
@@ -546,7 +547,7 @@ def print_global_stats():
   if len(pages): print_stat(nc('code 4K-pages'), len(pages))
   print_stat(nc('loops'), len(loops.loops), prefix='proxy count', comment='hot loops')
   print_stat('cycles in loops', loops.total_cycles, prefix='proxy count', ratio_of=('total cycles', LC.stat['total_cycles']))
-  print_stat('cycles in functions', funcs.total_cycles, prefix='proxy count', ratio_of=('total cycles', LC.stat['total_cycles']))
+  if funcs_num: print_stat('cycles in functions', funcs.total_cycles, prefix='proxy count', ratio_of=('total cycles', LC.stat['total_cycles']))
   for n in (4, 5, 6): print_loops_stat('%dB-unaligned' % 2 ** n, len([l for l in loops.loops.keys() if l & (2 ** n - 1)]))
   print_loops_stat('undetermined size', len([l for l in loops.loops.keys() if loops.loops[l]['size'] is None]))
   if LC.stats.ilen() : print_loops_stat('non-contiguous', len(loops.loops) - len(loops.contigous_loops))
@@ -633,14 +634,13 @@ def print_all(nloops=10, loop_ipc=0):
       loops.print_loop(l[0], nloops)
       nloops -=  1
   # print functions
-  if not loop_ipc:
+  if not loop_ipc and funcs_num:
     funcs_list = sorted(funcs.funcs, reverse=True)
-    nfuncs = min(len(funcs_list), C.env2int('LBR_FUNCS', 10))
+    nfuncs = min(len(funcs_list), funcs_num)
     if nfuncs:
-      if os.getenv("LBR_FUNCS_LOG"):
-        log = open(os.getenv("LBR_FUNCS_LOG"), 'w')
-        for i in range(len(funcs_list) - nfuncs):
-          print(funcs_list[i].__str__(detailed=True, index=len(funcs_list) - i), file=log)
+      log = open(os.getenv("LBR_FUNCS_LOG"), 'w')
+      for i in range(len(funcs_list) - nfuncs):
+        print(funcs_list[i].__str__(detailed=True, index=len(funcs_list) - i), file=log)
       print('');C.printc('top %d functions:' % nfuncs)
       for i in range(nfuncs):
         print('function#%d:' % (nfuncs - i), funcs_list[len(funcs_list) - nfuncs + i])

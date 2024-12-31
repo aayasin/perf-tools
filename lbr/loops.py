@@ -75,7 +75,7 @@ def tripcount_mean(loop, loop_ipc):
   addresses = hex_ipc
   for i in range(head + 1, head + size):
     line = loop_body[i].replace(str(hotness(loop_body[i])), '')
-    addresses += '|' + LC.line2info(line).ip_hex()
+    addresses += '|' + LC.line_ip_hex(line)
   # entrance by JMP to loop code
   # JCC that may jump to loop is not included
   entrances = C.exe_output(C.grep(r'jmp*\s+0x(%s)' % addresses, LC.hitcounts, '-E'), sep='\n')

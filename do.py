@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 3.99
+__version__ = 4.00
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -66,6 +66,7 @@ do = {'run':        C.RUN_DEF,
   'extra-metrics':  "+Mispredictions,+BpTkBranch,+IpCall,+IpLoad",
   'flameg':         0,
   'forgive':        1, # set it to: 2 to convert error to warning, 3 to further force tings
+  'funcs':          20,
   'gen-kernel':     1,
   'help':           1,
   'interval':       10,
@@ -838,7 +839,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       print_info('\n%s\n#\n' % lbr_hdr)
       if not C.isfile(hits) or do['reprocess']:
         if sys.version_info < (3, 0): C.error('Python 3 or above required')
-        lbr_env = "LBR_LOOPS_LOG=%s LBR_FUNCS_LOG=%s" % (loops, funcs)
+        if not do['funcs'] and C.isfile(funcs): os.remove(funcs)
+        lbr_env = "LBR_LOOPS_LOG=%s%s" % (loops, (' LBR_FUNCS=%d LBR_FUNCS_LOG=%s' % (do['funcs'], funcs)) if do['funcs'] else '')
         cycles = get_stat(pmu.event('cycles')) or get_stat('cycles', 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if args.verbose > 2: lbr_env += ' LBR_VERBOSE=%x' % C.env2int_bo('LBR_VERBOSE', 0x800)

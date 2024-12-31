@@ -220,7 +220,7 @@ def str2int(ip, plist):
     assert 0, "expect address in '%s' of '%s'" % (ip, plist[0])
 
 def line_ip_hex(line):
-  if line2info(line).is_label(): return None
+  if is_label(line): return None
   return line.strip().split()[0].lstrip('0')
 def line_ip(line, sample=None):
   info = line2info(line)

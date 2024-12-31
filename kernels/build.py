@@ -101,6 +101,10 @@ if args.GEN:
     gen_kernel("-i 'Lbl_head:' 'add $1, %r9' 'mov %r9, %r8' 'and $0xf, %r8' 'cmp $1, %r8' 'jz Lbl_head' 'cmp $2, %r8' 'jz Lbl_head' "
                "'cmp $3, %r8' 'jz Lbl_head' 'cmp $4, %r8' 'jz Lbl_head' 'cmp $5, %r8' 'jz Lbl_head' 'cmp $6, %r8' 'jz Lbl_head' "
                "'cmp $7, %r8' 'jz Lbl_head' 'cmp $8, %r8' 'jz Lbl_head' 'sub $1, %r9' -n1 --modify-regs", 'loop-jccx8')
+    gen_kernel("-i 'Lbl_head:' 'add $1, %r9' 'mov %r9, %r8' 'and $0xf, %r8' 'cmp $1, %r8' 'jz Lbl_head' 'cmp $2, %r8' 'jz Lbl_head' "
+               "'cmp $3, %r8' 'jz Lbl_head' 'cmp $4, %r8' 'jz Lbl_head' 'cmp $5, %r8' 'jz Lbl_head' 'cmp $6, %r8' 'jz Lbl_head' "
+               "'cmp $7, %r8' 'jz Lbl_head' 'cmp $8, %r8' 'jz Lbl_head' 'cmp $9, %r8' 'jz Lbl_head' "
+               "'sub $1, %r9' -n1 --modify-regs", 'loop-jccx9')
     kernels.append("memcpy")
     kernels.append("pagefault")
     kernels.append("tripcount-mean")

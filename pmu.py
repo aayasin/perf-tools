@@ -187,7 +187,9 @@ def toplev2intel_name(e):
   if not len(Toplev2Intel):
     try:
       with open(cpu('eventlist')) as file:
-        for event in json.load(file)['Events']:
+        json_d = json.load(file)
+        if cpu.state: cpu.state['eventlist-version'] = float(json_d['Header']['Version']) # to-be-fixed hack!
+        for event in json_d['Events']:
           Toplev2Intel[event['EventName'].lower().replace('.', '_')] = event['EventName']
     except FileNotFoundError:
       C.error('PMU event list %s is missing; try: %s/event_download.py' % (cpu('eventlist'), pmutools))

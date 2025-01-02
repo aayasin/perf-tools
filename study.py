@@ -14,7 +14,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 0.98
+__version__= 0.99
 
 import common as C, pmu, stats
 import sys, time, re
@@ -86,9 +86,11 @@ def init_Conf():
   def event(e, period=20000): return pmu.event_period(e, period)
   Conf['Events']['all-misp'] = Conf['Events']['cond-misp']
   for x in ('all-misp', 'cond-misp'): Conf['Pebs'][x] = (event(x), )
+  if pmu.redwoodcove_on() and pmu.server():
+    Conf['Pebs']['code-l2pf'] += ['FRONTEND_RETIRED.LATE_SWPF']
   for m in Conf['Pebs'].keys():
     for i, e in enumerate(Conf['Pebs'][m]):
-      if e.isupper(): Conf['Pebs'][m][i] = event(e, 200 if m == 'code-l2pf' else 3000)
+      if e.isupper(): Conf['Pebs'][m][i] = event(e, 300 if e == 'FRONTEND_RETIRED.LATE_SWPF' else 3000)
 
 def modes_list():
   ms = []

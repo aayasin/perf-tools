@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 4.00
+__version__ = 4.01
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -475,7 +475,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   perf_report_mods = perf_report + ' --stdio -F sample,overhead,comm,dso'
   perf_report_syms = perf_report_mods + ',sym'
   sort2u = 'sort | uniq -c | sort -n'
-  sort2up = sort2u + ' | ./ptage'
+  sort2up, sort2up2 = sort2u + ' | ./ptage', sort2u + ' | PTAGE_R=2 ./ptage'
   def en(n): return mask & 2**n
   def a_events():
     def power(rapl=['pkg', 'cores', 'ram'], px='/,power/energy-'): return px[(px.find(',')):] + px.join(rapl) + ('/' if '/' in px else '')
@@ -897,15 +897,18 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     elif ':' in do['perf-pebs']: error_if("Expect a precise event:", 'pp' not in do['perf-pebs'].split(':')[1])
     else: assert 0, "Expect a precise event in '%s'" % do['perf-pebs']
     if pmu.retlat(): assert ' -W' in do['perf-pebs'] or do['forgive'] > 1, "Expect use of Timed PEBS"
-    if 'frontend' in do['perf-pebs'] and pmu.granite() and pmu.cpu('kernel-version') < (6, 4):
-      error('Linux kernel version is too old for GNR: %s' % str(pmu.cpu('kernel-version')))
+    if 'frontend' in do['perf-pebs'] and pmu.granite():
+      if pmu.cpu('kernel-version') < (6, 4): error('Linux kernel version is too old for GNR: %s' % str(pmu.cpu('kernel-version')))
+      if pmu.cpu('eventlist-version') < 1.03: error('Outdated event list for GNR; Try ./do.py eventlist-update')
     pebs_event = pmu.find_event_name(do['perf-pebs'])
     data = perf_record('pebs', 9, pebs_event)[0]
     exe(perf_report_mods + " %s | tee %s.modules.log | grep -A12 Overhead" % (perf_ic(data, get_comm(data)), data), "@ top-10 modules")
+    top = do['perf-pebs-top'] + 1
     if '_COST' in do['perf-pebs']: pass
-    elif do['xed']: perf_script("--xed -F ip,insn | %s | tee %s.ips.log | tail -11" % (sort2up, data),
-                              "@ top-10 IPs, Insts of %s" % pebs_event, data)
-    else: perf_script("-F ip | %s | tee %s.ips.log | tail -11" % (sort2up, data), "@ top-10 IPs", data)
+    elif do['xed']:
+      perf_script(f"--xed -F ip,insn | {sort2up2} | tee {data}.ips.log | tail -{top}", f"@ top-{top-1} IPs, Insts of {pebs_event}", data)
+    else:
+      perf_script(f"-F ip | {sort2up2} | tee {data}.ips.log | tail -{top}", f"@ top-{top-1} IPs", data)
     if pmu.retlat() and ' -W' in do['perf-pebs']:
       perf_script("-F retire_lat,ip | sort | uniq -c | awk '{print $1*$2 \"\\t\" $2 \"\\t\" $3 }' | grep -v ^0"
         " | tee >(sort -k3 | awk 'BEGIN {ip=0; sum=0} {if ($3 != ip) {if (ip) printf \"%%8d %%18s\\n\", sum, ip; ip=$3; sum=$1} else {sum += $1}}"

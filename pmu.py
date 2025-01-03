@@ -82,7 +82,7 @@ def lbr_unfiltered_events(cut=False):
     e = lbr_event()
     return (e[:-1] if cut else e, 'instructions:ppp', 'cycles:p', 'BR_INST_RETIRED.NEAR_TAKENpdir')
 
-def event(x, precise=0, user_only=1):
+def event(x, precise=0, user_only=1, retire_latency=1):
   def misp_event(sub): return perf_event('BR_MISP_RETIRED.%s%s' % (sub, '_COST' if retlat() else ''))
   def rename_event(m, n): return perf_event(m).replace(m, n)
   aliases = {'lbr':     lbr_event(),
@@ -96,7 +96,7 @@ def event(x, precise=0, user_only=1):
   e = aliases[x] if x in aliases else perf_event(x)
   if (precise or user_only) and not e.endswith('/'): e += ':'
   e += 'u'*user_only
-  if precise: e += ('p'*precise + (' -W' if retlat() else ''))
+  if precise: e += ('p'*precise + (' -W' if retire_latency and retlat() else ''))
   if ':' in x and x.split(':')[0].isupper(): e = e.replace(x.split(':')[0], x)
   return perf_format(e)
 

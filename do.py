@@ -102,7 +102,7 @@ do = {'run':        C.RUN_DEF,
   'perf-pebs':      pmu.event_period('dsb-miss', 1000000),
   'perf-pebs-top':  0,
   'perf-pt':        "-e '{intel_pt//u,%su}' -c %d -m,64M" % (pmu.lbr_event(), pmu.lbr_period()), # noretcomp
-  'perf-record':    ' -g -e ' + pmu.event('cycles', precise=2, user_only=0),
+  'perf-record':    ' -g -e ' + pmu.event('cycles', precise=2, user_only=0, retire_latency=0),
   'perf-report-append': '',
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
@@ -641,7 +641,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', r' < [\[\+]|<$')
   def gen_retlat():
-    if not do['model'] or not pmu.retlat(): return False
+    if not do['model'] or not pmu.retlat() or not do['sample']: return False
     retlat = '%s/%s-retlat.json' % (C.dirname(), out)
     if profiling() and (not C.isfile(retlat) or os.path.getsize(retlat) < 100):
       exe('%s -q -o %s -- %s' % (perf_common(cmd='', p=genretlat), retlat, r), 'calibrating retire latencies')

@@ -400,6 +400,7 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
     mean = tripcount_mean_func(loop, loop_ipc)
     if mean: d['mean'] = mean
   d['num-buckets'] = len(hist)
+  if not 'mean' in d: d['mean'] = -1 # FIXME:10: implement a weighted-average in case of !numpy_imported
   if not print_hist: return d
   if d['num-buckets'] > 1:
     C.printc('%s histogram%s:' % (name, ' of loop %s' % hex_ip(loop_ipc) if loop_ipc else ''))
@@ -418,7 +419,7 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
   d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) is str else k) for k in hist.keys()) if weighted else tot
   return d
 
-glob_hist_threshold = C.env2int('LBR_GLOB_HIST_THR', 3) / 100.0
+glob_hist_threshold = C.env2float('LBR_GLOB_HIST_THR', 3) / 100.0
 hsts_threshold = {}
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 

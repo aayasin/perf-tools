@@ -391,7 +391,8 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
   hist, name, loop, loop_ipc, sorter, weighted = hist_t[0:]
   tot = sum(hist.values())
   d = {}
-  d['type'] = 'str' if C.any_in(('name', 'paths'), name) else 'hex' if C.any_in(('indir', 'Function'), name) else 'number'
+  d['type'] = 'str' if C.any_in(('name', 'paths'), name) else 'set' if '-set' in name else 'hex' if C.any_in(
+    ('indir', 'Function'), name) else 'number'
   d['mode'] = str(C.hist2slist(hist)[-1][0])
   keys = [sorter(x) for x in hist.keys()] if sorter else [float(x) for x in list(hist.keys())] if 'IPC' in name else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
@@ -400,7 +401,7 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
     mean = tripcount_mean_func(loop, loop_ipc)
     if mean: d['mean'] = mean
   d['num-buckets'] = len(hist)
-  if not 'mean' in d: d['mean'] = -1 # FIXME:10: implement a weighted-average in case of !numpy_imported
+  if d['type'] == 'number' and not 'mean' in d: d['mean'] = -1 # FIXME:10: implement a weighted-average in case of !numpy_imported
   if not print_hist: return d
   if d['num-buckets'] > 1:
     C.printc('%s histogram%s:' % (name, ' of loop %s' % hex_ip(loop_ipc) if loop_ipc else ''))

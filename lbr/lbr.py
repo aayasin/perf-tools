@@ -128,6 +128,7 @@ def count_of(t, lines, x, hist):
 hsts, LC.hsts_threshold = {}, {NOLFC: 0.01, IPLFCB0: 0, IPLFCB1: 0}
 def edge_en_init(indirect_en):
   for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, IPLFCB0, IPLFCB1, FUNCR, FUNCP): hsts[x] = {}
+  if pmu.lioncove_on(): hsts['LTT-set_misp_only'], hsts['LTT-mispIP-set'] = {}, {}
   if indirect_en:
     for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
@@ -140,8 +141,7 @@ def edge_en_init(indirect_en):
       assert x.startswith('0x'), 'invalid address: %s in LBR_IPC_IPS' % x
       ipc_ips.add(int(x, 16))
       hsts['IPC_' + x] = {}
-  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'], LC.hsts_threshold['dsb-heatmap']  = {}, 0
-  if pmu.lioncove_on(): hsts['LTT-set-misp'] = {}
+  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-set-heatmap'], LC.hsts_threshold['dsb-set-heatmap']  = {}, 0
 
 def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
   branches, dirjmps, insts_per_call, x = 0, 0, 0, len(lines) - 1
@@ -238,11 +238,13 @@ def edge_stats(line, lines, xip, size):
       #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
     if xinfo.is_cond_br() and xinfo.is_taken():
       LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
-    if 'LTT-set-misp' in hsts and 'MISP' in line:
+    if 'LTT-set_misp_only' in hsts and 'MISP' in line:
       key = '-1'
       target = ip if xinfo.is_taken() else LC.last_taken_target(lines)
       if target: key = str(int(f'{target:b}'[::-1][4:13][::-1], 2))
-      inc(hsts['LTT-set-misp'], key)
+      inc(hsts['LTT-set_misp_only'], key)
+      if not target: target = 0
+      inc(hsts['LTT-mispIP-set'], f"{target:x};{ip:x};{key}")
     # checks all lines but first
     if info.is_cond_br():
       if info.is_taken(): LC.glob['cond_taken-not-first'] += 1

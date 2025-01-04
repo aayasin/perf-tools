@@ -842,7 +842,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
         if sys.version_info < (3, 0): C.error('Python 3 or above required')
         if not do['funcs'] and C.isfile(funcs): os.remove(funcs)
         lbr_env = "LBR_LOOPS_LOG=%s%s" % (loops, (' LBR_FUNCS=%d LBR_FUNCS_LOG=%s' % (do['funcs'], funcs)) if do['funcs'] else '')
-        cycles = get_stat(pmu.event('cycles')) or get_stat('cycles', 0)
+        cycles = get_stat(pmu.event('cycles', user_only=0)) or get_stat('cycles', 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if args.verbose > 2: lbr_env += ' LBR_VERBOSE=%x' % C.env2int_bo('LBR_VERBOSE', 0x800)
         if type(do['lbr-indirects']) == int:

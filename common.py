@@ -67,6 +67,9 @@ def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3, type='war
     if level > WARN: return
   suffix = extra if type == 'info' else ('; suppressing' if log_db[type][msg] == suppress_after else '')
   printc('%s: %s%s' % (warning(type), msg, suffix), col)
+  if env2int('TRACEBACK'):
+    frame = inspect.currentframe().f_back
+    printc("Traceback (most recent call last):\n" + ''.join(traceback.format_stack(frame)))
 def warn_summary(type='warn', top=20):
   if len(log_db[type]): print('Top %ss: (%d total unique)\n' % (warning(type), len(log_db[type])), hist2str(log_db[type], top))
 def info_p(msg, extra):

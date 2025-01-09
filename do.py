@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 4.01
+__version__ = 4.02
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -815,10 +815,11 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
           perf_script("-F +brstackinsn --xed | GREP_INST| grep MISPRED | %s | %s > %s.tk-mispreds.log" %
                       (clean, sort2uf, data), '@processing mispredicts', data)
         else:
+          def g_(x): return "grep -%sE 'call|jmp|ret'" % ('v' if x == 'cond' else '')
           perf_script("-F +brstackinsn --xed | GREP_INST"
-            "| tee >(grep MISPRED | %s | tee >(grep -E -v 'call|jmp|ret' | %s > %s.cond-tk-mispreds.log) | %s > %s.tk-mispreds.log) "
+            "| tee >(grep MISPRED | %s | tee >(%s | %s > %s.cond-tk-mispreds.log) | tee >(%s | %s > %s.jump-mispreds.log) | %s > %s.tk-mispreds.log) "
             "%s| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
-            (clean, sort2uf, data, sort2uf, data, slow_cmd, clean, sort2uf, data, sort2uf, data, sort2uf, data),
+            (clean, g_('cond'), sort2uf, data, g_('jump'), sort2uf, data, sort2uf, data, slow_cmd, clean, sort2uf, data, sort2uf, data, sort2uf, data),
             '@processing %staken branches' % ('' if do['imix'] & 0x10 else 'all '), data)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'cond-tk-mispreds'))
@@ -847,7 +848,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
         if args.verbose > 2: lbr_env += ' LBR_VERBOSE=%x' % C.env2int_bo('LBR_VERBOSE', 0x800)
         if type(do['lbr-indirects']) == int:
           indirects = (get_indirects('%s.indirects.log' % data, int(do['lbr-indirects'])) + ',' +
-            get_indirects('%s.tk-mispreds.log' % data, int(do['lbr-indirects']))).strip(',')
+            get_indirects('%s.jump-mispreds.log' % data, int(do['lbr-indirects']))).strip(',')
           do['lbr-indirects'] = indirects if len(indirects) else 0
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         open(err, 'w').close()

@@ -246,11 +246,12 @@ def prev_line(sample, i=None, step=1):
 # get last taken target
 def last_taken_target(sample):
   i = -1
-  info = line2info(sample[i])
+  info, ltt = line2info(sample[i]), None
   while -i <= len(sample) and (info.is_label() or not info.is_taken()):
+    if not info.is_label(): ltt = info.ip()
     i -= 1
     info = line2info(sample[i])
-  return line2info(sample[i + 1]).ip() if -i <= len(sample) else None
+  return ltt
 
 # line properties class with lazy evaluation
 class LineInfo:

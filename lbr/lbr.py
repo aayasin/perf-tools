@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.65 # see version line of do.py
+__version__= x86.__version__ + 2.66 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -241,7 +241,7 @@ def edge_stats(line, lines, xip, size):
     if 'LTT-set_misp_only' in hsts and 'MISP' in line:
       key = '-1'
       target = ip if xinfo.is_taken() else LC.last_taken_target(lines)
-      if target: key = str(int(f'{target:b}'[::-1][4:13][::-1], 2))
+      if target: key = str((target >> 4) & 0x1FF)
       inc(hsts['LTT-set_misp_only'], key)
       if not target: target = 0
       inc(hsts['LTT-mispIP-set'], f"{target:x};{ip:x};{key}")

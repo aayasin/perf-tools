@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 4.02
+__version__ = 4.03
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -807,7 +807,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if C.isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, r" grep -E -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      slow_cmd = f"| tee >(sed -E 's/\[[0-9]+\]//' | {sort2u} | ./slow-branch {ipc_lbr} | sort -n | {C.ptage()} > {data}.slow.log)" if mask_eq(0x48, do['imix']) else ''
+      slow_cmd = f"| tee >(sed -E 's/\[[0-9]+\]//' | {sort2u} | {C.grep(x86.JUMP)} | ./slow-branch {ipc_lbr} " \
+        f"| sort -n | {C.ptage()} > {data}.slow.log)" if mask_eq(0x48, do['imix']) else ''
       perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data, log_br_count('sampled taken',
         'samples').replace('Count', '\\nCount')), '@processing %d samples' % nsamples, data, fail=0)
       if do['xed']:

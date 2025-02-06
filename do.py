@@ -589,7 +589,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if not args.sys_wide: do_info(f'App: {r}')
     if profiling() and do['perf-jit']:
       if do['perf-jit'] == 1:
-        x = "ps -ef | grep java | grep -v 'grep java|hack record' | grep '\-XX:+PreserveFramePointer' | grep '\-agentpath'"
+        x = "ps -ef | grep java | grep -v 'grep java|hack record' | grep '\\-XX:+PreserveFramePointer' | grep '\\-agentpath'"
       elif do['perf-jit'] == 2:
         x = "%s -m sysconfig | grep -F no-omit-frame-pointer | grep -F no-omit-leaf-frame-pointer" % do['python']
         if exe(x, fail=0): C.error('Improper python for profiling; did you set :python tunable?')
@@ -626,7 +626,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if args.mode != 'profile' and do['perf-jit']:
       exe(perf_report_mods + " -n --no-call-graph -i %s | tee %s-mods.log | grep -A13 Overhead "
           r"| grep -E -v '^# \.|^\s+$|^$' | sed 's/[ \\t]*$//' | nl -v-1" % (data, base), '@report modules no call-graph')
-      n, j = samples_count(data), int(exe_1line("grep -E 'jitted|\[JIT\]' %s-mods.log | ./ptage | tail -1" % base, 1))
+      n, j = samples_count(data), int(exe_1line("grep -E 'jitted|\\[JIT\\]' %s-mods.log | ./ptage | tail -1" % base, 1))
       C.printc('\n\t'.join((
         '\t%9d %3.2f%% == jitted' % (j, 100.0 * j / n),
         '%9d %3.2f%% == total' % (n, 100))))
@@ -778,7 +778,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     def static_stats():
       if args.mode == 'profile' or args.print_only or windows_file: return
       bins = exe2list(perf + r" script -i %s | awk -F'\\(' '{print $NF}' | cut -d\) -f1 | grep -vwE deleted "
-        "| grep -E -v '^\[|anonymous|/tmp/perf-' | %s | tail -5" % (data, sort2u))[1:][::2]
+        "| grep -E -v '^\\[|anonymous|/tmp/perf-' | %s | tail -5" % (data, sort2u))[1:][::2]
       assert len(bins)
       print_info('# %s:\n#\n' % 'Static Statistics')
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
@@ -807,7 +807,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if C.isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, r" grep -E -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      slow_cmd = f"| tee >(sed -E 's/\[[0-9]+\]//' | {sort2u} | {C.grep(x86.JUMP)} | ./slow-branch {ipc_lbr} " \
+      slow_cmd = f"| tee >(sed -E 's/\\[[0-9]+\\]//' | {sort2u} | {C.grep(x86.JUMP)} | ./slow-branch {ipc_lbr} " \
         f"| sort -n | {C.ptage()} > {data}.slow.log)" if mask_eq(0x48, do['imix']) else ''
       perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data, log_br_count('sampled taken',
         'samples').replace('Count', '\\nCount')), '@processing %d samples' % nsamples, data, fail=0)
@@ -889,7 +889,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
                   (perf + " script -i %s -F +brstackinsn --xed -c %s" % (data, comm)),
                   C.realpath('loop_stats'), exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info))
         perf_script("%s %s && %s" % (perf_F(), cmd,
-                    C.grep('F[FL]-cycles...([1-9][0-9]|[3-9]\.)', info, color=1)), "@detailed stats for hot loops", data,
+                    C.grep('F[FL]-cycles...([1-9][0-9]|[3-9]\\.)', info, color=1)), "@detailed stats for hot loops", data,
                     export='PTOOLS_HITS=%s%s%s' % (hits, (' LLVM_LOG=%s LLVM_ARGS="%s"' % (llvm_mca, do['llvm-mca-args']))
                     if do['loop-ideal-ipc'] & 0x1 else '', (' UICA_LOG=%s' % uica) if do['loop-ideal-ipc'] & 0x2 else ''))
       else: warn_file(loops)
@@ -923,7 +923,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
                         (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
     def log_funcs(funcs_log):
       if not C.isfile(funcs_log): return
-      sed_cut = "sed s/::/#/g | cut -d: -f3 | sed 's/, num-buckets//;s/\-> ? \-> //g;s/ \-> ?//g;s/ \-> /|/g;s/;/|/g' | sed s/#/::/g"
+      sed_cut = "sed s/::/#/g | cut -d: -f3 | sed 's/, num-buckets//;s/\\-> ? \\-> //g;s/ \\-> ?//g;s/ \\-> /|/g;s/;/|/g' | sed s/#/::/g"
       top = do['perf-pebs-top']
       while top > 0:
         top_ip = exe_1line("tail -%d %s.ips.log | head -1" % (top + 1, data), 2)

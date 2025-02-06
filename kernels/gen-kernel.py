@@ -63,7 +63,7 @@ if len(args.instructions) == 1 and args.instructions[0].endswith('.txt'):
   lines = C.file2lines(f, True)
   for i in lines[:-1]:
     if i.startswith('j') and '0x' in i: i = ' '.join((i.split()[0], 'Lbl_end'))
-    x = re.search('([0-9a-fx]+)\(%[re]ip', i)
+    x = re.search(r'([0-9a-fx]+)\(%[re]ip', i)
     if x:
       i = i.replace(x.group(1), '0x%x' % (0x100 + ip_idx))
       ip_idx += 16

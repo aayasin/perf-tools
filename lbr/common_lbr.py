@@ -192,6 +192,12 @@ def get_ilen(line):
   if not 'ilen' in line: return None
   return int(line.split('ilen:')[-1].strip().split()[0])
 
+def get_timestamp(line):
+  assert line2info(line).header()
+  elements = line.split()
+  for e in elements:
+    if '.' in e: return e.replace(':', '')
+
 def is_jcc_erratum(line, previous=None):
   info = line2info(line)
   length = info.ilen()

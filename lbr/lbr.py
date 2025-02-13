@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.67 # see version line of do.py
+__version__= x86.__version__ + 2.68 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -361,7 +361,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           C.printf(x+'\n')
         inc(LC.stat['events'], ev)
         func = None
-        if LC.debug: timestamp = header.group(1).split()[-1]
+        timestamp = LC.get_timestamp(line)
       # a new sample started
       # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
         if ip_filter:
@@ -446,7 +446,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       LC.glob['all'] += 1
       if size > 1:
         loop_srcline = None if ip in loops.loops and 'srcline' in loops.loops[ip] and loops.loops[ip]['srcline'] == srcline else srcline
-        loops.detect_loop(ip, lines, loop_ipc, takens, loop_srcline)
+        loops.detect_loop(ip, lines, loop_ipc, takens, loop_srcline, timestamp)
       if skip_bad: tc_state = loops.loop_stats(line, loop_ipc, tc_state)
       if LC.edge_en:
         if LC.glob['all'] == 1:  # 1st instruction observed

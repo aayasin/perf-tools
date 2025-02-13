@@ -146,7 +146,7 @@ bwd_br_tgts = []
 loop_cands = []
 functions_in_loops, inter_loops = set(), set()
 inter_loops_dict = dict()
-def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
+def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline, timestamp,
                 MOLD=4e4):  # Max Outer Loop Distance
   global bwd_br_tgts, loop_cands, contigous_loops, functions_in_loops, inter_loops, inter_loops_dict  # unlike nonlocal, global works in python2 too!
   def find_block_ip(x=len(lines) - 2):
@@ -212,6 +212,7 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
     loop = loops[ip]
     loop['hotness'] += 1
     if srcline and not 'srcline' in loop: loop['srcline'] = srcline
+    loop['time-frame'][1] = timestamp
     if prev_i.is_taken():
       if indirect_jmp_enter() and 'entered_by_indirect' not in loop['attributes']:
         loop['attributes'] += ';entered_by_indirect'
@@ -313,7 +314,8 @@ def detect_loop(ip, lines, loop_ipc, lbr_takens, srcline,
       loops[ip] = {'back': xip, 'hotness': 1, 'size': None, 'imix-ID': None,
                    'attributes': ';entered_by_indirect' if indirect_jmp_enter() else '',
                    'entry-block': 0 if xip > ip else find_block_ip()[0],  # 'BK': {hex(xip): 1, },
-                   'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs
+                   'inner': inner, 'outer': outer, 'inner-loops': ins, 'outer-loops': outs,
+                   'time-frame': [timestamp, timestamp]
                    }
       if srcline: loops[ip]['srcline'] = srcline.replace(':', ';')
       ilen = prev_i.ilen()

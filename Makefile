@@ -325,7 +325,7 @@ PRE_PUSH_CMDS := \
     "echo 'testing pipeline-view sys-wide idle' && $(DO) profile -pm 200000 -s 30 -o pipeline-view -v1 " \
     "$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1" \
     "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)" \
-    "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:0x3 -pm 300 -o test-ideal-ipc > test-ideal-ipc 2>&1 || $(FAIL)" \
+    "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 -o test-ideal-ipc > test-ideal-ipc 2>&1 || $(FAIL)" \
     "echo 'timing openssl' && time $(DO) profile -a \"openssl speed rsa2048\" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)" \
     "echo 'testing default w/ python2 (errors only)' && $(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL)"
 

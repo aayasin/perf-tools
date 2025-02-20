@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.68 # see version line of do.py
+__version__= x86.__version__ + 2.69 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -415,8 +415,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         valid = skip_sample(lines[0])
         invalid('bad', tag)
         break
+      ip = None if 'not reaching sample' in line else info.ip()
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
-      if skip_bad and len(lines) and not label and not line.strip().startswith('0'):
+      if skip_bad and len(lines) and not label and not ip:
         if LC.debug and LC.debug == timestamp:
           exit(line, lines, "bad line")
         valid = skip_sample(lines[0])
@@ -430,7 +431,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         lines += [line.rstrip('\r\n')]
         continue
       elif not len(lines): continue
-      ip = None if header or label or 'not reaching sample' in line else info.ip()
       if info.is_taken(): takens += [ip]
       if len(takens) < 2:
         # perf may return subset of LBR-sample with < 32 records

@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 4.01
+__version__ = 4.04
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -102,7 +102,7 @@ do = {'run':        C.RUN_DEF,
   'perf-pebs':      pmu.event_period('dsb-miss', 1000000),
   'perf-pebs-top':  0,
   'perf-pt':        "-e '{intel_pt//u,%su}' -c %d -m,64M" % (pmu.lbr_event(), pmu.lbr_period()), # noretcomp
-  'perf-record':    ' -g -e ' + pmu.event('cycles', precise=2, user_only=0),
+  'perf-record':    ' -g -e ' + pmu.event('cycles', precise=2, user_only=0, retire_latency=0),
   'perf-report-append': '',
   'perf-scr':       0,
   'perf-stat':      '', # '--topdown' if pmu.perfmetrics() else '',
@@ -589,7 +589,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if not args.sys_wide: do_info(f'App: {r}')
     if profiling() and do['perf-jit']:
       if do['perf-jit'] == 1:
-        x = "ps -ef | grep java | grep -v 'grep java|hack record' | grep '\-XX:+PreserveFramePointer' | grep '\-agentpath'"
+        x = "ps -ef | grep java | grep -v 'grep java|hack record' | grep '\\-XX:+PreserveFramePointer' | grep '\\-agentpath'"
       elif do['perf-jit'] == 2:
         x = "%s -m sysconfig | grep -F no-omit-frame-pointer | grep -F no-omit-leaf-frame-pointer" % do['python']
         if exe(x, fail=0): C.error('Improper python for profiling; did you set :python tunable?')
@@ -626,7 +626,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if args.mode != 'profile' and do['perf-jit']:
       exe(perf_report_mods + " -n --no-call-graph -i %s | tee %s-mods.log | grep -A13 Overhead "
           r"| grep -E -v '^# \.|^\s+$|^$' | sed 's/[ \\t]*$//' | nl -v-1" % (data, base), '@report modules no call-graph')
-      n, j = samples_count(data), int(exe_1line("grep -E 'jitted|\[JIT\]' %s-mods.log | ./ptage | tail -1" % base, 1))
+      n, j = samples_count(data), int(exe_1line("grep -E 'jitted|\\[JIT\\]' %s-mods.log | ./ptage | tail -1" % base, 1))
       C.printc('\n\t'.join((
         '\t%9d %3.2f%% == jitted' % (j, 100.0 * j / n),
         '%9d %3.2f%% == total' % (n, 100))))
@@ -641,7 +641,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
   grep_nz= grep_NZ
   if args.verbose < 2: grep_nz = grep_nz.replace('##placeholder##', r' < [\[\+]|<$')
   def gen_retlat():
-    if not do['model'] or not pmu.retlat(): return False
+    if not do['model'] or not pmu.retlat() or not do['sample']: return False
     retlat = '%s/%s-retlat.json' % (C.dirname(), out)
     if profiling() and (not C.isfile(retlat) or os.path.getsize(retlat) < 100):
       exe('%s -q -o %s -- %s' % (perf_common(cmd='', p=genretlat), retlat, r), 'calibrating retire latencies')
@@ -778,7 +778,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     def static_stats():
       if args.mode == 'profile' or args.print_only or windows_file: return
       bins = exe2list(perf + r" script -i %s | awk -F'\\(' '{print $NF}' | cut -d\) -f1 | grep -vwE deleted "
-        "| grep -E -v '^\[|anonymous|/tmp/perf-' | %s | tail -5" % (data, sort2u))[1:][::2]
+        "| grep -E -v '^\\[|anonymous|/tmp/perf-' | %s | tail -5" % (data, sort2u))[1:][::2]
       assert len(bins)
       print_info('# %s:\n#\n' % 'Static Statistics')
       exe('size %s >> %s' % (' '.join(bins), info), "@stats")
@@ -807,7 +807,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
           (perf_ic(data, comm), info), None if do['size'] else "@stats")
       if C.isfile(logs['stat']): exe("grep -E '  branches| cycles|instructions|BR_INST_RETIRED' %s >> %s" % (logs['stat'], info))
       sort2uf = "%s |%s ./ptage" % (sort2u, r" grep -E -v '\s+[1-9]\s+' |" if do['imix'] & 0x10 else '')
-      slow_cmd = f"| tee >(sed -E 's/\[[0-9]+\]//' | {sort2u} | ./slow-branch {ipc_lbr} | sort -n | {C.ptage()} > {data}.slow.log)" if mask_eq(0x48, do['imix']) else ''
+      slow_cmd = f"| tee >(sed -E 's/\\[[0-9]+\\]//' | {sort2u} | {C.grep(x86.JUMP)} | ./slow-branch {ipc_lbr} " \
+        f"| sort -n | {C.ptage()} > {data}.slow.log)" if mask_eq(0x48, do['imix']) else ''
       perf_script("-F ip | %s > %s.samples.log && %s" % (sort2uf, data, log_br_count('sampled taken',
         'samples').replace('Count', '\\nCount')), '@processing %d samples' % nsamples, data, fail=0)
       if do['xed']:
@@ -815,10 +816,11 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
           perf_script("-F +brstackinsn --xed | GREP_INST| grep MISPRED | %s | %s > %s.tk-mispreds.log" %
                       (clean, sort2uf, data), '@processing mispredicts', data)
         else:
+          def g_(x): return "grep -%sE 'call|jmp|ret'" % ('v' if x == 'cond' else '')
           perf_script("-F +brstackinsn --xed | GREP_INST"
-            "| tee >(grep MISPRED | %s | tee >(grep -E -v 'call|jmp|ret' | %s > %s.cond-tk-mispreds.log) | %s > %s.tk-mispreds.log) "
+            "| tee >(grep MISPRED | %s | tee >(%s | %s > %s.cond-tk-mispreds.log) | tee >(%s | %s > %s.jump-mispreds.log) | %s > %s.tk-mispreds.log) "
             "%s| %s | tee >(%s > %s.takens.log) | tee >(grep '%%' | %s > %s.indirects.log) | grep call | %s > %s.calls.log" %
-            (clean, sort2uf, data, sort2uf, data, slow_cmd, clean, sort2uf, data, sort2uf, data, sort2uf, data),
+            (clean, g_('cond'), sort2uf, data, g_('jump'), sort2uf, data, sort2uf, data, slow_cmd, clean, sort2uf, data, sort2uf, data, sort2uf, data),
             '@processing %staken branches' % ('' if do['imix'] & 0x10 else 'all '), data)
           for x in ('taken', 'call', 'indirect'): exe(log_br_count(x, "%ss" % x))
           exe(log_br_count('mispredicted conditional taken', 'cond-tk-mispreds'))
@@ -842,12 +844,12 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
         if sys.version_info < (3, 0): C.error('Python 3 or above required')
         if not do['funcs'] and C.isfile(funcs): os.remove(funcs)
         lbr_env = "LBR_LOOPS_LOG=%s%s" % (loops, (' LBR_FUNCS=%d LBR_FUNCS_LOG=%s' % (do['funcs'], funcs)) if do['funcs'] else '')
-        cycles = get_stat(pmu.event('cycles')) or get_stat('cycles', 0)
+        cycles = get_stat(pmu.event('cycles', user_only=0)) or get_stat('cycles', 0)
         if cycles: lbr_env += ' PTOOLS_CYCLES=%d' % cycles
         if args.verbose > 2: lbr_env += ' LBR_VERBOSE=%x' % C.env2int_bo('LBR_VERBOSE', 0x800)
         if type(do['lbr-indirects']) == int:
           indirects = (get_indirects('%s.indirects.log' % data, int(do['lbr-indirects'])) + ',' +
-            get_indirects('%s.tk-mispreds.log' % data, int(do['lbr-indirects']))).strip(',')
+            get_indirects('%s.jump-mispreds.log' % data, int(do['lbr-indirects']))).strip(',')
           do['lbr-indirects'] = indirects if len(indirects) else 0
         if do['lbr-indirects']: lbr_env += " LBR_INDIRECTS=%s" % do['lbr-indirects']
         open(err, 'w').close()
@@ -887,7 +889,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
                   (perf + " script -i %s -F +brstackinsn --xed -c %s" % (data, comm)),
                   C.realpath('loop_stats'), exe_1line('tail -1 %s' % loops, 2)[:-1], ev, info))
         perf_script("%s %s && %s" % (perf_F(), cmd,
-                    C.grep('F[FL]-cycles...([1-9][0-9]|[3-9]\.)', info, color=1)), "@detailed stats for hot loops", data,
+                    C.grep('F[FL]-cycles...([1-9][0-9]|[3-9]\\.)', info, color=1)), "@detailed stats for hot loops", data,
                     export='PTOOLS_HITS=%s%s%s' % (hits, (' LLVM_LOG=%s LLVM_ARGS="%s"' % (llvm_mca, do['llvm-mca-args']))
                     if do['loop-ideal-ipc'] & 0x1 else '', (' UICA_LOG=%s' % uica) if do['loop-ideal-ipc'] & 0x2 else ''))
       else: warn_file(loops)
@@ -910,8 +912,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     else:
       perf_script(f"-F ip | {sort2up2} | tee {data}.ips.log | tail -{top}", f"@ top-{top-1} IPs", data)
     if pmu.retlat() and ' -W' in do['perf-pebs']:
-      perf_script("-F retire_lat,ip | sort | uniq -c | awk '{print $1*$2 \"\\t\" $2 \"\\t\" $3 }' | grep -v ^0"
-        " | tee >(sort -k3 | awk 'BEGIN {ip=0; sum=0} {if ($3 != ip) {if (ip) printf \"%%8d %%18s\\n\", sum, ip; ip=$3; sum=$1} else {sum += $1}}"
+      perf_script("-F retire_lat,ip | sort | uniq -c | awk '{print \$1*\$2 \"\\t\" \$2 \"\\t\" \$3 }' | grep -v ^0"
+        " | tee >(sort -k3 | awk 'BEGIN {ip=0; sum=0} {if (\$3 != ip) {if (ip) printf \"%%8d %%18s\\n\", sum, ip; ip=\$3; sum=\$1} else {sum += \$1}}"
                 " END {printf \"%%8d %%18s\\n\", sum, ip}' | sort -n | ./ptage > %s.ips-retlat.log)"
         " | sort -n | ./ptage | tee %s.lat-retlat.log | tail -11" % (data, data), "@ top-10 (retire-latency, IPs) pairs", data)
       exe(C.tail(data + '.ips-retlat.log'), "@ top-10 IPs by retire-latency")
@@ -921,7 +923,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
                         (pmu.dsb_msb(), sort2up, data), "@ DSB-miss sets", data)
     def log_funcs(funcs_log):
       if not C.isfile(funcs_log): return
-      sed_cut = "sed s/::/#/g | cut -d: -f3 | sed 's/, num-buckets//;s/\-> ? \-> //g;s/ \-> ?//g;s/ \-> /|/g;s/;/|/g' | sed s/#/::/g"
+      sed_cut = "sed s/::/#/g | cut -d: -f3 | sed 's/, num-buckets//;s/\\-> ? \\-> //g;s/ \\-> ?//g;s/ \\-> /|/g;s/;/|/g' | sed s/#/::/g"
       top = do['perf-pebs-top']
       while top > 0:
         top_ip = exe_1line("tail -%d %s.ips.log | head -1" % (top + 1, data), 2)

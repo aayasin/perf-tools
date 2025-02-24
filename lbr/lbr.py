@@ -27,7 +27,7 @@ try:
   numpy_imported = True
 except ImportError:
   numpy_imported = False
-__version__= x86.__version__ + 2.64 # see version line of do.py
+__version__= x86.__version__ + 2.69 # see version line of do.py
 
 llvm_log = C.envfile('LLVM_LOG')
 llvm_args = C.env2str('LLVM_ARGS')
@@ -128,6 +128,7 @@ def count_of(t, lines, x, hist):
 hsts, LC.hsts_threshold = {}, {NOLFC: 0.01, IPLFCB0: 0, IPLFCB1: 0}
 def edge_en_init(indirect_en):
   for x in (FUNCI, 'IPC', IPTB, IPLFC, NOLFC, IPLFCB0, IPLFCB1, FUNCR, FUNCP): hsts[x] = {}
+  if pmu.lioncove_on(): hsts['LTT-set_misp_only'], hsts['LTT-mispIP-set'] = {}, {}
   if indirect_en:
     for x in ('', '-misp'): hsts['indirect-x2g%s' % x] = {}
   if os.getenv('LBR_INDIRECTS'):
@@ -140,8 +141,7 @@ def edge_en_init(indirect_en):
       assert x.startswith('0x'), 'invalid address: %s in LBR_IPC_IPS' % x
       ipc_ips.add(int(x, 16))
       hsts['IPC_' + x] = {}
-  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-heatmap'], LC.hsts_threshold['dsb-heatmap']  = {}, 0
-  if pmu.lioncove_on(): hsts['LTT-set-misp'] = {}
+  if pmu.dsb_msb() and not pmu.cpu('smt-on'): hsts['dsb-set-heatmap'], LC.hsts_threshold['dsb-set-heatmap']  = {}, 0
 
 def edge_leaf_func_stats(lines, line): # invoked when a RET is observed
   branches, dirjmps, insts_per_call, x = 0, 0, 0, len(lines) - 1
@@ -252,11 +252,13 @@ def edge_stats(line, lines, xip, size):
       #inc(hsts['indirect_%s_paths' % hex_ip(xip)], '%s.%s.%s' % (hex_ip(get_taken(lines, -2)['from']), hex_ip(xip), hex_ip(ip)))
     if xinfo.is_cond_br() and xinfo.is_taken():
       LC.glob['cond_%sward-taken' % ('for' if ip > xip else 'back')] += 1
-    if 'LTT-set-misp' in hsts and 'MISP' in line:
+    if 'LTT-set_misp_only' in hsts and 'MISP' in line:
       key = '-1'
       target = ip if xinfo.is_taken() else LC.last_taken_target(lines)
-      if target: key = str(int(f'{target:b}'[::-1][4:13][::-1], 2))
-      inc(hsts['LTT-set-misp'], key)
+      if target: key = str((target >> 4) & 0x1FF)
+      inc(hsts['LTT-set_misp_only'], key)
+      if not target: target = 0
+      inc(hsts['LTT-mispIP-set'], f"{target:x};{ip:x};{key}")
     # checks all lines but first
     if info.is_cond_br():
       if info.is_taken(): LC.glob['cond_taken-not-first'] += 1
@@ -373,7 +375,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
           C.printf(x+'\n')
         inc(LC.stat['events'], ev)
         func = None
-        if LC.debug: timestamp = header.group(1).split()[-1]
+        timestamp = LC.get_timestamp(line)
       # a new sample started
       # perf  3433 1515065.348598:    1000003 EVENT.NAME:      7fd272e3b217 __regcomp+0x57 (/lib/x86_64-linux-gnu/libc-2.23.so)
         if ip_filter:
@@ -427,8 +429,9 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         valid = skip_sample(lines[0])
         invalid('bad', tag)
         break
+      ip = None if 'not reaching sample' in line else info.ip()
       # e.g. "        prev_nonnote_           addb  %al, (%rax)"
-      if skip_bad and len(lines) and not label and not line.strip().startswith('0'):
+      if skip_bad and len(lines) and not label and not ip:
         if LC.debug and LC.debug == timestamp:
           exit(line, lines, "bad line")
         valid = skip_sample(lines[0])
@@ -442,7 +445,6 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
         lines += [line.rstrip('\r\n')]
         continue
       elif not len(lines): continue
-      ip = None if header or label or 'not reaching sample' in line else info.ip()
       if info.is_taken(): takens += [ip]
       if len(takens) < 2:
         # perf may return subset of LBR-sample with < 32 records
@@ -458,7 +460,7 @@ def read_sample(ip_filter=None, skip_bad=True, min_lines=0, ret_latency=False,
       LC.glob['all'] += 1
       if size > 1:
         loop_srcline = None if ip in loops.loops and 'srcline' in loops.loops[ip] and loops.loops[ip]['srcline'] == srcline else srcline
-        loops.detect_loop(ip, lines, loop_ipc, takens, loop_srcline)
+        loops.detect_loop(ip, lines, loop_ipc, takens, loop_srcline, timestamp)
       if skip_bad: tc_state = loops.loop_stats(line, loop_ipc, tc_state)
       if LC.edge_en:
         if LC.glob['all'] == 1:  # 1st instruction observed

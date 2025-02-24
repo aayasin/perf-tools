@@ -193,6 +193,12 @@ def get_ilen(line):
   if not 'ilen' in line: return None
   return int(line.split('ilen:')[-1].strip().split()[0])
 
+def get_timestamp(line):
+  assert line2info(line).header()
+  elements = line.split()
+  for e in elements:
+    if '.' in e: return e.replace(':', '')
+
 def is_jcc_erratum(line, previous=None):
   info = line2info(line)
   length = info.ilen()
@@ -247,11 +253,12 @@ def prev_line(sample, i=None, step=1):
 # get last taken target
 def last_taken_target(sample):
   i = -1
-  info = line2info(sample[i])
+  info, ltt = line2info(sample[i]), None
   while -i <= len(sample) and (info.is_label() or not info.is_taken()):
+    if not info.is_label(): ltt = info.ip()
     i -= 1
     info = line2info(sample[i])
-  return line2info(sample[i + 1]).ip() if -i <= len(sample) else None
+  return ltt
 
 # line properties class with lazy evaluation
 class LineInfo:
@@ -392,7 +399,8 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
   hist, name, loop, loop_ipc, sorter, weighted = hist_t[0:]
   tot = sum(hist.values())
   d = {}
-  d['type'] = 'str' if C.any_in(('name', 'paths'), name) else 'hex' if C.any_in(('indir', 'Function'), name) else 'number'
+  d['type'] = 'str' if C.any_in(('name', 'paths'), name) else 'set' if '-set' in name else 'hex' if C.any_in(
+    ('indir', 'Function'), name) else 'number'
   d['mode'] = str(C.hist2slist(hist)[-1][0])
   keys = [sorter(x) for x in hist.keys()] if sorter else [float(x) for x in list(hist.keys())] if 'IPC' in name else list(hist.keys())
   if d['type'] == 'number' and numpy_imported: d['mean'] = str(round(average(keys, weights=list(hist.values())), 2))
@@ -401,6 +409,7 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
     mean = tripcount_mean_func(loop, loop_ipc)
     if mean: d['mean'] = mean
   d['num-buckets'] = len(hist)
+  if d['type'] == 'number' and not 'mean' in d: d['mean'] = -1 # FIXME:10: implement a weighted-average in case of !numpy_imported
   if not print_hist: return d
   if d['num-buckets'] > 1:
     C.printc('%s histogram%s:' % (name, ' of loop %s' % hex_ip(loop_ipc) if loop_ipc else ''))
@@ -419,7 +428,7 @@ def print_hist(hist_t, threshold=0.05, tripcount_mean_func=None, print_hist=True
   d['total'] = sum(hist[k] * int((k.split('+')[0]) if type(k) is str else k) for k in hist.keys()) if weighted else tot
   return d
 
-glob_hist_threshold = C.env2int('LBR_GLOB_HIST_THR', 3) / 100.0
+glob_hist_threshold = C.env2float('LBR_GLOB_HIST_THR', 3) / 100.0
 hsts_threshold = {}
 def hist_fmt(d): return '%s%s' % (str(d).replace("'", ""), '' if 'num-buckets' in d and d['num-buckets'] == 1 else '\n')
 

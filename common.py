@@ -67,6 +67,9 @@ def warn(msg, bold=False, col=color.ORANGE, level=0, suppress_after=3, type='war
     if level > WARN: return
   suffix = extra if type == 'info' else ('; suppressing' if log_db[type][msg] == suppress_after else '')
   printc('%s: %s%s' % (warning(type), msg, suffix), col)
+  if env2int('TRACEBACK'):
+    frame = inspect.currentframe().f_back
+    printc("Traceback (most recent call last):\n" + ''.join(traceback.format_stack(frame)))
 def warn_summary(type='warn', top=20):
   if len(log_db[type]): print('Top %ss: (%d total unique)\n' % (warning(type), len(log_db[type])), hist2str(log_db[type], top))
 def info_p(msg, extra):
@@ -215,6 +218,7 @@ def check_executable(x):
 def dirname(): return os.path.dirname(__file__)
 def realpath(x): return os.path.join(dirname(), x)
 def env2int(x, default=0, base=10): y=os.getenv(x); return int(y, base) if y else default
+def env2float(x, default=0): y=os.getenv(x); return float(y) if y else default
 def env2str(x, default=0, prefix=0): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
 def env2list(x, default): y = os.getenv(x); return y.split() if y else default
 def envfile(x): x = os.getenv(x); return x if isfile(x) else None

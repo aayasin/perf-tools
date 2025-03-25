@@ -914,8 +914,8 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     else:
       perf_script(f"-F ip | {sort2up2} | tee {data}.ips.log | tail -{top}", f"@ top-{top-1} IPs", data)
     if pmu.retlat() and ' -W' in do['perf-pebs']:
-      perf_script("-F retire_lat,ip | sort | uniq -c | awk '{print \$1*\$2 \"\\t\" \$2 \"\\t\" \$3 }' | grep -v ^0"
-        " | tee >(sort -k3 | awk 'BEGIN {ip=0; sum=0} {if (\$3 != ip) {if (ip) printf \"%%8d %%18s\\n\", sum, ip; ip=\$3; sum=\$1} else {sum += \$1}}"
+      perf_script("-F retire_lat,ip | sort | uniq -c | awk '{print \\$1*\\$2 \"\\t\" \\$2 \"\\t\" \\$3 }' | grep -v ^0"
+        " | tee >(sort -k3 | awk 'BEGIN {ip=0; sum=0} {if (\\$3 != ip) {if (ip) printf \"%%8d %%18s\\n\", sum, ip; ip=\\$3; sum=\\$1} else {sum += \\$1}}"
                 " END {printf \"%%8d %%18s\\n\", sum, ip}' | sort -n | ./ptage > %s.ips-retlat.log)"
         " | sort -n | ./ptage | tee %s.lat-retlat.log | tail -11" % (data, data), "@ top-10 (retire-latency, IPs) pairs", data)
       exe(C.tail(data + '.ips-retlat.log'), "@ top-10 IPs by retire-latency")

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (c) 2020-2024, Intel Corporation
 # Author: Ahmad Yasin
 #

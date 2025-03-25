@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Author: Ahmad Yasin
 # edited: Oct 2022
 Papers = {

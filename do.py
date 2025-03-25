@@ -223,7 +223,9 @@ def analyze_it():
   analyze.analyze(uniq_name(), args, do, not is_yperf())
 
 def tools_install(packages=[]):
-  installer='sudo %s -y install ' % do['package-mgr']
+  installer='sudo %s %s install %s ' % (do['package-mgr'],
+                                       "-y" if "zypper" not in do['package-mgr'] else "",
+                                       "-y" if "zypper" in do['package-mgr'] else "")
   if args.install_perf:
     if args.install_perf == 'install':
       if do['package-mgr'] == 'dnf': exe('sudo apt-get install perf', 'installing perf')

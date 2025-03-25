@@ -210,6 +210,7 @@ def os_installer():
   installer, name = 'yum', os_release()
   if 'Ubuntu' in name or 'Debian' in name: installer='apt-get'
   if 'CentOS' in name: installer='dnf'
+  if 'SUSE' in name: installer='zypper'
   return installer
 
 def check_executable(x):

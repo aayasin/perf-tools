@@ -9,3 +9,4 @@ TGL,Contested_Accesses;Data_Sharing;False_Sharing
 ICX,Remote_Cache;Contested_Accesses;Data_Sharing;False_Sharing
 CLX,Remote_Cache;Contested_Accesses;Data_Sharing;False_Sharing
 SKL,Contested_Accesses;Data_Sharing;False_Sharing
+SKX,Contested_Accesses;Data_Sharing;False_Sharing

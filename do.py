@@ -352,7 +352,7 @@ def msr_clear(m, mask): return msr_set(m, mask, set=False)
 
 def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
   def label(x, tool='dmesg'): return C.grep(x, flags='-H --label %s' % tool)
-  def log_patch(x, patch=r'| sed s/=/:\ /'): return exe("%s %s >> %s" % (x, patch, out))
+  def log_patch(x, patch=r'| sed s/=/:\ /', fail=1): return exe("%s %s >> %s" % (x, patch, out), fail=fail)
   def new_line(): return prn_line(out)
   def version(tool): C.fappend('%s: %s' % (tool, exe_1line('%s --version | head -1' % tool)), out)
   forcecpu = globs['force-cpu']
@@ -367,7 +367,7 @@ def log_setup(out=globs['setup-log'], c='setup-cpuid.log', d='setup-dmesg.log'):
             '/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor',
             '/sys/devices/system/node/node0/memory_side_cache/index1/size'):
     if C.isfile(f): prn_sysfile(f, out)
-  log_patch("sysctl -a | tee setup-sysctl.log | grep -E 'randomize_va_space|hugepages ='")
+  log_patch("sysctl -a | tee setup-sysctl.log | grep -E 'randomize_va_space|hugepages ='", fail=0)
   C.fappend('IP-address: %s' % exe_1line('hostname -I'), out)
   exe("env > setup-env.log")
   new_line()          #CPU

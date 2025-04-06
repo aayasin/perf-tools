@@ -222,6 +222,19 @@ def edge_stats(line, lines, xip, size):
       if C.any_in(vecs, ''.join(v2ii2v_srcs)): inc_stat('V2I transition-Penalty')
       elif C.any_in(vecs, v2ii2v_dst): inc_stat('I2V transition-Penalty')
     elif v2ii2v_dst: inc_stat('V2I transition-Penalty')
+  if x86.is_type(x86.MOV,line) and not info.is_memory() and not info.is_imm() and not re.match(info.inst(),x86.MOVS_ZX):
+    me_src=info.srcs()[0]
+    me_dst=info.dst()
+    if me_src in x86.REGS_64:
+      inc_stat('r64 move-elimination')
+    elif me_src in x86.REGS_32:
+      inc_stat('r32 move-elimination')
+    elif 'xmm' in me_src: 
+      inc_stat('xmm move-elimination')
+    elif 'ymm' in me_src:
+      inc_stat('ymm move-elimination')
+    elif 'zmm' in me_src:
+      inc_stat('zmm move-elimination')
   if size > 1:
     xline = LC.prev_line(lines)
     xinfo = LC.line2info(xline)
@@ -519,7 +532,7 @@ c = lambda x: x.replace(':', '-')
 def stat_name(name, prefix='count', ratio_of=None):
   def nm(x):
     if not ratio_of or ratio_of[0] != 'ALL': return x
-    n = (x if C.any_in(['cond', 'fusible', 'MRN', 'Penalty'], name) else x.upper()) + ' '
+    n = (x if C.any_in(['cond', 'fusible', 'MRN', 'Penalty','elimination'], name) else x.upper()) + ' '
     if x.startswith('vec'): n += 'comp '
     if x in LC.is_imix(None):  n += 'insts-class'
     elif x in x86.mem_type(None):  n += 'insts-subclass'
@@ -565,6 +578,7 @@ def print_global_stats():
     for x in LC.Insts_Fusions: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_MRN: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_V2II2V: print_imix_stat(x, LC.glob[x])
+    for x in LC.Insts_MovElim: print_imix_stat(x, LC.glob[x])
     for x in LC.Insts_global: print_imix_stat(x, LC.glob[x])
   if 'indirect-x2g' in hsts:
     print_hist_sum('indirect (call/jump) of >2GB offset', 'indirect-x2g')

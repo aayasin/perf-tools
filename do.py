@@ -20,7 +20,7 @@ from __future__ import print_function
 __author__ = 'ayasin'
 # pump version for changes with collection/report impact: by .01 on fix/tunable,
 #   by .1 on new command/profile-step/report/flag or TMA revision
-__version__ = 4.04
+__version__ = 4.14
 
 import argparse, os.path, re, sys
 import analyze, common as C, pmu, stats, tma
@@ -30,16 +30,15 @@ from common1 import registrar
 from getpass import getuser
 from math import log10
 from platform import python_version
-from pipeline import pipeline_view
 
 globs = {
   'cmds_file':          None,
+  'cputype':            C.Globals['cputype'],
   'find-perf':          'sudo find / -name perf -executable -type f | grep ^/',
   'find-jvmti':         'sudo find /usr -name libperf-jvmti.so | grep -v find:',
   'force-cpu':          C.env2str('FORCECPU'),
   'ldlat-def':          '7',
   'setup-log':          'setup-system.log',
-  'time':               '/usr/bin/time',
   'tunable2pkg':        {'loop-ideal-ipc': 'libtinfo5', 'msr': 'msr-tools', 'xed': 'python3-pip'},
   'uname-a':            C.exe_one_line('uname -a'),
   'V_timing':           4,
@@ -131,15 +130,16 @@ args = argparse.Namespace()
 def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=False, export=None):
   def get_time_cmd():
     X, i = x.split(), 0
-    if '-C0.log' in x:
-      while '-C0.log' not in X[i]: i += 1
+    c = C.main_core()
+    if '-C%s.log' % c in x:
+      while '-C%s.log' % c not in X[i]: i += 1
       i += 1
     while C.any_in(('=', 'python'), X[i]): i += 1
     j=i+1
     while C.any_in(('--no-desc',), X[j]): j += 1
     kk = C.flag_value(x, '-e') or '' if ' record' in x else C.flag_value(x, '-F') if ' script' in x else X[j+1]
     cmd_name = C.chop('-'.join((X[i].split('/')[-1], X[j], kk)))
-    time_str = '%s %s' % (globs['time'], '-f "\\t%%E time-real:%s"' % cmd_name if do['time'] > 1 else '')
+    time_str = '%s %s' % (C.Globals['time'], '-f "\\t%%E time-real:%s"' % cmd_name if do['time'] > 1 else '')
     X.insert(1 if '=' in X[0] else 0, time_str)
     return ' '.join(X)
   if msg and do['batch']: msg += " for '%s'" % args.app
@@ -149,7 +149,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=Fa
   if export: pass
   elif (args.verbose > globs['V_timing'] and x.startswith(('perf script', 'perf annotate'))) or (
        do['time'] and profiling): x = get_time_cmd()
-  x = bash(x, export).replace('  ', ' ').strip()
+  x = C.bash(x, win(), export).replace('  ', ' ').strip()
   debug = args.verbose > 0
   if getuser() == 'root': x = x.replace('sudo ', '')
   if len(vars(args)):
@@ -165,6 +165,7 @@ def exe(x, msg=None, redir_out='2>&1', run=True, log=True, fail=1, background=Fa
     if background: x = x + ' &'
     if C.any_in(['perf script', 'toplev.py'], x) and C.any_in(['Unknown', 'generic'], pmu.name()):
       C.warn('CPU model is unrecognized; consider Linux kernel update (https://intelpedia.intel.com/IntelNext#Intel_Next_OS)', suppress_after=1)
+    x = C.append_prefix(x)
     if globs['cmds_file'] and ('loop_stats' not in x or args.verbose > 3) and (not x.startswith('#') or args.verbose > 2 or do['batch']):
       globs['cmds_file'].write(x + '\n')
       globs['cmds_file'].flush()
@@ -179,12 +180,8 @@ def print_cmd(x, show=True):
   if show and not do['batch'] and args.verbose >= 0: C.printc(x)
   if len(vars(args))>0 and globs['cmds_file']: globs['cmds_file'].write('# ' + x + '\n')
 
-def bash(x, px=None):
-  win = 'process-win' in args.command
-  cond = (('tee >(' in x or x.startswith(globs['time']) or px) and not win) or (win and px)
-  return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"')) if cond else x
 def exe_1line(x, f=None, heavy=True):
-  return "-1" if args.mode == 'profile' and heavy else C.exe_one_line(bash(x), f, args.verbose > 1)
+  return "-1" if args.mode == 'profile' and heavy else C.exe_one_line(C.bash(x, win=win()), f, args.verbose > 1)
 def exe2list(x, sep=' '): return ['-1'] if args.mode == 'profile' or args.print_only else C.exe2list(x, sep, args.verbose > 1)
 
 def error(x): C.warn(x) if do['forgive'] > 1 else C.error(x)
@@ -211,6 +208,7 @@ def module_version(mod_name):
   return '%s=%.2f' % (mod_name, mod.__version__)
 def is_yperf(): return len(do['perf-track']) > 99 # hack for yperf which uses really long tunable
 def profiling(): return args.mode != 'process'
+def win(): return 'process-win' in args.command
 def user_app(): return args.output or args.app != C.RUN_DEF
 def uniq_name(): return args.output or C.command_basename(args.app, args.app_iterations if args.gen_args else None)[:200]
 def toplev_describe(m, msg=None, mod='^'):
@@ -328,10 +326,12 @@ def multisocket(x='offline'):
   exe(args.pmu_tools + f"/cputop 'socket > 0' {x} | sudo sh")
   print(".. or try: for x in {56..112}; do echo %d | sudo tee /sys/devices/system/cpu/cpu$x/online; done" %
     (0 if x == 'offline' else 1))
-def atom(x='offline'):
-  exe(args.pmu_tools + "/cputop 'type == \"atom\"' %s"%x)
-  print(".. or try: for x in {16..23}; do echo %d | sudo tee /sys/devices/system/cpu/cpu$x/online; done" %
-    (0 if x == 'offline' else 1))
+def atom(state='offline'):
+  def r(cmd):
+    for c in C.exe_output(cmd, sep='\n').split('\n'):
+      if c.strip() != '': exe(c)
+  if state == 'offline': r(args.pmu_tools + "/cputop 'type == \"atom\"' %s" % state)
+  else: r(args.pmu_tools + "/cputop offline online")
 def fix_frequency(x='on'):
   base_freq = C.file2str('/sys/devices/system/cpu/cpu0/cpufreq/base_frequency')
   if x == 'on':
@@ -434,7 +434,7 @@ def get_perf_toplev():
     env += 'EVENTMAP=%s ' % pmu.force_cpu(forcecpu)
   elif do['core']:
     ##if pmu.perfmetrics(): toplev += ' --pinned'
-    if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=core'
+    if pmu.hybrid(): ptools['toplev.py'] += ' --cputype=%s' % globs['cputype']
   return perf, ptools['toplev.py'], ptools['ocperf'], ptools['genretlat'], env
 
 def profile(mask, toplev_args=['mvl6', None], windows_file=None):
@@ -491,7 +491,9 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
                                                         ',+srcline' if do['srcline'] else '',
                                                         ' 2>>' + err if do['srcline'] else '')
   # FIXME:01: add a "namer" module to assign filename for all logs; here and in calling log_funcs()
-  def perf_stat_TSC(log): return ' '.join([perf, 'stat -a -C0 -e msr/tsc/', '-o', log.replace('.log', '-C0.log ')])
+  def perf_stat_TSC(log):
+    c = C.main_core()
+    return ' '.join([perf, 'stat -a -C%s -e msr/tsc/' % c, '-o', log.replace('.log', '-C%s.log ' % c)])
   def perf_stat(flags, msg, step, events='', perfmetrics=do['core'],
                 csv=False, # note !csv implies to collect TSC
                 basic_events=do['perf-stat-add'] > 1, first_events='cpu-clock,', last_events=',' + do['perf-stat-def'], warn=True,
@@ -616,7 +618,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     #TODO:speed: parallelize next 3 exe() invocations & resume once all are done
     def show(n=7): return r"| grep -wA%d Overhead | cut -c-150 | grep -E -v '^[#\s]*$| 0\.0.%%' | sed 's/[ \\t]*$//' " % n
     exe(perf_report_syms + " -n --no-call-graph -i %s | tee %s-funcs.log %s| nl -v-1" % (data, base, show()), '@report functions')
-    exe(perf_report + " --stdio --hierarchy --header -i %s | tee %s-modules.log %s" % (data, base, show(22)), '@report modules')
+    exe(perf_report + " --stdio --hierarchy --header -i %s | tee %s-modules.log %s" % (data, base, show(40)), '@report modules')
     # works only with -g lbr : exe(perf_report + " --stdio -g folded -i %s | tee %s-callchains.log | grep '^[0-9]' | sort -nr | head -5" % (data, base), '@report callchains')
     if do['perf-annotate']:
       exe(r"%s --stdio -n -l -i %s | c++filt | tee %s "
@@ -725,7 +727,9 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     profile_exe(cmd + ' | tee %s | %s' % (log, grep_nz), 'topdown %s group' % group, 15)
     print_cmd("cat %s | %s" % (log, grep_NZ), False)
 
+  # TODO: replace with emon cfg support for core/atom
   if en(16):
+    if C.Globals['cputype'] == 'atom': C.error('bottlenecks-view: no support for atom')
     if profiling():
       if pmu.cpu('smt-on'): C.error('bottlenecks-view: disable-smt')
       if pmu.msocket(): error('bottlenecks-view: disable-multisocket')
@@ -953,6 +957,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if '_COST' not in do['perf-pebs']: handle_top()
 
   if en(10):
+    if pmu.hybrid(): atom('online')
     data = perf_record('ldlat', 10, record='record' if pmu.goldencove() else 'mem record')[0]
     exe("%s mem report --stdio -i %s -F+symbol_iaddr -v " # workaround: missing -F+ip in perf-mem-report
         "-w 5,5,44,5,13,44,18,43,8,5,12,4,7 2>/dev/null | sed 's/RAM or RAM/RAM/;s/LFB or LFB/LFB or FB/' "
@@ -961,6 +966,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
       "| tee %s.%s.log | tail -11" % (fields, sort2up, data, tag.lower()), "@ top-10 %s" % tag, data)
     perf_script_ldlat('event,ip,insn --xed', 'IPs')
     perf_script_ldlat('ip,addr', 'DLA-IP')
+    if globs['cputype'] == 'core': atom('offline')
 
   if en(7):
     cmd, logs['tma'] = toplev_V('-%s --no-multiplex' % toplev_args[0], '-nomux', ','.join((do['nodes'], do['extra-metrics'])))
@@ -996,6 +1002,7 @@ def profile(mask, toplev_args=['mvl6', None], windows_file=None):
     if args.mode != 'profile': print('firefox %s.svg &' % perf_data)
 
   if en(21) and not pmu.lunarlake(): # FIXME:08: jon support LNL in Pipeline View
+    from pipeline import pipeline_view
     widths = pmu.cpu_pipeline_width('all_widths')
     evts = pmu.widths_2_cmasks(widths)
     if do['interval'] < 1000: C.warn('Adjusting your %dms interval to 1000ms' % do['interval'])
@@ -1053,6 +1060,7 @@ def build_kernel(dir='./kernels/'):
 def parse_args():
   modes = ('profile', 'process', 'both') # keep 'both', the default, last on this list
   epilog = """environment variables:
+    CPUTYPE - run on a specific cpu type, options: core (default), atom.
     FORCECPU - force a specific CPU all over e.g. SPR, spr.
     TMA_CPU - force model for TMA (in .stat file).
     TRACEBACK - print traceback of calls on error.
@@ -1175,6 +1183,7 @@ def run_commands(commands, windows_file=None):
 def main():
   global args
   args, windows_file = parse_args(), None
+  if globs['cputype'] == 'core': atom('offline')
   #args sanity checks
   if '207' in exe_1line("lscpu | grep -F 'Model:'") and not C.env2str('FORCECPU'):
     C.error('EMR detected; prepend your command with: FORCECPU=SPR ./do.py ..')
@@ -1193,6 +1202,9 @@ def main():
   if any(perf_version() == x.split()[0] for x in C.file2lines(C.dirname()+'/settings/perf-bad.txt')):
     C.error('Unsupported perf tool: ' + perf_version())
   do_cmd = '%s # version %s' % (C.argv2str(), version())
+  if globs['cputype'] == 'atom' and args.profile_mask & 0xf0:
+    C.warn('topdown steps not supported for atom')
+    args.profile_mask &= 0x0f
   if 'process-win' in args.command:
     windows_file = args.app
     # update related args

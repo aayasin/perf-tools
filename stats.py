@@ -12,7 +12,7 @@
 #
 from __future__ import print_function
 __author__ = 'ayasin'
-__version__= 1.08
+__version__= 1.09
 
 import common as C, pmu, tma
 from common1 import registrar
@@ -63,8 +63,9 @@ stats = {'verbose': 0}
 
 # internal methods
 def get_file_int(prefix, ext):
+  atom_re = r"[a-z0-9_]*atom[a-z0-9_]*" if C.Globals['cputype'] == 'atom' else r"(?![a-z0-9_]*atom)[a-z0-9_]+"
   for filename in C.glob(prefix + '*', True):
-    if re.search("%s-janysave_type-e([a-z0-9_]+)ppp-c([0-9]+)(\-a)?%s.log" % (prefix, ext), filename):
+    if re.search("%s-janysave_type-e(%s)ppp-c([0-9]+)(\-a)?%s.log" % (prefix, atom_re, ext), filename):
       return filename
   return None
 
@@ -258,7 +259,7 @@ def print_DB(c):
   return d
 
 def get_TSC(f):
-  tsc = read_perf(f.replace('.log', '-C0.log'))['msr/tsc/'][0]
+  tsc = read_perf(f.replace('.log', '-C%s.log' % C.main_core()))['msr/tsc/'][0]
   # FIXME:02: support apart from -r3 or -r1
   if f.endswith('-r3.log'): tsc = int(tsc / 3)
   return tsc
@@ -283,11 +284,10 @@ def read_perf(f):
   lines = file2lines(f)
   if len(lines) < 5: C.error("invalid perf-stat file: %s" % f)
   for l in lines:
-    if 'atom' in l: continue
     try:
       name, group, val, var, name2, group2, val2, name3, group3, val3 = parse_perf(l)
       if name:
-        if name.startswith('cpu_core/'): name = name[9:-1]
+        if name.startswith('%s/' % pmu.pmu()): name = name[9:-1] if name.endswith('/') else name[9:]
         d[name] = (val, group)
         if var: d[name + ':var'] = (var, group)
         calc_metric(name, val)
@@ -322,7 +322,7 @@ def parse_perf(l):
   else:
     name_idx = 2 if '-clock' in l else 1
     name = items[name_idx]
-    if name.count('_') >= 1 and name.islower() and not name.startswith(('cpu_core/', 'perf_metrics', 'unc_', 'sys')): # hack ocperf lower casing!
+    if name.count('_') >= 1 and name.islower() and not name.startswith(('cpu_core/', 'cpu_atom/', 'perf_metrics', 'unc_', 'sys')): # hack ocperf lower casing!
       base_event = name.split(':')[0]
       Name = name.replace(base_event, pmu.toplev2intel_name(base_event))
       assert ':C1' not in Name # Name = Name.replace(':C1', ':c1')
@@ -376,7 +376,8 @@ def read_toplev(filename, metric=None):
         name, group = items[1], items[0]
         if not l.startswith('Info') and not l.startswith('Bottleneck'):
           name, group = items[1].split('.')[-1], 'TMA'
-        d[name] = (convert(items[3]), group)  # (value, group)
+        try: d[name] = (convert(items[3]), group)  # (value, group)
+        except ValueError: d[name] = (convert(items[2]), group)
         if '<==' in l:
           d['Critical-Group'] = (Key2group[items[0]], None)
           d['Critical-Node'] = (items[1], None)
@@ -510,7 +511,7 @@ def perf_log2stat(log, smt_on, d={}):
   retlat = base + '-retlat.json'
   if os.path.isfile(retlat): d.update(read_retlat_json(retlat))
   if bottlenecks:
-    d = patch_metrics(d)
+    d.update(patch_metrics(d))
     for x, y in pmu.Legacy_fixed:
       d[x] = d[r_dash(y)]
       del d[r_dash(y)]

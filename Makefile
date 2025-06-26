@@ -1,6 +1,6 @@
 .PHONY: clean clean-all help
-AP = CLTRAMP3D
-APP = taskset 0x4 ./$(AP)
+AP = BC-14
+APP = taskset 0x4 ./workloads/BC.sh 14  #./$(AP)
 AP_MT = perf bench numa mem -p 16 -C0-15
 CC = clang
 CPP = /usr/bin/clang++
@@ -12,9 +12,11 @@ DO1 = $(DO) $(CMD) -a "$(APP)" --tune :loops:10
 DO2 = $(DO) $(CMD) -a 'workloads/BC.sh 3'
 FAIL = (echo 'failed! $$?'; exit 1)
 JAVA = java
+LBR_EVENT = cpu_core/event=0xc4,umask=0x20/ppp  #r20c4:ppp
 MAKE = make --no-print-directory
-METRIC = -m IpCall
+METRIC =  #-m IpCall
 MGR = sudo $(shell python -c 'import common; print(common.os_installer())') -y -q
+MT_CPU = -C4-7
 NUM_THREADS = $(shell grep ^cpu\\scores /proc/cpuinfo | uniq |  awk '{print $$4}')
 OPT = -static -fcf-protection=none
 PM = $(shell python -c 'import common; print("0x%x" % common.PROF_MASK_DEF)')
@@ -96,8 +98,8 @@ ifneq ($(CPU), ICX)
 	./yperf advise -o $<
 	./yperf advise -o permute-yperf
 	./yperf advise -o CLTRAMP3D-yperf
-	./yperf record -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- $(AP_MT)
-	./yperf report -pm 100 -o perf-bench-numa-mem-yperf -C4-7 --tune :calibrate:1 -- $(AP_MT) # fails on ICX!
+	./yperf record -pm 100 -o perf-bench-numa-mem-yperf $(MT_CPU) --tune :calibrate:1 -- $(AP_MT)
+	./yperf report -pm 100 -o perf-bench-numa-mem-yperf $(MT_CPU) --tune :calibrate:1 -- $(AP_MT)
 	./yperf advise -o perf-bench-numa-mem-yperf
 endif
 
@@ -143,9 +145,11 @@ test-default-track-perf:
 	$(DO1) --toplev-args ' --no-multiplex --frequency --metric-group +Summary' -pm 1010 # carefully tests MUX sensitive profile-steps
 	$(DO1) -pm $(PM) --print-only $(DO_SUFF) > test-print-only
 	@echo 1 > $@
+INSTS_EVENT := $(if $(filter atom,$(CPUTYPE)),cpu_atom/instructions/ppp,instructions:ppp)
+CYCLES_EVENT := $(if $(filter atom,$(CPUTYPE)),cpu_atom/cycles/p,cycles:p)
 test-LBR-edge:
-	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e instructions:ppp -c 3000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
-	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e cycles:p -c 2000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
+	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e $(INSTS_EVENT) -c 3000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
+	$(DO1) --tune :perf-lbr:\"'-j any,save_type -e $(CYCLES_EVENT) -c 2000001'\" -pm 100 > /dev/null 2>&1 || $(FAIL)
 
 install-jit:
 	$(MAKE) install1 PKG="openjdk-17-jdk openjdk-17-jre xterm"
@@ -289,7 +293,7 @@ post-push:
 PRE_PUSH_CMDS := \
     "echo 'testing help of metric; version; prompts for sudo password' && $(DO) version log help -m GFLOPs --tune :msr:1" \
     "echo 'testing sys-wide + topdown tree; MEM_Bandwidth in L5' && $(MAKE) test-mem-bw SHOW=\"grep --color -E '.*<=='\"" \
-    "echo 'testing perf -M IpCall & colored TMA, then toplev --drilldown' && $(MAKE) test-metric SHOW=\"grep --color -E '^|Ret.*<=='\"" \
+    "echo 'testing perf metric & colored TMA, then toplev --drilldown' && $(MAKE) test-metric SHOW=\"grep --color -E '^|Ret.*<=='\"" \
     "echo 'prompting for sudo soon1' && $(DO) log" \
     "echo 'testing topdown across-tree tagging; Mispredict' && $(MAKE) test-bc2 PM=40 SHOW=\"grep --color -E '^|Mispredict'\"" \
     "echo 'testing topdown ~overlap in Threshold attribute' && echo skip: $(MAKE) test-false-sharin" \
@@ -302,32 +306,29 @@ PRE_PUSH_CMDS := \
     "echo 'testing analyze module' && $(MAKE) test-analyze" \
     "echo 'prompting for sudo soon2' && $(DO) log" \
     "echo 'running the yperf profiler' && $(MAKE) test-yperf" \
-    "echo 'testing --cpu' && $(DO) profile -C4-7 -pm 11116 -a \"$(AP_MT)\" > AP-mt.log 2>&1 || $(FAIL)" \
-    "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 9' -d1 > BC-9.log 2>&1 || $(FAIL)" \
+    "echo 'testing --cpu' && $(DO) profile $(MT_CPU) -pm 11116 -a \"$(AP_MT)\" > AP-mt.log 2>&1 || $(FAIL)" \
+    "echo 'testing --delay' && $(DO) profile -a './workloads/BC.sh 14' -d1 > BC-9.log 2>&1 || $(FAIL)" \
     "echo 'testing prof-no-mux command' && $(DO) prof-no-mux -a './workloads/BC.sh 1' -pm 82 && test -f BC-1.$(CPU).stat" \
-    "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view, pipeline-view & over-time profile-steps, tar command' && \
+    "echo 'testing unfiltered-calibrated-sampling; PEBS, tma group, bottlenecks-view & over-time profile-steps, tar command' && \
       $(MAKE) test-default DO_SUFF=\"--tune :calibrate:-1 :loops:0 :msr:1 :perf-filter:0 :perf-annotate:0 :sample:3 :size:1 \
-      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=23931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
-      test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log && \
-      test -f $(AP)-u.perf_stat-r1-I1000.pipeline.log" \
+      -o $(AP)-u $(DO_SUFF)\" CMD='suspend-smt profile tar' PM=3931a && test -f $(AP)-u.$(CPU).results.tar.gz && \
+      test -f $(AP)-u.perf_stat-I10.csv && test -f $(AP)-u.toplev-vl2-Fed.log" \
     "echo 'prompting for sudo soon3' && $(DO) log" \
     "echo 'testing Windows support' && $(MAKE) test-windows" \
     "echo 'testing sys-wide non-MUX profile-steps' && \
-     $(MAKE) test-default APP=./$(AP) CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \
-     :perf-lbr:\\\"'-a -j any,save_type -e r20c4:ppp -c 90001'\\\" :perf-filter:0 -o $(AP)-a\"" \
+     $(MAKE) test-default APP='./workloads/BC.sh 14' CMD=\"log profile\" PM=313e DO_SUFF=\"--tune :perf-stat:\\\"' -a'\\\" :perf-record:\\\"' -a -g'\\\" \
+     :perf-lbr:\\\"'-a -j any,save_type -e $(LBR_EVENT) -c 90001'\\\" :perf-filter:0 -o BC-14-a\"" \
     "echo 'testing default from another directory, toplev describe' && mkdir -p test-dir; cd test-dir; ln -sf ../common.py && \
-     make test-default APP=../pmu-tools/workloads/COMPILE10s DO=../do.py -f ../Makefile > ../test-dir.log 2>&1" \
+     make test-default APP='../workloads/BC.sh 14' DO=../do.py -f ../Makefile > ../test-dir.log 2>&1" \
     "echo 'testing clean command' && cp -r test-dir test-dir0; cd test-dir0; ../do.py clean; ls -l" \
     "echo 'testing study script (errors only)' $(MAKE) test-study" \
     "echo 'testing srcline stat' && $(MAKE) test-srcline" \
     "echo 'testing tripcount-mean calculation' && $(MAKE) test-tripcount-mean" \
-    "echo 'testing sampling by instructions' && $(MAKE) test-LBR-edge" \
+    "echo 'testing sampling by instructions and by cycles' && $(MAKE) test-LBR-edge" \
     "echo 'testing pipeline-view sys-wide idle' && $(DO) profile -pm 200000 -s 30 -o pipeline-view -v1 " \
     "$(PY3) $(DO) log profile --tune :forgive:0 -pm 10 > .do-forgive.log 2>&1" \
-    "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile > .do.log 2>&1 || $(FAIL)" \
-    "echo 'testing setup-all, ideal-IPC' && $(DO) setup-all profile --tune :loop-ideal-ipc:1 -pm 300 -o test-ideal-ipc > test-ideal-ipc 2>&1 || $(FAIL)" \
-    "echo 'timing openssl' && time $(DO) profile -a \"openssl speed rsa2048\" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)" \
-    "echo 'testing default w/ python2 (errors only)' && $(PY2) ./do.py profile -v3 > .do-$(PY2).log 2>&1 || $(FAIL)"
+    "echo 'testing default profile-steps (errors only)' && $(PY3) $(DO) profile -a $(APP) > .do.log 2>&1 || $(FAIL)" \
+    "echo 'timing openssl' && time $(DO) profile -a \"openssl speed rsa2048\" --tune :loops:9 :time:2 > openssl.log 2>&1 || $(FAIL)"
 
 pre-push: help
 	@for cmd in $(PRE_PUSH_CMDS); do \

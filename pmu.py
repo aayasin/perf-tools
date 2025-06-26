@@ -22,7 +22,9 @@ else:
 #
 # PMU, no prefix
 #
-def sys_devices_cpu(s=''): return '/sys/devices/cpu%s%s' % ('_core' if os.path.isdir('/sys/devices/cpu_core') else '', s)
+def sys_devices_cpu(s=''):
+  c = C.Globals['cputype']
+  return '/sys/devices/cpu%s%s' % ('_%s' % c if os.path.isdir('/sys/devices/cpu_%s' % c) else '', s)
 def name(real=False):
   forcecpu = C.env2str('FORCECPU')
   def pmu_name():
@@ -70,17 +72,20 @@ def amd():
   return 'AMD' in x and 'EPYC' in x
 
 # events
-def pmu():  return 'cpu_core' if hybrid() else 'cpu'
+def pmu():  return 'cpu_%s' % C.Globals['cputype'] if hybrid() else 'cpu'
 def default_period(): return 2000003
 def period(n): return n + (1 if (n % 10 == 0) and goldencove_on() else 0)
 
 def lbr_event(win=False):
   # AMD https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/pmu-events/arch/x86/amdzen4/branch.json
-  return 'BR_INST_RETIRED.NEAR_TAKENpdir' if win else ('rc4' if amd() else (('cpu_core/event=0xc4,umask=0x20/' if hybrid() else 'r20c4:') + 'ppp'))
+  return 'BR_INST_RETIRED.NEAR_TAKENpdir' if win else \
+    ('rc4' if amd() else (('cpu_%s/event=0xc4,umask=0x%s0/' %
+                           (C.Globals['cputype'], '2' if C.Globals['cputype'] == 'core'
+                           else 'c') if hybrid() else 'r20c4:') + 'ppp'))
 def lbr_period(): return period(700000)
 def lbr_unfiltered_events(cut=False):
     e = lbr_event()
-    return (e[:-1] if cut else e, 'instructions:ppp', 'cycles:p', 'BR_INST_RETIRED.NEAR_TAKENpdir')
+    return (e[:-1] if cut else e, 'instructions:ppp', 'cpu_atom/instructions/ppp', 'cycles:p', 'cpu_atom/cycles/p', 'BR_INST_RETIRED.NEAR_TAKENpdir')
 
 def event(x, precise=0, user_only=1, retire_latency=1):
   def misp_event(sub): return perf_event('BR_MISP_RETIRED.%s%s' % (sub, '_COST' if retlat() else ''))
@@ -115,8 +120,9 @@ def ldlat_event(lat):
 
 def basic_events():
   events = [event('sentries')]
-  if v5p(): events += ['r2424']
-  if goldencove_on(): events += ['r0262']
+  if C.Globals['cputype'] == 'core':
+    if v5p(): events += ['r2424']
+    if goldencove_on(): events += ['r0262']
   return ','.join(events)
 
 Legacy_fixed = (('INST_RETIRED.ANY', 'instructions'),
@@ -125,7 +131,8 @@ Legacy_fixed = (('INST_RETIRED.ANY', 'instructions'),
 def fixed_events(intel_names):
   es, idx = [], 0 if intel_names else 1
   for x in Legacy_fixed: es += [x[idx]]
-  if perfmetrics(): es.insert(0, ('TOPDOWN.SLOTS', 'slots')[idx])
+  if perfmetrics() and C.Globals['cputype'] == 'core':
+    es.insert(0, ('TOPDOWN.SLOTS', 'slots')[idx])
   return es
 
 # TODO: lookup Metric's attribute in pmu-tools/ratio; no hardcoding!
@@ -199,7 +206,9 @@ def toplev2intel_name(e):
 def perf_event(e):
   perf_str = C.exe_one_line('%s/ocperf -e %s --print' % (pmutools, e))
   tl_name = find_event_name(perf_str)
-  return tl_name if tl_name.isupper() else perf_str.replace(tl_name, toplev2intel_name(tl_name)).split()[2]
+  return tl_name if tl_name.isupper() else \
+    perf_str.replace(tl_name, toplev2intel_name(tl_name)).split()[2]\
+      .replace('cpu_core', 'cpu_%s' % C.Globals['cputype'])  # FIXME: fix this hack for atom events
 
 #
 # CPU, cpu_ prefix

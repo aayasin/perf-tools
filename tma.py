@@ -27,7 +27,7 @@ def fixed_metrics(intel_names=False, force_glc=False):
       flags = ' --td-level=2'
     events = '{%s}' % events
     if pmu.hybrid():
-      for x, y in ((prefix, '/,cpu_core/topdown-'), ('}', '/}'), ('{slots/', '{slots'), ('ref-cycles/,', 'ref-cycles,')):
+      for x, y in ((prefix, '/,cpu_%s/topdown-' % C.Globals['cputype']), ('}', '/}'), ('{slots/', '{slots'), ('ref-cycles/,', 'ref-cycles,')):
         events = events.replace(x, y)
   return events, flags
 

@@ -35,9 +35,11 @@ class color:
   UNDERLINE = '\033[4m'
   END = '\033[0m'
 
-Globals = {'llvm-mca': '/usr/local/bin/llvm-mca',
-           'uica':     'uiCA/uiCA.py',
-           'xed':      '/usr/local/bin/xed',
+Globals = {'exe-prefix': '',
+           'llvm-mca':   '/usr/local/bin/llvm-mca',
+           'time':       '/usr/bin/time',
+           'uica':       'uiCA/uiCA.py',
+           'xed':        '/usr/local/bin/xed',
 }
 
 # append to a file
@@ -94,6 +96,32 @@ def exit(msg=None):
   printc('%s ..' % str(msg), color.GREEN)
   sys.exit('exiting' if msg else 0)
 
+# OS
+#
+def os_release(): return file2str('/etc/os-release', 1)
+def os_installer():
+  installer, name = 'yum', os_release()
+  if 'Ubuntu' in name or 'Debian' in name: installer='apt-get'
+  if 'CentOS' in name: installer='dnf'
+  if 'SUSE' in name: installer='zypper'
+  return installer
+
+def check_executable(x):
+  if not (os.path.isfile(x) and os.access(x, os.X_OK)): error("'%s' is not executable" % x)
+
+def dirname(): return os.path.dirname(__file__)
+def realpath(x): return os.path.join(dirname(), x)
+def env2int(x, default=0, base=10): y=os.getenv(x); return int(y, base) if y else default
+def env2float(x, default=0): y=os.getenv(x); return float(y) if y else default
+def env2str(x, default=0, prefix=0): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
+def env2list(x, default): y = os.getenv(x); return y.split() if y else default
+def envfile(x): x = os.getenv(x); return x if isfile(x) else None
+def env2int_bo(x, val, base=10): return int(env2int(x)) | val # read & return a bitwise-or (bo) of int env var
+
+def print_env(std=sys.stderr):
+  for k, v in sorted(os.environ.items()):
+    std.write('%s: %s\n' % (k, v))
+
 #debug
 #
 #print (to stderr) and flush
@@ -114,8 +142,49 @@ def log_callchain():
   t = [x.split('\n')[1].strip() for x in tb[:-2]]
   printc('\t==> '.join(t), col=color.GREY)
 
+# cpu type
+#
+Globals['cputype'] = env2str('CPUTYPE', 'core')
+
+def cputype_prefix():
+  t = Globals['cputype']
+  if t == 'core': return ''
+  elif t == 'atom':
+    for c in subprocess.check_output([os.path.dirname(os.path.realpath(__file__)) +
+      "/pmu-tools/cputop", "offline", "online"]).decode().strip().split('\n'):
+      os.system(c)
+    return subprocess.check_output(
+      os.path.dirname(os.path.realpath(__file__)) +
+      "/pmu-tools/cputop atom taskset", shell=True).decode().strip() + ' '
+  else: error('unrecognized CPUTYPE value')
+def main_core():
+  pre = cputype_prefix()
+  return '0' if pre == '' else pre.replace('taskset -c', '').strip().split(',')[0]
+Globals['exe-prefix'] = cputype_prefix()
+
+def append_prefix(cmd):
+  cmd, pre = bash(cmd), ''
+  if 'taskset' in Globals['exe-prefix'] and not Globals['exe-prefix'] in cmd:
+    # deal with leading env variables
+    match = re.match(r'^((?:[A-Za-z_][A-Za-z0-9_]*=[^\s]+\s*)+)', cmd)
+    env = match.group(1).strip() if match else ''
+    cmd = cmd.replace(env, '')
+    pre = '%s%s' % (env, (' ' if env != '' else '') + Globals['exe-prefix'])
+  return cmd.replace('(', '(%s' % pre, 1) if cmd.startswith('(') else pre + cmd
+
 # system
 #
+def bash(x, win=False, px=None):
+  if 'bash -c' in x: return x
+  opers = ('&&', '||', ';', '&', '|', '>', '<', 'cmd', '*', '?', '~')
+  cond = (('tee >(' in x or x.startswith(Globals['time']) or px) and not win) or (win and px) \
+         or ('taskset' in Globals['exe-prefix'] and
+             ('builtin' in subprocess.check_output
+             ('bash -c "type %s" 2>&1' % x.split()[0].replace('(', ''), shell=True).decode() or
+              any_in(opers, x)))
+  if cond: x = x.replace(Globals['exe-prefix'], '')
+  return '%s bash -c "%s" 2>&1' % (px or '', x.replace('"', '\\"').replace('$', '\$')) if cond else x
+
 # exe_cmd - execute system command(s) with logging support
 # @x:     command to be executed
 # @msg:   an informative message to display. @ hints for a "slave" command
@@ -133,6 +202,7 @@ def exe_cmd(x, msg=None, redir_out=None, debug=0, run=True, log=True, fail=1, ba
     if '@' in msg: msg='\t' + msg.replace('@', '')
     else: msg = msg + ' ..'
     if run or msg.endswith('..'): printc(msg, color.BOLD)
+  x = append_prefix(x)
   if debug > 1: printct('@@\t' + x, color.BLUE)
   elif debug: printc(x, color.BLUE)
   sys.stdout.flush()
@@ -151,18 +221,21 @@ def exe_cmd(x, msg=None, redir_out=None, debug=0, run=True, log=True, fail=1, ba
   return ret
 
 def exe_output(x, sep=";"):
+  x = append_prefix(x)
   out = subprocess.check_output(x, shell=True)
   if isinstance(out, (bytes, bytearray)):
     out = out.decode()
   return out.replace("\n", sep).strip(sep)
 
 def exe2list(x, sep=' ', debug=False):
+  x = append_prefix(x)
   res = str2list(exe_output(x, sep))
   if debug: printc('exe2list(%s) = %s' % (x, str(res).replace(', u', ', ')), color.BLUE)
   return res
 
 # @fail:  1: exit with error if command fails; 0: warn
 def exe_one_line(x, field=None, debug=False, fail=0):
+  x = append_prefix(x)
   def print1(x): printf(x, std=sys.stdout, col=color.BLUE) if debug else None
   x_str = 'exe_one_line(%s, f=%s)' % (x, str(field))
   cached = x in exe_one_line.cache
@@ -202,32 +275,6 @@ def glob(regex, forgive=0):
   fs = python_glob.glob(regex)
   if len(fs) == 0 and not forgive: error("could not find files: %s" % regex)
   return sorted(fs)
-
-# OS
-#
-def os_release(): return file2str('/etc/os-release', 1)
-def os_installer():
-  installer, name = 'yum', os_release()
-  if 'Ubuntu' in name or 'Debian' in name: installer='apt-get'
-  if 'CentOS' in name: installer='dnf'
-  if 'SUSE' in name: installer='zypper'
-  return installer
-
-def check_executable(x):
-  if not (os.path.isfile(x) and os.access(x, os.X_OK)): error("'%s' is not executable" % x)
-
-def dirname(): return os.path.dirname(__file__)
-def realpath(x): return os.path.join(dirname(), x)
-def env2int(x, default=0, base=10): y=os.getenv(x); return int(y, base) if y else default
-def env2float(x, default=0): y=os.getenv(x); return float(y) if y else default
-def env2str(x, default=0, prefix=0): y = os.getenv(x); return '%s%s' % (x+'=' if prefix else '', y) if y else default
-def env2list(x, default): y = os.getenv(x); return y.split() if y else default
-def envfile(x): x = os.getenv(x); return x if isfile(x) else None
-def env2int_bo(x, val, base=10): return int(env2int(x)) | val # read & return a bitwise-or (bo) of int env var
-
-def print_env(std=sys.stderr):
-  for k, v in sorted(os.environ.items()):
-    std.write('%s: %s\n' % (k, v))
 
 # files
 #
@@ -355,8 +402,13 @@ import argparse
 RUN_DEF = './run.sh'
 TOPLEV_DEF=' --frequency --metric-group +Summary'
   #' --no-uncore' # https://github.com/andikleen/pmu-tools/issues/450
-PROF_MASK_DEF=0x313F
-def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=argparse.ArgumentDefaultsHelpFormatter, epilog=None):
+PROF_MASK_DEF = 0x313F if Globals['cputype'] == 'core' else 0x10F
+  # FIXME: enable topdown steps by default for atom
+
+class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,
+                      argparse.RawDescriptionHelpFormatter):
+  pass
+def argument_parser(usg, defs=None, mask=PROF_MASK_DEF, fc=CustomFormatter, epilog=None):
   ap = argparse.ArgumentParser(usage=usg, formatter_class=fc, epilog=epilog) if usg else argparse.ArgumentParser(formatter_class=fc)
   common_args = []
   def common_def(a): common_args.append(a); return def_value(a)

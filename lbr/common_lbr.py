@@ -195,8 +195,11 @@ def get_ilen(line):
 def get_timestamp(line):
   assert line2info(line).header()
   elements = line.split()
-  for e in elements:
-    if '.' in e: return e.replace(':', '')
+  time_candidate = elements[2].replace(':', '')
+  timestamp = None
+  if re.match(r'\d+\.\d+', time_candidate):
+      timestamp = time_candidate
+  return timestamp
 
 def is_jcc_erratum(line, previous=None):
   info = line2info(line)
